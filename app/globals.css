@@ -1,26 +1,468 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* RTU Brand Colors */
+  --rtu-blue: #1B3A6B;
+  --rtu-blue-dark: #0F2442;
+  --rtu-blue-light: #2A5298;
+  --rtu-gold: #D4A843;
+  --rtu-gold-light: #F0D68A;
+  --rtu-gold-dark: #B8922E;
+
+  /* Neutrals */
+  --bg-primary: #FAF9F6;
+  --bg-card: #FFFFFF;
+  --text-primary: #1A1A2E;
+  --text-secondary: #4A4A6A;
+  --text-muted: #8A8AA0;
+
+  /* Shadows */
+  --shadow-card: 0 4px 20px rgba(27, 58, 107, 0.08);
+  --shadow-card-hover: 0 8px 32px rgba(27, 58, 107, 0.15);
+  --shadow-nav: 0 2px 20px rgba(0, 0, 0, 0.1);
+
+  /* Glass */
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.3);
+
+  --background: var(--bg-primary);
+  --foreground: var(--text-primary);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-rtu-blue: var(--rtu-blue);
+  --color-rtu-blue-dark: var(--rtu-blue-dark);
+  --color-rtu-blue-light: var(--rtu-blue-light);
+  --color-rtu-gold: var(--rtu-gold);
+  --color-rtu-gold-light: var(--rtu-gold-light);
+  --color-rtu-gold-dark: var(--rtu-gold-dark);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+/* ===== Fluid Typography ===== */
+h1 {
+  font-size: clamp(1.75rem, 4vw + 0.5rem, 3.75rem);
+}
+
+h2 {
+  font-size: clamp(1.5rem, 3vw + 0.25rem, 2.25rem);
+}
+
+h3 {
+  font-size: clamp(1rem, 1.5vw + 0.25rem, 1.25rem);
+}
+
+/* ===== Glass navbar ===== */
+.glass-nav {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-nav);
+}
+
+/* ===== Cards ===== */
+.card {
+  background: var(--bg-card);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* Only lift on devices that support hover (not touch) */
+@media (hover: hover) {
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-card-hover);
+  }
+}
+
+/* ===== Gold gradient text ===== */
+.text-gradient-gold {
+  background: linear-gradient(135deg, var(--rtu-gold), var(--rtu-gold-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ===== Blue gradient background ===== */
+.bg-gradient-rtu {
+  background: linear-gradient(135deg, var(--rtu-blue-dark), var(--rtu-blue), var(--rtu-blue-light));
+}
+
+/* ===== Buttons ===== */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--rtu-gold-dark), var(--rtu-gold));
+  color: var(--rtu-blue-dark);
+  font-weight: 600;
+  padding: 0.75rem 1.75rem;
+  border-radius: 0.75rem;
+  transition: all 0.25s ease;
+  border: none;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .btn-primary:hover {
+    background: linear-gradient(135deg, var(--rtu-gold), var(--rtu-gold-light));
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(212, 168, 67, 0.4);
+  }
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: white;
+  font-weight: 600;
+  padding: 0.75rem 1.75rem;
+  border-radius: 0.75rem;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.7);
+    transform: translateY(-2px);
+  }
+}
+
+/* ===== Section spacing (fluid) ===== */
+.section {
+  padding: clamp(2.5rem, 6vw, 5rem) 0;
+}
+
+/* ===== Container (fluid) ===== */
+.container-main {
+  max-width: 75rem;
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 4vw, 1.5rem);
+}
+
+/* ===== Page header (reusable across sub-pages) ===== */
+.page-header {
+  padding: clamp(3rem, 6vw, 5rem) 0;
+}
+
+/* ===== Mobile-safe touch targets ===== */
+@media (max-width: 640px) {
+
+  .btn-primary,
+  .btn-secondary {
+    min-height: 2.75rem;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.875rem;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 1rem;
+    /* prevents iOS zoom on focus */
+  }
+}
+
+/* ===== News card grid ===== */
+.news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: 1.5rem;
+}
+
+/* ===== Focus Ring (Accessibility / WCAG) ===== */
+:focus-visible {
+  outline: 2px solid var(--rtu-gold);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+/* ===== Input Focus Glow ===== */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  border-color: var(--rtu-gold) !important;
+  box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.2);
+  outline: none;
+}
+
+/* ===== Skeleton Shimmer (Loading State) ===== */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 0.75rem;
+}
+
+/* ===== Section Heading Accent ===== */
+.section-heading {
+  display: inline-block;
+  position: relative;
+}
+
+.section-heading::after {
+  content: '';
+  display: block;
+  width: 3rem;
+  height: 3px;
+  margin: 0.75rem auto 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--rtu-gold), var(--rtu-gold-light));
+}
+
+/* ===== Floating Logo Animation ===== */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* ===== Gold Text Shimmer ===== */
+@keyframes goldShimmer {
+  0% {
+    background-position: -200% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.text-gradient-gold-shimmer {
+  background: linear-gradient(90deg,
+      var(--rtu-gold) 0%,
+      var(--rtu-gold-light) 40%,
+      #fff 50%,
+      var(--rtu-gold-light) 60%,
+      var(--rtu-gold) 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: goldShimmer 4s linear infinite;
+}
+
+/* ===== Scroll Fade-in ===== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.6s ease-out both;
+}
+
+/* ===== Footer Gradient Divider ===== */
+.footer-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212, 168, 67, 0.4), transparent);
+  border: none;
+}
+
+/* ===== Active Nav Indicator ===== */
+.nav-link-active {
+  position: relative;
+}
+
+.nav-link-active::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--rtu-gold), var(--rtu-gold-light));
+  border-radius: 1px;
+}
+
+/* ===== Button Spinner ===== */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* ===== Facebook Post Card ===== */
+.fb-card {
+  background: var(--bg-card);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.25s ease;
+}
+
+@media (hover: hover) {
+  .fb-card:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+}
+
+/* Header row: avatar + name + time */
+.fb-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+}
+
+.fb-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.fb-card-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.fb-card-meta {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Caption / text body */
+.fb-card-body {
+  padding: 0 1rem 0.625rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+/* Edge-to-edge image */
+.fb-card-media {
+  position: relative;
+  width: 100%;
+  background: #f0f2f5;
+  overflow: hidden;
+}
+
+.fb-card-media img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+}
+
+/* Reactions / action bar */
+.fb-card-actions {
+  display: flex;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 0.25rem 0.5rem;
+}
+
+.fb-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .fb-action-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-secondary);
+  }
+}
+
+/* "See more" text toggle */
+.fb-see-more {
+  color: var(--text-muted);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 0.25rem;
+}
+
+.fb-see-more:hover {
+  text-decoration: underline;
 }

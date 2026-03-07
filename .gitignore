@@ -30,8 +30,49 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+.env.local
+
+# AI Agent folders
+/.adal
+/.agent
+/.agents
+/.augment
+/.claude
+/.codebuddy
+/.commandcode
+/.continue
+/.cortex
+/.crush
+/.factory
+/.goose
+/.iflow
+/.junie
+/.kilocode
+/.kiro
+/.kode
+/.mcpjam
+/.mux
+/.neovate
+/.openhands
+/.pi
+/.pochi
+/.qoder
+/.qwen
+/.roo
+/.trae
+/.vibe
+/.windsurf
+/.zencoder
+
+# Agent Skills
+/skills/
+skills-lock.json
+
+# Sensitive test data
+/tests/sheet-dump*.json
+/tests/sheet_dump*.json
 
 # vercel
 .vercel
