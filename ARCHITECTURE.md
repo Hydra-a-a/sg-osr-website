@@ -2,6 +2,11 @@
 
 This document serves as the living architectural blueprint and feature inventory for the Office of the Student Regent (OSR) Website. It ensures all development aligns with the core requirements of dynamic content management, strict security, and modular design.
 
+> [!IMPORTANT]
+> **Mobile Audit:** While the CSS is responsive, a dedicated manual audit for mobile-specific edge cases is required before Phase 2.
+> **Institutional Credentials:** We need official student leader accounts to safely facilitate the upload of sensitive financial and meeting documents.
+> **Authentication (The "Wall"):** To prevent random students from submitting as a Council, we will implement **Google OAuth** (Login with RTU Email) combined with an **Authorized Email Whitelist** managed via a simple Google Sheet for easy maintenance.
+
 ## I. Feature Inventory & Technical Requirements
 
 ### 1. Content & Layout Management
@@ -43,6 +48,11 @@ This document serves as the living architectural blueprint and feature inventory
 - [x] Enable Incremental Static Regeneration (ISR) to buffer Google API requests and prevent rate-limiting.
 - [ ] Implement Image Optimization (Next/Image) for fast loading on campus Wi-Fi and Edge Caching via Vercel.
 - [x] Add Aria-Labels for accessibility and dynamic meta tags for professional social media sharing.
+
+### 1. AI FAQ Chatbot & Secure Login
+- [ ] **Google OAuth Implementation:** Add "Login with RTU Email" functionality.
+- [ ] **Sheets-Based Whitelist:** Implement a hidden/protected Google Sheet that maps emails to specific Council/Office permissions (Easily maintainable by the OSR/SSC secretary).
+- [ ] **Intelligent Chatbot Filter:** Build a chatbot interface that answers basic FAQs and directs students to services.
 
 ### Week 4: Handover & Documentation
 - [ ] Create an Officer Handbook within a Google Slide to explain how to manage the site.

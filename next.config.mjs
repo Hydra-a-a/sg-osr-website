@@ -9,6 +9,7 @@ const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '*.googleusercontent.com' },
+      { protocol: 'https', hostname: 'www.google.com' },
       { protocol: 'https', hostname: '*.fbcdn.net' },
       { protocol: 'https', hostname: '*.facebook.com' },
     ],
@@ -18,7 +19,7 @@ const nextConfig = {
       default-src 'self';
       script-src 'self' 'unsafe-eval' 'unsafe-inline';
       style-src 'self' 'unsafe-inline';
-      img-src 'self' blob: data: *.googleusercontent.com *.fbcdn.net *.facebook.com;
+      img-src 'self' blob: data: *.googleusercontent.com www.google.com *.fbcdn.net *.facebook.com;
       font-src 'self';
       object-src 'none';
       base-uri 'self';

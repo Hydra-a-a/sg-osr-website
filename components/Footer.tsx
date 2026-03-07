@@ -11,15 +11,15 @@ export default function Footer() {
                         <div className="flex items-center gap-3 mb-4">
                             <Image
                                 src="/images/OSR_LOGO.jpg"
-                                alt="OSR Logo"
+                                alt="RTU Student Government Logo"
                                 width={36}
                                 height={36}
                                 className="rounded-full"
                             />
-                            <span className="font-bold text-lg">Rizal Technological University - Office of the Student Regent</span>
+                            <span className="font-bold text-lg">RTU Student Government Portal</span>
                         </div>
                         <p className="text-white/60 text-sm leading-relaxed">
-                            The Office of the Student Regent serves as the official voice of the student body in the Board of Regents, championing student rights, transparency, and welfare across all campuses.
+                            The unified digital platform of the Supreme Student Council and the Office of the Student Regent — championing student rights, transparency, and welfare across all campuses.
                         </p>
                     </div>
 
@@ -31,9 +31,11 @@ export default function Footer() {
                         <div className="flex flex-col gap-2">
                             {[
                                 { href: '/', label: 'Home' },
+                                { href: '/osr', label: 'Office of the Student Regent' },
                                 { href: '/directory', label: 'Officer Directory' },
                                 { href: '/services', label: 'Services & Forms' },
                                 { href: '/news', label: 'News & Updates' },
+                                { href: '/login', label: 'Portal Login' },
                             ].map(link => (
                                 <Link
                                     key={link.href}
@@ -63,7 +65,7 @@ export default function Footer() {
                 <div className="footer-divider mt-10 mb-6" />
                 <div className="text-center">
                     <p className="text-white/40 text-xs">
-                        © {new Date().getFullYear()} Rizal Technological University - Office of the Student Regent. All rights reserved.
+                        © {new Date().getFullYear()} RTU Student Government Portal. All rights reserved.
                     </p>
                 </div>
             </div>

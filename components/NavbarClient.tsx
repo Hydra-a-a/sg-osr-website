@@ -11,9 +11,12 @@ import { SiteConfig } from '@/lib/slideConfig';
 
 const baseNavLinks = [
     { href: '/', label: 'Home' },
+    { href: '/osr', label: 'OSR' },
     { href: '/directory', label: 'Directory' },
     { href: '/services', label: 'Services' },
     { href: '/news', label: 'News' },
+    { href: '/transparency', label: 'Transparency' },
+    { href: '/hub', label: 'Student Hub' },
 ];
 
 export default function NavbarClient({ config }: { config: SiteConfig }) {
@@ -49,7 +52,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                             className="rounded-full"
                         />
                         <span className="font-bold text-sm md:text-lg" style={{ color: 'var(--rtu-blue)' }}>
-                            Rizal Technological University - Office of the Student Regent
+                            RTU Student Government Portal
                         </span>
                     </Link>
 
@@ -67,8 +70,8 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                 {link.label}
                             </Link>
                         ))}
-                        <Link href="/services" className="btn-primary text-sm no-underline">
-                            File a Grievance
+                        <Link href="/login" className="btn-primary text-sm no-underline px-6">
+                            Login
                         </Link>
                     </div>
 
@@ -106,11 +109,11 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                     </Link>
                                 ))}
                                 <Link
-                                    href="/services"
+                                    href="/login"
                                     className="btn-primary text-sm text-center no-underline"
                                     onClick={() => setMobileOpen(false)}
                                 >
-                                    File a Grievance
+                                    Login
                                 </Link>
                             </div>
                         </motion.div>

@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { Search, Facebook, Linkedin, Users, Grid, List as ListIcon } from 'lucide-react';
 
+const branches = ['All', 'OSR', 'SSC', 'College Councils'] as const;
+type Branch = typeof branches[number];
+
 interface Officer {
     id?: string;
     name: string;
@@ -20,6 +23,7 @@ export default function DirectoryPage() {
     const [error, setError] = useState('');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [userOverridden, setUserOverridden] = useState(false);
+    const [activeBranch, setActiveBranch] = useState<Branch>('All');
 
     useEffect(() => {
         fetch('/api/directory')
@@ -39,11 +43,13 @@ export default function DirectoryPage() {
             });
     }, []);
 
-    const filtered = officers.filter(o =>
-        o.name.toLowerCase().includes(search.toLowerCase()) ||
-        o.position.toLowerCase().includes(search.toLowerCase()) ||
-        (o.branch || '').toLowerCase().includes(search.toLowerCase())
-    );
+    const filtered = officers.filter(o => {
+        const matchSearch = o.name.toLowerCase().includes(search.toLowerCase()) ||
+            o.position.toLowerCase().includes(search.toLowerCase()) ||
+            (o.branch || '').toLowerCase().includes(search.toLowerCase());
+        const matchBranch = activeBranch === 'All' || (o.branch || '').toLowerCase().includes(activeBranch.toLowerCase());
+        return matchSearch && matchBranch;
+    });
 
     return (
         <>
@@ -52,13 +58,33 @@ export default function DirectoryPage() {
                 <div className="container-main text-center">
                     <Users className="mx-auto mb-4 text-white/80" size={40} />
                     <h1 className="font-bold text-white mb-3">
-                        Officer <span className="text-gradient-gold">Directory</span>
+                        Student Government <span className="text-gradient-gold">Directory</span>
                     </h1>
                     <p className="text-white/60 max-w-lg mx-auto">
-                        Meet the student leaders serving across all commissions and branches of Rizal Technological University.
+                        Meet the student leaders serving across all branches of the RTU Student Government.
                     </p>
                 </div>
-            </section >
+            </section>
+
+            {/* Branch Filter Tabs */}
+            <section className="container-main -mt-6 mb-2">
+                <div className="flex gap-2 justify-center flex-wrap">
+                    {branches.map(branch => (
+                        <button
+                            key={branch}
+                            onClick={() => setActiveBranch(branch)}
+                            className="px-5 py-2 rounded-full text-sm font-semibold transition-all cursor-pointer border-2"
+                            style={{
+                                background: activeBranch === branch ? 'var(--rtu-blue)' : 'var(--bg-card)',
+                                color: activeBranch === branch ? 'white' : 'var(--text-secondary)',
+                                borderColor: activeBranch === branch ? 'var(--rtu-blue)' : 'var(--glass-border)',
+                            }}
+                        >
+                            {branch}
+                        </button>
+                    ))}
+                </div>
+            </section>
 
             {/* Search Bar & View Toggle */}
             < section className="container-main -mt-6" >

@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Rizal Technological University - Office of the Student Regent",
-  description: "The official portal of the Office of the Student Regent at Rizal Technological University. Filing grievances, officer directory, news, and student services.",
+  title: "RTU Student Government Portal",
+  description: "The unified digital portal of the RTU Supreme Student Council and Office of the Student Regent. Access student services, officer directory, transparency reports, and campus resources.",
 };
 
 export default function RootLayout({ children }) {

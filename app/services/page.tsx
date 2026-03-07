@@ -71,7 +71,7 @@ export default function ServicesPage() {
                         Student <span className="text-gradient-gold">Services</span>
                     </h1>
                     <p className="text-white/60 max-w-lg mx-auto">
-                        File grievances, share feedback, or contact the Office of the Student Regent.
+                        File grievances, share feedback, or contact any branch of the RTU Student Government.
                     </p>
                 </div>
             </section>
@@ -79,6 +79,9 @@ export default function ServicesPage() {
             <section className="section">
                 <div className="container-main max-w-2xl">
                     {/* Form Type Tabs */}
+                    <p className="text-center text-xs mb-6" style={{ color: 'var(--text-muted)' }}>
+                        💡 Not sure where to start? An AI assistant will be available soon to help guide you.
+                    </p>
                     <div className="flex gap-3 mb-8 justify-center flex-wrap">
                         {formTypes.map(ft => (
                             <button
