@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, LogOut, User, Shield } from 'lucide-react';
 import AlertBanner from './AlertBanner';
 import { SiteConfig } from '@/lib/slideConfig';
 
@@ -22,7 +23,10 @@ const baseNavLinks = [
 export default function NavbarClient({ config }: { config: SiteConfig }) {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
+    const [profileOpen, setProfileOpen] = useState(false);
+    const profileRef = useRef<HTMLDivElement>(null);
     const pathname = usePathname();
+    const { data: session, status } = useSession();
 
     // navbar gets see-through when you scroll down
     useEffect(() => {
@@ -31,14 +35,27 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
 
+    // close profile dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+                setProfileOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     // dynamic links because the regents wanted elections to disappear sometimes
     const navLinks = [...baseNavLinks];
     if (config.electionsActive) {
         navLinks.push({ href: '/elections', label: 'Elections 🗳️' });
     }
 
+    const isLeader = session?.user?.role === 'leader';
+
     return (
-        <header className="fixed top-0 left-0 right-0 z-50">
+        <header className="sticky top-0 z-50">
             {config.alertBanner && <AlertBanner message={config.alertBanner} />}
             <nav className="glass-nav" style={{ background: scrolled ? 'rgba(255,255,255,0.97)' : undefined, transition: 'background 0.3s ease' }}>
                 <div className="container-main flex items-center justify-between h-16">
@@ -56,7 +73,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                         </span>
                     </Link>
 
-                    {/* desktop nav because mobile is hard */}
+                    {/* desktop nav */}
                     <div className="hidden md:flex items-center gap-8">
                         {navLinks.map(link => (
                             <Link
@@ -70,9 +87,68 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                 {link.label}
                             </Link>
                         ))}
-                        <Link href="/login" className="btn-primary text-sm no-underline px-6">
-                            Login
-                        </Link>
+
+                        {/* Auth section */}
+                        {status === 'loading' ? (
+                            <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse" />
+                        ) : session?.user ? (
+                            <div className="relative" ref={profileRef}>
+                                <button
+                                    onClick={() => setProfileOpen(!profileOpen)}
+                                    className="flex items-center gap-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                                    aria-label="User menu"
+                                >
+                                    {session.user.image ? (
+                                        <Image
+                                            src={session.user.image}
+                                            alt=""
+                                            width={32}
+                                            height={32}
+                                            className="rounded-full border-2 border-transparent hover:border-rtu-blue transition-colors"
+                                        />
+                                    ) : (
+                                        <div className="w-8 h-8 rounded-full bg-rtu-blue flex items-center justify-center">
+                                            <User size={16} className="text-white" />
+                                        </div>
+                                    )}
+                                </button>
+
+                                <AnimatePresence>
+                                    {profileOpen && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                                            transition={{ duration: 0.15 }}
+                                            className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50"
+                                        >
+                                            <div className="p-4 bg-gradient-to-br from-blue-50 to-white border-b border-gray-100">
+                                                <p className="font-semibold text-sm text-gray-900 truncate">{session.user.name || 'Student'}</p>
+                                                <p className="text-xs text-gray-500 truncate mt-0.5">{session.user.email}</p>
+                                                {isLeader && (
+                                                    <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                                                        <Shield size={10} /> Student Leader
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="p-2">
+                                                <button
+                                                    onClick={() => signOut({ callbackUrl: '/' })}
+                                                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                >
+                                                    <LogOut size={16} />
+                                                    Sign Out
+                                                </button>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        ) : (
+                            <Link href="/login" className="btn-primary text-sm no-underline px-6">
+                                Login
+                            </Link>
+                        )}
                     </div>
 
                     {/* the hamburger menu that gave me a headache */}
@@ -86,7 +162,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                     </button>
                 </div>
 
-                {/* animated mobile menu that i spent way too long on */}
+                {/* animated mobile menu */}
                 <AnimatePresence>
                     {mobileOpen && (
                         <motion.div
@@ -108,13 +184,42 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                         {link.label}
                                     </Link>
                                 ))}
-                                <Link
-                                    href="/login"
-                                    className="btn-primary text-sm text-center no-underline"
-                                    onClick={() => setMobileOpen(false)}
-                                >
-                                    Login
-                                </Link>
+
+                                {/* Mobile auth */}
+                                {session?.user ? (
+                                    <div className="pt-3 border-t border-gray-200">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            {session.user.image ? (
+                                                <Image src={session.user.image} alt="" width={32} height={32} className="rounded-full" />
+                                            ) : (
+                                                <div className="w-8 h-8 rounded-full bg-rtu-blue flex items-center justify-center">
+                                                    <User size={16} className="text-white" />
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-sm font-semibold">{session.user.name || 'Student'}</p>
+                                                {isLeader && (
+                                                    <span className="text-[10px] text-amber-600 font-bold uppercase">Student Leader</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => { signOut({ callbackUrl: '/' }); setMobileOpen(false); }}
+                                            className="w-full flex items-center justify-center gap-2 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                                        >
+                                            <LogOut size={16} />
+                                            Sign Out
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <Link
+                                        href="/login"
+                                        className="btn-primary text-sm text-center no-underline"
+                                        onClick={() => setMobileOpen(false)}
+                                    >
+                                        Login
+                                    </Link>
+                                )}
                             </div>
                         </motion.div>
                     )}
@@ -123,3 +228,4 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
         </header>
     );
 }
+

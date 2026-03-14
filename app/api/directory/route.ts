@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getSheetData } from '@/lib/sheets';
+import { parseSheetData } from '@/lib/sheets-parser';
 import { OfficerSchema } from '@/schemas/directory';
 import { rateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/security';
 
 // cache for an hour. don't hit google sheets every time or they ban us.
 export const revalidate = 3600;
 
 export async function GET(request: Request) {
-    const ip = request.headers.get('x-forwarded-for') || 'anonymous';
+    const ip = getClientIp(request);
     const limit = rateLimit(`dir_api_${ip}`, 30, 60000); // 30 requests per minute per IP
 
     if (!limit.success) {
@@ -15,12 +17,12 @@ export async function GET(request: Request) {
     }
 
     try {
-        const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_DIRECTORY_ID;
+        const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_INFO_ID;
         const RANGE = 'Officers!A2:G';
 
         if (!SPREADSHEET_ID) {
             return NextResponse.json(
-                { error: 'Missing configuration: GOOGLE_SHEETS_DIRECTORY_ID' },
+                { error: 'Missing configuration: GOOGLE_SHEETS_INFO_ID' },
                 { status: 500 }
             );
         }
@@ -31,38 +33,35 @@ export async function GET(request: Request) {
             return NextResponse.json({ data: [] });
         }
 
-        const validOfficers: any[] = [];
-        const validationErrors: any[] = [];
-
-        rawData.forEach((row, index) => {
-            // dumping sheet rows into the object
-            const officerData = {
-                id: row[0] || `auto-${index}`,
-                name: row[1] || '',
-                position: row[2] || '',
-                branch: row[3] || '',
-                facebookUrl: row[4] || undefined,
-                linkedinUrl: row[5] || undefined,
-                priority: row[6] ? parseInt(row[6], 10) : undefined,
-            };
-
-            const result = OfficerSchema.safeParse(officerData);
-
-            if (result.success) {
-                validOfficers.push(result.data);
-            } else {
-                // someone messed up the sheet formatting again
-                console.warn(`Row ${index + 2} skipped:`, result.error.format());
-                validationErrors.push({ row: index + 2 });
+        const { validData, invalidCount } = parseSheetData({
+            rows: rawData,
+            schema: OfficerSchema,
+            mapping: [
+                { index: 0, key: 'id' },
+                { index: 1, key: 'name', defaultValue: '' },
+                { index: 2, key: 'position', defaultValue: '' },
+                { index: 3, key: 'branch', defaultValue: '' },
+                { index: 4, key: 'facebookUrl' },
+                { index: 5, key: 'linkedinUrl' },
+                { index: 6, key: 'priority', transform: (v) => parseInt(v, 10) }
+            ],
+            onError: (err, rowNum) => {
+                console.warn(`Row ${rowNum} skipped:`, err);
             }
         });
 
+        // Generate IDs for those missing them (assuming id was optional or needs a fallback)
+        const finalData = validData.map((officer, index) => ({
+            ...officer,
+            id: officer.id || `auto-${index}`,
+        }));
+
         return NextResponse.json({
-            data: validOfficers,
+            data: finalData,
             meta: {
                 total: rawData.length,
-                valid: validOfficers.length,
-                invalid: validationErrors.length
+                valid: finalData.length,
+                invalid: invalidCount
             }
         });
 

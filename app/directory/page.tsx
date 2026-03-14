@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, Facebook, Linkedin, Users, Grid, List as ListIcon } from 'lucide-react';
+import { useState, useEffect, useTransition } from 'react';
+import useSWR from 'swr';
+import { Search, Facebook, Linkedin, Users, Grid, List as ListIcon, Loader2 } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 const branches = ['All', 'OSR', 'SSC', 'College Councils'] as const;
 type Branch = typeof branches[number];
@@ -17,37 +19,30 @@ interface Officer {
 }
 
 export default function DirectoryPage() {
-    const [officers, setOfficers] = useState<Officer[]>([]);
+    const { data: response, error, isLoading } = useSWR('/api/directory', (url: string) => fetch(url).then(res => res.json()));
+    const officers: Officer[] = response?.data || [];
+
     const [search, setSearch] = useState('');
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [filterQuery, setFilterQuery] = useState('');
+    const [viewModeState, setViewModeState] = useState<'grid' | 'list'>('grid');
     const [userOverridden, setUserOverridden] = useState(false);
     const [activeBranch, setActiveBranch] = useState<Branch>('All');
+    const [filterBranch, setFilterBranch] = useState<Branch>('All');
+    const [isPending, startTransition] = useTransition();
 
-    useEffect(() => {
-        fetch('/api/directory')
-            .then(res => res.json())
-            .then(json => {
-                const data = json.data || [];
-                setOfficers(data);
-                // switch to list view if there's too many people because grid looks awful
-                if (!userOverridden && data.length > 15) {
-                    setViewMode('list');
-                }
-                setLoading(false);
-            })
-            .catch(() => {
-                setError('Failed to load directory');
-                setLoading(false);
-            });
-    }, []);
+    // Derive effective view mode: default to list if many people, unless user manually chose
+    const viewMode = (!userOverridden && officers.length > 15) ? 'list' : viewModeState;
+
+    const handleViewChange = (mode: 'grid' | 'list') => {
+        setViewModeState(mode);
+        setUserOverridden(true);
+    };
 
     const filtered = officers.filter(o => {
-        const matchSearch = o.name.toLowerCase().includes(search.toLowerCase()) ||
-            o.position.toLowerCase().includes(search.toLowerCase()) ||
-            (o.branch || '').toLowerCase().includes(search.toLowerCase());
-        const matchBranch = activeBranch === 'All' || (o.branch || '').toLowerCase().includes(activeBranch.toLowerCase());
+        const matchSearch = o.name.toLowerCase().includes(filterQuery.toLowerCase()) ||
+            o.position.toLowerCase().includes(filterQuery.toLowerCase()) ||
+            (o.branch || '').toLowerCase().includes(filterQuery.toLowerCase());
+        const matchBranch = filterBranch === 'All' || (o.branch || '').toLowerCase().includes(filterBranch.toLowerCase());
         return matchSearch && matchBranch;
     });
 
@@ -69,20 +64,36 @@ export default function DirectoryPage() {
             {/* Branch Filter Tabs */}
             <section className="container-main -mt-6 mb-2">
                 <div className="flex gap-2 justify-center flex-wrap">
-                    {branches.map(branch => (
-                        <button
-                            key={branch}
-                            onClick={() => setActiveBranch(branch)}
-                            className="px-5 py-2 rounded-full text-sm font-semibold transition-all cursor-pointer border-2"
-                            style={{
-                                background: activeBranch === branch ? 'var(--rtu-blue)' : 'var(--bg-card)',
-                                color: activeBranch === branch ? 'white' : 'var(--text-secondary)',
-                                borderColor: activeBranch === branch ? 'var(--rtu-blue)' : 'var(--glass-border)',
-                            }}
-                        >
-                            {branch}
-                        </button>
-                    ))}
+                    {branches.map(branch => {
+                        const isActive = activeBranch === branch;
+                        return (
+                            <button
+                                key={branch}
+                                onClick={() => {
+                                    setActiveBranch(branch);
+                                    startTransition(() => {
+                                        setFilterBranch(branch);
+                                    });
+                                }}
+                                className="relative px-5 py-2 rounded-full text-sm font-semibold cursor-pointer border-2 transition-colors"
+                                style={{
+                                    color: isActive ? 'white' : 'var(--text-secondary)',
+                                    borderColor: isActive ? 'transparent' : 'var(--glass-border)',
+                                    background: isActive ? 'transparent' : 'var(--bg-card)',
+                                }}
+                            >
+                                {isActive && (
+                                    <motion.div
+                                        layoutId="active-branch"
+                                        className="absolute inset-0 rounded-full"
+                                        style={{ background: 'var(--rtu-blue)' }}
+                                        transition={{ type: 'spring', duration: 0.5, bounce: 0.2 }}
+                                    />
+                                )}
+                                <span className="relative z-10">{branch}</span>
+                            </button>
+                        );
+                    })}
                 </div>
             </section>
 
@@ -97,21 +108,27 @@ export default function DirectoryPage() {
                             className="flex-1 outline-none text-base bg-transparent"
                             style={{ color: 'var(--text-primary)' }}
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => {
+                                setSearch(e.target.value);
+                                startTransition(() => {
+                                    setFilterQuery(e.target.value);
+                                });
+                            }}
                         />
+                        {isPending && <Loader2 size={16} className="animate-spin text-amber-500" />}
                     </div>
 
                     {/* View Controls */}
                     <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
                         <button
-                            onClick={() => { setViewMode('grid'); setUserOverridden(true); }}
+                            onClick={() => handleViewChange('grid')}
                             className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-amber-500' : 'text-gray-400 hover:text-gray-600'}`}
                             title="Grid View"
                         >
                             <Grid size={18} />
                         </button>
                         <button
-                            onClick={() => { setViewMode('list'); setUserOverridden(true); }}
+                            onClick={() => handleViewChange('list')}
                             className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-amber-500' : 'text-gray-400 hover:text-gray-600'}`}
                             title="List View"
                         >
@@ -124,7 +141,7 @@ export default function DirectoryPage() {
             {/* Grid */}
             < section className="section" >
                 <div className="container-main">
-                    {loading && (
+                    {isLoading && (
                         <div className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-4"}>
                             {Array.from({ length: 6 }).map((_, i) => (
                                 <div key={i} className="card p-6 flex flex-col gap-4">
@@ -137,9 +154,9 @@ export default function DirectoryPage() {
                         </div>
                     )}
                     {error && (
-                        <p className="text-center text-red-500">{error}</p>
+                        <p className="text-center text-red-500">Failed to load directory</p>
                     )}
-                    {!loading && !error && filtered.length === 0 && (
+                    {!isLoading && !error && filtered.length === 0 && (
                         <p className="text-center" style={{ color: 'var(--text-muted)' }}>
                             {search ? 'No officers found matching your search.' : 'No officers in the directory yet.'}
                         </p>
@@ -148,7 +165,7 @@ export default function DirectoryPage() {
                         {filtered.map((officer, idx) => (
                             <div
                                 key={officer.id || idx}
-                                className={`card p-6 flex ${viewMode === 'list' ? 'flex-row items-center gap-6' : 'flex-col'}`}
+                                className={`card p-6 flex ${viewMode === 'list' ? 'flex-row items-center gap-6' : 'flex-col'} content-visibility-auto`}
                             >
                                 {/* Avatar */}
                                 <div

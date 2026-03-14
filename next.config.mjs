@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactCompiler: true,
+  serverExternalPackages: ['jsdom'],
   experimental: {
     serverActions: {
       allowedOrigins: ["localhost:3000"]
@@ -17,28 +18,21 @@ const nextConfig = {
   async headers() {
     const cspHeader = `
       default-src 'self';
-      script-src 'self' 'unsafe-eval' 'unsafe-inline';
+      script-src 'self' 'unsafe-inline';
       style-src 'self' 'unsafe-inline';
-      img-src 'self' blob: data: *.googleusercontent.com www.google.com *.fbcdn.net *.facebook.com;
+      img-src 'self' blob: data: https://*.googleusercontent.com https://www.google.com https://*.fbcdn.net https://*.facebook.com;
       font-src 'self';
       object-src 'none';
       base-uri 'self';
-      form-action 'self';
-      frame-src 'self' *.youtube.com *.drive.google.com;
-      connect-src 'self' *.google.com;
+      form-action 'self' https://accounts.google.com;
+      frame-src 'self' https://*.youtube.com https://*.drive.google.com;
+      frame-ancestors 'self';
+      connect-src 'self' https://*.google.com https://accounts.google.com https://oauth2.googleapis.com;
+      script-src-attr 'none';
       upgrade-insecure-requests;
     `.replace(/\s{2,}/g, ' ').trim();
 
     return [
-      {
-        source: "/api/:path*",
-        headers: [
-          { key: "Access-Control-Allow-Credentials", value: "true" },
-          { key: "Access-Control-Allow-Origin", value: "https://rtu.edu.ph" },
-          { key: "Access-Control-Allow-Methods", value: "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
-          { key: "Access-Control-Allow-Headers", value: "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization" },
-        ]
-      },
       {
         source: "/(.*)",
         headers: [

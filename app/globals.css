@@ -52,6 +52,7 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
+  min-height: 100vh;
 }
 
 /* ===== Fluid Typography ===== */
@@ -228,8 +229,10 @@ select:focus-visible {
 
 /* ===== Section Heading Accent ===== */
 .section-heading {
-  display: inline-block;
+  display: block;
   position: relative;
+  width: fit-content;
+  margin-inline: auto;
 }
 
 .section-heading::after {
@@ -306,6 +309,16 @@ select:focus-visible {
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(212, 168, 67, 0.4), transparent);
   border: none;
+}
+
+@media (max-width: 640px) {
+  .container-main {
+    padding-inline: 1rem;
+  }
+
+  .section-heading::after {
+    margin-top: 0.625rem;
+  }
 }
 
 /* ===== Active Nav Indicator ===== */
@@ -534,4 +547,10 @@ select:focus-visible {
       transparent 100%);
   background-size: 200% 100%;
   animation: ctaShimmer 3s ease-in-out infinite;
+}
+
+/* ===== Performance Optimizations ===== */
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 400px;
 }

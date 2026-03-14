@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import useSWR from 'swr';
 import Image from 'next/image';
 import { Newspaper, Globe, ThumbsUp, MessageSquare, Share2 } from 'lucide-react';
 import { NewsPost } from '@/schemas/news';
@@ -67,25 +68,8 @@ function CaptionText({ text }: { text: string }) {
 }
 
 export default function NewsPage() {
-    const [posts, setPosts] = useState<NewsPost[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        async function fetchNews() {
-            try {
-                const res = await fetch('/api/news');
-                const data = await res.json();
-                if (data.data) {
-                    setPosts(data.data);
-                }
-            } catch (err) {
-                console.error("Failed to load news", err);
-            } finally {
-                setLoading(false);
-            }
-        }
-        fetchNews();
-    }, []);
+    const { data: response, error, isLoading } = useSWR('/api/news', (url: string) => fetch(url).then(res => res.json()));
+    const posts: NewsPost[] = response?.data || [];
 
     return (
         <>
@@ -105,7 +89,7 @@ export default function NewsPage() {
             {/* Feed */}
             <section className="section">
                 <div className="container-main" style={{ maxWidth: '42rem' }}>
-                    {loading ? (
+                    {isLoading ? (
                         /* loading state nobody looks at */
                         <div className="flex flex-col gap-4">
                             {Array.from({ length: 3 }).map((_, i) => (
@@ -138,10 +122,9 @@ export default function NewsPage() {
                     ) : posts.length === 0 ? (
                         <div className="text-center py-20 text-white/50">No news updates yet.</div>
                     ) : (
-                        /* the actual stuff */
                         <div className="flex flex-col gap-4">
                             {posts.map((post) => (
-                                <article key={post.id} className="fb-card fade-in-up">
+                                <article key={post.id} className="fb-card fade-in-up content-visibility-auto">
 
                                     {/* ── Header ── */}
                                     <div className="fb-card-header">
@@ -214,7 +197,7 @@ export default function NewsPage() {
                         This feed updates automatically whenever a new Facebook post is detected.
                     </p>
                 </div>
-            </section>
+            </section >
         </>
     );
 }

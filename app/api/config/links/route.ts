@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getSheetData } from '@/lib/sheets';
+import { parseSheetData } from '@/lib/sheets-parser';
 import { QuickLinkSchema } from '@/schemas/links';
 import { rateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/security';
 
 export const revalidate = 3600; // Hourly ISR
 
 export async function GET(request: Request) {
-    const ip = request.headers.get('x-forwarded-for') || 'anonymous';
+    const ip = getClientIp(request);
     const limit = rateLimit(`links_api_${ip}`, 30, 60000); // 30 requests per minute per IP
 
     if (!limit.success) {
@@ -14,7 +16,7 @@ export async function GET(request: Request) {
     }
 
     try {
-        const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_DIRECTORY_ID;
+        const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_INFO_ID;
         const RANGE = 'QuickLinks!A2:E';
 
         if (!SPREADSHEET_ID) {
@@ -23,18 +25,29 @@ export async function GET(request: Request) {
 
         const rawData = await getSheetData(SPREADSHEET_ID, RANGE);
 
-        const links = rawData.map((row, index) => {
-            const linkData = {
-                id: row[0] || `link-${index}`,
-                label: row[1] || 'Link',
-                desc: row[2] || '',
-                href: row[3] || '#',
-                icon: row[4] || 'ExternalLink',
-            };
+        const { validData } = parseSheetData({
+            rows: rawData,
+            schema: QuickLinkSchema,
+            mapping: [
+                { index: 0, key: 'id' },
+                { index: 1, key: 'label' },
+                { index: 2, key: 'desc' },
+                { index: 3, key: 'href' },
+                { index: 4, key: 'icon', defaultValue: 'ExternalLink' }
+            ],
+            onError: (err, rowNum) => {
+                console.warn(`Link Row ${rowNum} skipped:`, err);
+            }
+        });
 
-            const result = QuickLinkSchema.safeParse(linkData);
-            return result.success ? result.data : null;
-        }).filter(Boolean);
+        // Generate fallback IDs
+        const links = validData.map((link, index) => ({
+            ...link,
+            id: link.id || `link-${index}`,
+            label: link.label || 'Link',
+            desc: link.desc || '',
+            href: link.href || '#',
+        }));
 
         return NextResponse.json({ data: links });
 

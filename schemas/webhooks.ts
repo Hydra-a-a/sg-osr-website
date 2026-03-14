@@ -71,6 +71,9 @@ export const FormSubmissionSchema = z.object({
 
     // Security: Client-side timestamp to prevent instant bot submissions
     timestamp: z.number().optional(),
+
+    // Security: Allow students to submit grievances without PII attached
+    isAnonymous: z.boolean().optional().default(false),
 });
 
 export type FormSubmission = z.infer<typeof FormSubmissionSchema>;

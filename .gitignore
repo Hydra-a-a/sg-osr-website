@@ -30,6 +30,14 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# local generated reports / outputs
+build_out.txt
+lint_out.txt
+lint_output.json
+lint_output.txt
+out.txt
+out_v2.txt
+
 # env files
 .env*
 .env.local
@@ -80,3 +88,4 @@ skills-lock.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.env*.local

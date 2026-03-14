@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { z } from 'zod';
+import { getGoogleServiceAccountCredentials } from '@/lib/google-credentials';
 
 // ───── Zod Schemas for Google Slides API ─────
 // Now captures text, images, AND videos from slide page elements.
@@ -46,15 +47,10 @@ export type SlideData = z.infer<typeof SlideSchema>;
 export type PageElement = z.infer<typeof PageElementSchema>;
 
 export async function getSlidesData(): Promise<SlideData[]> {
-    if (!process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) {
-        throw new Error("Missing Server-side Environment Variables");
-    }
+    const credentials = getGoogleServiceAccountCredentials();
 
     const auth = new google.auth.GoogleAuth({
-        credentials: {
-            client_email: process.env.GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL,
-            private_key: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.replace(/\\n/g, '\n'),
-        },
+        credentials,
         scopes: ['https://www.googleapis.com/auth/presentations.readonly'],
     });
 

@@ -1,0 +1,502 @@
+{
+    "name": "Integration Facebook Pages, HTTP (Final)",
+    "flow": [
+        {
+            "id": 1,
+            "module": "facebook-pages:WatchPosts",
+            "version": 6,
+            "parameters": {
+                "limit": 2,
+                "page_id": "1022192497644296",
+                "__IMTCONN__": 5687376
+            },
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": -481,
+                    "y": -33
+                },
+                "restore": {
+                    "parameters": {
+                        "page_id": {
+                            "mode": "chose",
+                            "label": "Test page osr"
+                        },
+                        "__IMTCONN__": {
+                            "data": {
+                                "connection": "facebook",
+                                "scoped": "true"
+                            },
+                            "label": "My Facebook connection (Richard Christian Fernandez)"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "__IMTCONN__",
+                        "type": "account:facebook",
+                        "label": "Connection",
+                        "required": true
+                    },
+                    {
+                        "name": "page_id",
+                        "type": "select",
+                        "label": "Page",
+                        "required": true
+                    },
+                    {
+                        "name": "limit",
+                        "type": "uinteger",
+                        "label": "Limit",
+                        "required": true
+                    }
+                ]
+            }
+        },
+        {
+            "id": 7,
+            "module": "json:CreateJSON",
+            "version": 1,
+            "parameters": {
+                "type": 328563,
+                "space": ""
+            },
+            "filter": {
+                "name": "News_Filter",
+                "conditions": [
+                    [
+                        {
+                            "a": "{{1.message}}",
+                            "b": "#OSRUPDATES",
+                            "o": "text:contain:ci"
+                        }
+                    ]
+                ]
+            },
+            "mapper": {
+                "content": "{{1.message}}",
+                "imageUrl": "{{1.picture}}",
+                "sourcePage": "Test page osr",
+                "publishedAt": "{{1.created_time}}",
+                "fbLink": "{{1.permalink_url}}"
+            },
+            "metadata": {
+                "designer": {
+                    "x": -101,
+                    "y": -34
+                },
+                "restore": {
+                    "parameters": {
+                        "type": {
+                            "label": "FACEBOOK_POST_CHECK"
+                        },
+                        "space": {
+                            "label": "Empty"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "type",
+                        "type": "udt",
+                        "label": "Data structure",
+                        "required": true
+                    },
+                    {
+                        "name": "space",
+                        "type": "select",
+                        "label": "Indentation",
+                        "validate": {
+                            "enum": [
+                                "tab",
+                                "2",
+                                "4"
+                            ]
+                        }
+                    }
+                ],
+                "expect": [
+                    {
+                        "name": "sourcePage",
+                        "type": "text",
+                        "label": "Source page"
+                    },
+                    {
+                        "name": "content",
+                        "type": "text",
+                        "label": "Content"
+                    },
+                    {
+                        "name": "imageUrl",
+                        "type": "text",
+                        "label": "Image URL"
+                    },
+                    {
+                        "name": "publishedAt",
+                        "type": "text",
+                        "label": "Published at"
+                    },
+                    {
+                        "name": "fbLink",
+                        "type": "text",
+                        "label": "FB Link"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 9,
+            "module": "util:SetVariables",
+            "version": 1,
+            "parameters": {
+                "scope": "roundtrip"
+            },
+            "mapper": {
+                "variables": [
+                    {
+                        "name": "timestamp",
+                        "value": "{{formatDate(now; \"X\")}}"
+                    },
+                    {
+                        "name": "webhook_secret",
+                        "value": "AzxlJaklsO1mas-salkasGaFsdFasdapoMnajhsdBalsd-asjka"
+                    }
+                ]
+            },
+            "metadata": {
+                "designer": {
+                    "x": 235,
+                    "y": -33
+                },
+                "restore": {
+                    "expect": {
+                        "variables": {
+                            "mode": "chose",
+                            "items": [
+                                null,
+                                null
+                            ]
+                        }
+                    }
+                },
+                "expect": [
+                    {
+                        "name": "variables",
+                        "spec": [
+                            {
+                                "name": "name",
+                                "type": "text",
+                                "label": "Variable name",
+                                "required": true
+                            },
+                            {
+                                "name": "value",
+                                "type": "any",
+                                "label": "Variable value"
+                            }
+                        ],
+                        "type": "array",
+                        "label": "Variables"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 8,
+            "module": "http:MakeRequest",
+            "version": 4,
+            "parameters": {
+                "tlsType": "",
+                "proxyKeychain": "",
+                "authenticationType": "noAuth"
+            },
+            "mapper": {
+                "url": "https://nasty-suits-create.loca.lt/api/webhooks/make",
+                "method": "post",
+                "headers": [
+                    {
+                        "name": "x-webhook-timestamp",
+                        "value": "{{9.timestamp}}"
+                    },
+                    {
+                        "name": "x-webhook-signature",
+                        "value": "sha256={{hmac(9.timestamp + \".\" + 7.json; 9.webhook_secret; \"sha256\"; \"hex\")}}"
+                    },
+                    {
+                        "name": "bypass-tunnel-reminder",
+                        "value": "true"
+                    }
+                ],
+                "contentType": "custom",
+                "shareCookies": false,
+                "parseResponse": true,
+                "allowRedirects": true,
+                "rawBodyContent": "{{7.json}}",
+                "stopOnHttpError": true,
+                "contentTypeValue": "application/json",
+                "requestCompressedContent": true
+            },
+            "metadata": {
+                "designer": {
+                    "x": 560,
+                    "y": -33
+                },
+                "restore": {
+                    "expect": {
+                        "method": {
+                            "mode": "chose",
+                            "label": "POST"
+                        },
+                        "headers": {
+                            "mode": "chose",
+                            "items": [
+                                null,
+                                null,
+                                null
+                            ]
+                        },
+                        "contentType": {
+                            "label": "Custom"
+                        },
+                        "shareCookies": {
+                            "mode": "chose"
+                        },
+                        "parseResponse": {
+                            "mode": "chose"
+                        },
+                        "allowRedirects": {
+                            "mode": "chose"
+                        },
+                        "paginationType": {
+                            "label": "Empty"
+                        },
+                        "queryParameters": {
+                            "mode": "chose"
+                        },
+                        "stopOnHttpError": {
+                            "mode": "chose"
+                        },
+                        "requestCompressedContent": {
+                            "mode": "chose"
+                        }
+                    },
+                    "parameters": {
+                        "tlsType": {
+                            "label": "Empty"
+                        },
+                        "proxyKeychain": {
+                            "label": "Choose a key"
+                        },
+                        "authenticationType": {
+                            "label": "No authentication"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "authenticationType",
+                        "type": "select",
+                        "label": "Authentication type",
+                        "required": true,
+                        "validate": {
+                            "enum": [
+                                "noAuth",
+                                "apiKey",
+                                "basicAuth",
+                                "oAuth"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "tlsType",
+                        "type": "select",
+                        "label": "Transport layer security (TLS)",
+                        "validate": {
+                            "enum": [
+                                "mTls",
+                                "tls"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "proxyKeychain",
+                        "type": "keychain:proxy",
+                        "label": "Proxy"
+                    }
+                ],
+                "expect": [
+                    {
+                        "name": "url",
+                        "type": "url",
+                        "label": "URL",
+                        "required": true
+                    },
+                    {
+                        "name": "method",
+                        "type": "select",
+                        "label": "Method",
+                        "required": true,
+                        "validate": {
+                            "enum": [
+                                "get",
+                                "head",
+                                "post",
+                                "put",
+                                "patch",
+                                "delete",
+                                "options"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "headers",
+                        "spec": {
+                            "name": "value",
+                            "spec": [
+                                {
+                                    "name": "name",
+                                    "type": "text",
+                                    "label": "Name",
+                                    "required": true,
+                                    "validate": {
+                                        "pattern": "^[-!#$%&'*+.^_`|~0-9A-Za-z]+$"
+                                    }
+                                },
+                                {
+                                    "name": "value",
+                                    "type": "text",
+                                    "label": "Value"
+                                }
+                            ],
+                            "type": "collection",
+                            "label": "Header"
+                        },
+                        "type": "array",
+                        "label": "Headers"
+                    },
+                    {
+                        "name": "queryParameters",
+                        "spec": {
+                            "name": "value",
+                            "spec": [
+                                {
+                                    "name": "name",
+                                    "type": "text",
+                                    "label": "Name",
+                                    "required": true
+                                },
+                                {
+                                    "name": "value",
+                                    "type": "text",
+                                    "label": "Value"
+                                }
+                            ],
+                            "type": "collection",
+                            "label": "Parameter"
+                        },
+                        "type": "array",
+                        "label": "Query parameters"
+                    },
+                    {
+                        "name": "contentType",
+                        "type": "select",
+                        "label": "Body content type",
+                        "validate": {
+                            "enum": [
+                                "json",
+                                "multipart",
+                                "urlEncoded",
+                                "custom"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "parseResponse",
+                        "type": "boolean",
+                        "label": "Parse response",
+                        "required": true
+                    },
+                    {
+                        "name": "stopOnHttpError",
+                        "type": "boolean",
+                        "label": "Return error if HTTP request fails",
+                        "required": true
+                    },
+                    {
+                        "name": "timeout",
+                        "type": "uinteger",
+                        "label": "Timeout",
+                        "validate": {
+                            "max": 300,
+                            "min": 1
+                        }
+                    },
+                    {
+                        "name": "allowRedirects",
+                        "type": "boolean",
+                        "label": "Allow redirects",
+                        "required": true
+                    },
+                    {
+                        "name": "shareCookies",
+                        "type": "boolean",
+                        "label": "Share cookies with other HTTP modules",
+                        "required": true
+                    },
+                    {
+                        "name": "requestCompressedContent",
+                        "type": "boolean",
+                        "label": "Request compressed content",
+                        "required": true
+                    },
+                    {
+                        "name": "contentTypeValue",
+                        "type": "text",
+                        "label": "Content type value",
+                        "required": true
+                    },
+                    {
+                        "name": "rawBodyContent",
+                        "type": "buffer",
+                        "label": "Body content",
+                        "required": true
+                    },
+                    {
+                        "name": "paginationType",
+                        "type": "select",
+                        "label": "Pagination type",
+                        "validate": {
+                            "enum": [
+                                "offsetBased",
+                                "pageBased",
+                                "urlBased",
+                                "tokenBased"
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "metadata": {
+        "instant": false,
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false,
+            "slots": null,
+            "confidential": false,
+            "dataloss": false,
+            "dlq": false,
+            "freshVariables": false
+        },
+        "designer": {
+            "orphans": []
+        },
+        "zone": "eu1.make.com",
+        "notes": []
+    }
+}

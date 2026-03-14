@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import useSWR from 'swr';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -42,34 +43,51 @@ const councils = [
         gradientFrom: '#dad73eff',
         gradientTo: '#dee080ff',
     },
+    {
+        id: 'mccsc',
+        name: 'Mandaluyong City College Student Council',
+        abbr: 'MCCSC',
+        src: '/images/MCCSC.png',
+        glow: 'rgba(126, 34, 206, 0.5)',
+        gradientFrom: '#7e22ce',
+        gradientTo: '#fbbf24',
+    },
 ];
 
 export default function Hero() {
-    const [links, setLinks] = useState<QuickLink[]>([]);
+    const { data: linksResponse } = useSWR('/api/config/links', (url: string) => fetch(url).then(r => r.json()));
+    const links: QuickLink[] = linksResponse?.data || [];
     const [activeIdx, setActiveIdx] = useState(0);
-
-    const next = useCallback(() => setActiveIdx((i) => (i + 1) % councils.length), []);
-    const prev = useCallback(() => setActiveIdx((i) => (i - 1 + councils.length) % councils.length), []);
-
-    // auto-rotate every 5 seconds
-    useEffect(() => {
-        const id = setInterval(next, 5000);
-        return () => clearInterval(id);
-    }, [next]);
+    const lastInteraction = useRef(0);
 
     useEffect(() => {
-        async function fetchLinks() {
-            try {
-                const res = await fetch('/api/config/links');
-                const data = await res.json();
-                if (data.data) {
-                    setLinks(data.data);
-                }
-            } catch (err) {
-                console.error("Failed to load hero links", err);
+        lastInteraction.current = Date.now();
+    }, []);
+
+    const next = useCallback(() => {
+        setActiveIdx((i) => (i + 1) % councils.length);
+        lastInteraction.current = Date.now();
+    }, []);
+
+    const prev = useCallback(() => {
+        setActiveIdx((i) => (i - 1 + councils.length) % councils.length);
+        lastInteraction.current = Date.now();
+    }, []);
+
+    const jumpTo = useCallback((idx: number) => {
+        setActiveIdx(idx);
+        lastInteraction.current = Date.now();
+    }, []);
+
+    // auto-rotate every 5 seconds, but only if user hasn't interacted for 10 seconds
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const now = Date.now();
+            if (now - lastInteraction.current > 10000) {
+                setActiveIdx((i) => (i + 1) % councils.length);
             }
-        }
-        fetchLinks();
+        }, 5000);
+        return () => clearInterval(interval);
     }, []);
 
     const heroLinks = links.length > 0 ? links.slice(0, 3) : [
@@ -99,7 +117,7 @@ export default function Hero() {
                 style={{ background: 'var(--rtu-gold-light)' }}
             />
 
-            <div className="container-main relative z-10 py-32">
+            <div className="container-main relative z-10 py-24 md:py-32">
                 <div className="flex flex-col md:flex-row items-center gap-12">
 
                     <motion.div
@@ -114,7 +132,7 @@ export default function Hero() {
                         >
                             Rizal Technological University
                         </p>
-                        <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight mb-6">
+                        <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight mb-6 min-h-[3em] md:min-h-0">
                             RTU Student{' '}
                             <motion.span
                                 key={active.id}
@@ -134,7 +152,7 @@ export default function Hero() {
                             </motion.span>
                         </h1>
                         <p className="text-lg text-white/70 max-w-xl mb-8">
-                            Empowering Rizalinos through transparency, service, and inclusive governance.
+                            Empowering Rizalians through transparent, responsive, and inclusive student governance.
                             The unified digital home of the Supreme Student Council and the Office of the Student Regent.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
@@ -150,17 +168,17 @@ export default function Hero() {
 
                     {/* ── Logo Carousel ── */}
                     <motion.div
-                        className="flex-shrink-0"
+                        className="flex-shrink-0 w-full md:w-auto"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ duration: 0.6, delay: 0.15, ease: 'easeOut' }}
                     >
                         <div className="relative flex flex-col items-center">
                             {/* Logo stage */}
-                            <div className="relative w-72 h-56 md:w-[22rem] md:h-72 flex items-center justify-center">
+                            <div className="relative w-full max-w-[22rem] h-64 md:h-72 flex items-center justify-center">
                                 {/* Dynamic glow */}
                                 <motion.div
-                                    className="absolute inset-[-16px] rounded-full blur-[50px] z-0"
+                                    className="absolute inset-[10%] rounded-full blur-[40px] md:blur-[50px] z-0"
                                     animate={{ background: active.glow }}
                                     transition={{ duration: 0.6 }}
                                     style={{ opacity: 0.5 }}
@@ -169,21 +187,20 @@ export default function Hero() {
                                 {/* Left (prev) logo */}
                                 <motion.div
                                     key={`left-${leftIdx}`}
-                                    className="absolute w-24 h-24 md:w-36 md:h-36 z-10 cursor-pointer"
-                                    style={{ left: 0 }}
+                                    className="absolute w-28 h-28 md:w-36 md:h-36 z-10 cursor-pointer"
+                                    style={{ left: '-5%', top: '50%' }}
                                     onClick={prev}
-                                    initial={{ opacity: 0, x: 30, scale: 0.7 }}
-                                    animate={{ opacity: 0.55, x: 0, scale: 0.75 }}
-                                    exit={{ opacity: 0, x: 30, scale: 0.7 }}
-                                    transition={{ duration: 0.5, ease: 'easeOut' }}
-                                    whileHover={{ opacity: 0.85, scale: 0.82 }}
+                                    initial={{ opacity: 0, x: 20, y: '-50%', scale: 0.7 }}
+                                    animate={{ opacity: 0.4, x: 0, y: '-50%', scale: 0.7 }}
+                                    exit={{ opacity: 0, x: 20, y: '-50%', scale: 0.7 }}
+                                    transition={{ duration: 0.5 }}
+                                    whileHover={{ opacity: 0.7, scale: 0.75, y: '-50%' }}
                                 >
                                     <Image
                                         src={councils[leftIdx].src}
                                         alt={councils[leftIdx].name}
                                         fill
-                                        className="object-contain rounded-full"
-                                        style={{ filter: 'brightness(0.7)' }}
+                                        className="object-contain rounded-full brightness-75 transition-all"
                                     />
                                 </motion.div>
 
@@ -191,19 +208,19 @@ export default function Hero() {
                                 <AnimatePresence mode="wait">
                                     <motion.div
                                         key={`center-${activeIdx}`}
-                                        className="absolute w-44 h-44 md:w-56 md:h-56 z-20"
-                                        style={{ left: '50%', marginLeft: '-7rem', top: '50%', marginTop: '-7rem' }}
-                                        initial={{ opacity: 0, scale: 0.85 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.85 }}
+                                        className="absolute w-48 h-48 md:w-56 md:h-56 z-20 flex items-center justify-center"
+                                        style={{ top: '50%', left: '50%' }}
+                                        initial={{ opacity: 0, scale: 0.8, x: '-50%', y: '-50%' }}
+                                        animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
+                                        exit={{ opacity: 0, scale: 0.8, x: '-50%', y: '-50%' }}
                                         transition={{ duration: 0.45, ease: 'easeOut' }}
                                     >
-                                        <div className="w-full h-full animate-float relative">
+                                        <div className="w-full h-full animate-float relative flex items-center justify-center">
                                             <Image
                                                 src={active.src}
                                                 alt={active.name}
                                                 fill
-                                                className="object-contain rounded-full"
+                                                className="object-contain rounded-full shadow-2xl"
                                                 style={{
                                                     filter: `drop-shadow(0 12px 32px ${active.glow})`,
                                                 }}
@@ -216,40 +233,39 @@ export default function Hero() {
                                 {/* Right (next) logo */}
                                 <motion.div
                                     key={`right-${rightIdx}`}
-                                    className="absolute w-24 h-24 md:w-36 md:h-36 z-10 cursor-pointer"
-                                    style={{ right: 0 }}
+                                    className="absolute w-28 h-28 md:w-36 md:h-36 z-10 cursor-pointer"
+                                    style={{ right: '-5%', top: '50%' }}
                                     onClick={next}
-                                    initial={{ opacity: 0, x: -30, scale: 0.7 }}
-                                    animate={{ opacity: 0.55, x: 0, scale: 0.75 }}
-                                    exit={{ opacity: 0, x: -30, scale: 0.7 }}
-                                    transition={{ duration: 0.5, ease: 'easeOut' }}
-                                    whileHover={{ opacity: 0.85, scale: 0.82 }}
+                                    initial={{ opacity: 0, x: -20, y: '-50%', scale: 0.7 }}
+                                    animate={{ opacity: 0.4, x: 0, y: '-50%', scale: 0.7 }}
+                                    exit={{ opacity: 0, x: -20, y: '-50%', scale: 0.7 }}
+                                    transition={{ duration: 0.5 }}
+                                    whileHover={{ opacity: 0.7, scale: 0.75, y: '-50%' }}
                                 >
                                     <Image
                                         src={councils[rightIdx].src}
                                         alt={councils[rightIdx].name}
                                         fill
-                                        className="object-contain rounded-full"
-                                        style={{ filter: 'brightness(0.7)' }}
+                                        className="object-contain rounded-full brightness-75 transition-all"
                                     />
                                 </motion.div>
                             </div>
 
                             {/* Navigation arrows + label */}
-                            <div className="flex items-center gap-4 mt-4">
+                            <div className="flex items-center gap-4 mt-6">
                                 <button
                                     onClick={prev}
-                                    className="w-9 h-9 rounded-full flex items-center justify-center transition-colors"
+                                    className="w-10 h-10 rounded-full flex items-center justify-center transition-colors hover:bg-white/20"
                                     style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}
                                     aria-label="Previous council"
                                 >
-                                    <ChevronLeft className="text-white/70" size={18} />
+                                    <ChevronLeft className="text-white" size={20} />
                                 </button>
 
                                 <AnimatePresence mode="wait">
                                     <motion.span
                                         key={active.id}
-                                        className="text-xs font-bold uppercase tracking-widest min-w-[5rem] text-center"
+                                        className="text-sm font-bold uppercase tracking-widest min-w-[6rem] text-center"
                                         style={{
                                             background: `linear-gradient(135deg, ${active.gradientFrom}, ${active.gradientTo})`,
                                             WebkitBackgroundClip: 'text',
@@ -267,24 +283,25 @@ export default function Hero() {
 
                                 <button
                                     onClick={next}
-                                    className="w-9 h-9 rounded-full flex items-center justify-center transition-colors"
+                                    className="w-10 h-10 rounded-full flex items-center justify-center transition-colors hover:bg-white/20"
                                     style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}
                                     aria-label="Next council"
                                 >
-                                    <ChevronRight className="text-white/70" size={18} />
+                                    <ChevronRight className="text-white" size={20} />
                                 </button>
                             </div>
 
                             {/* Dot indicators */}
-                            <div className="flex gap-2 mt-3">
+                            <div className="flex gap-3 mt-4">
                                 {councils.map((c, i) => (
                                     <button
                                         key={c.id}
-                                        onClick={() => setActiveIdx(i)}
-                                        className="w-2 h-2 rounded-full transition-all duration-300"
+                                        onClick={() => jumpTo(i)}
+                                        className="w-2.5 h-2.5 rounded-full transition-all duration-300"
                                         style={{
-                                            background: i === activeIdx ? active.gradientFrom : 'rgba(255,255,255,0.25)',
-                                            transform: i === activeIdx ? 'scale(1.4)' : 'scale(1)',
+                                            background: i === activeIdx ? active.gradientFrom : 'rgba(255,255,255,0.2)',
+                                            transform: i === activeIdx ? 'scale(1.3)' : 'scale(1)',
+                                            boxShadow: i === activeIdx ? `0 0 10px ${active.glow}` : 'none'
                                         }}
                                         aria-label={`Switch to ${c.abbr}`}
                                     />

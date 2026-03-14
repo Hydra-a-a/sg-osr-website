@@ -1,8 +1,8 @@
 'use client';
 
-import DOMPurify from 'isomorphic-dompurify';
 import { SlideData, PageElement } from '../lib/google';
 import { extractYouTubeId, extractDriveFileId } from '../lib/smartLinks';
+import { sanitizeRichText } from '../lib/security';
 import Image from 'next/image';
 
 interface SlideParserProps {
@@ -113,7 +113,7 @@ export default function SlideParser({ slides }: SlideParserProps) {
                     <p
                         key={`txt-${index}-${pIndex}`}
                         className="text-lg leading-relaxed mb-4 text-gray-800 break-words"
-                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(cleanText).replace(/\n/g, '<br />') }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeRichText(cleanText) }}
                     />
                 );
             });

@@ -50,20 +50,77 @@ export default function HubPage() {
     const zoomOut = useCallback(() => setZoom((z) => Math.max(z - 0.5, 0.5)), []);
     const resetView = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
 
+    const activePointers = useRef<{ [key: number]: { x: number; y: number } }>({});
+    const initialDistance = useRef<number | null>(null);
+    const initialZoom = useRef<number>(1);
+
+    const getDistance = (p1: { x: number, y: number }, p2: { x: number, y: number }) => {
+        return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+    };
+
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
-        setDragging(true);
-        dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    }, [pan]);
+        const target = e.target as HTMLElement;
+        target.setPointerCapture(e.pointerId);
+        activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
+
+        const pointerKeys = Object.keys(activePointers.current);
+        if (pointerKeys.length === 1) {
+            setDragging(true);
+            dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+        } else if (pointerKeys.length === 2) {
+            setDragging(false); // Stop panning when zooming
+            const p1 = activePointers.current[Number(pointerKeys[0])];
+            const p2 = activePointers.current[Number(pointerKeys[1])];
+            initialDistance.current = getDistance(p1, p2);
+            initialZoom.current = zoom;
+        }
+    }, [pan, zoom]);
 
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
-        if (!dragging) return;
-        const dx = e.clientX - dragStart.current.x;
-        const dy = e.clientY - dragStart.current.y;
-        setPan({ x: dragStart.current.panX + dx, y: dragStart.current.panY + dy });
+        if (!activePointers.current[e.pointerId]) return;
+        activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
+
+        const pointerKeys = Object.keys(activePointers.current);
+        if (pointerKeys.length === 1 && dragging) {
+            const dx = e.clientX - dragStart.current.x;
+            const dy = e.clientY - dragStart.current.y;
+            setPan({ x: dragStart.current.panX + dx, y: dragStart.current.panY + dy });
+        } else if (pointerKeys.length === 2 && initialDistance.current !== null) {
+            const p1 = activePointers.current[Number(pointerKeys[0])];
+            const p2 = activePointers.current[Number(pointerKeys[1])];
+            const currentDistance = getDistance(p1, p2);
+
+            const scale = currentDistance / initialDistance.current;
+            const newZoom = initialZoom.current * scale;
+
+            setZoom(Math.max(0.5, Math.min(newZoom, 4)));
+        }
     }, [dragging]);
 
-    const handlePointerUp = useCallback(() => setDragging(false), []);
+    const handlePointerUp = useCallback((e: React.PointerEvent) => {
+        delete activePointers.current[e.pointerId];
+        const pointerKeys = Object.keys(activePointers.current);
+
+        if (pointerKeys.length < 2) {
+            initialDistance.current = null;
+        }
+        if (pointerKeys.length === 0) {
+            setDragging(false);
+        } else if (pointerKeys.length === 1) {
+            setPan(currentPan => {
+                const remainingPointerId = Number(pointerKeys[0]);
+                const p = activePointers.current[remainingPointerId];
+                dragStart.current = { x: p.x, y: p.y, panX: currentPan.x, panY: currentPan.y };
+                setDragging(true);
+                return currentPan;
+            });
+        }
+        try {
+            (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+        } catch (err) {
+            // Ignore capture release errors
+        }
+    }, []);
 
     const handleWheel = useCallback((e: React.WheelEvent) => {
         e.preventDefault();
@@ -225,7 +282,7 @@ export default function HubPage() {
                         {/* Zoomable Image Container */}
                         <motion.div
                             className="relative z-[1000] w-[90vw] h-[85vh] overflow-hidden rounded-2xl"
-                            style={{ background: 'rgba(30,30,30,0.6)', cursor: dragging ? 'grabbing' : 'grab' }}
+                            style={{ background: 'rgba(30, 30, 30, 0.6)', cursor: dragging ? 'grabbing' : 'grab', touchAction: 'none' }}
                             initial={{ scale: 0.92, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.92, opacity: 0 }}

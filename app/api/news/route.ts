@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getSheetData } from '@/lib/sheets';
+import { parseSheetData } from '@/lib/sheets-parser';
 import { NewsPostSchema } from '@/schemas/news';
 import { rateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/security';
 
 export const revalidate = 3600; // vercel pls cache this i can't afford more api hits
 
 export async function GET(request: Request) {
-    const ip = request.headers.get('x-forwarded-for') || 'anon';
+    const ip = getClientIp(request);
     const limit = rateLimit(`news_api_${ip}`, 30, 60000); // 30 reqs/min pls don't ddos me bro i have midterms
 
     if (!limit.success) {
@@ -14,7 +16,7 @@ export async function GET(request: Request) {
     }
 
     try {
-        const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_DIRECTORY_ID;
+        const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_INFO_ID;
         const RANGE = 'News!A2:Z'; // reading a ton of cols because idk who keeps shifting the sheet
 
         if (!SPREADSHEET_ID) {
@@ -23,32 +25,41 @@ export async function GET(request: Request) {
 
         const rawData = await getSheetData(SPREADSHEET_ID, RANGE);
 
-        const posts = rawData.map((row, index) => {
-            // scanning for the actual start because someone keeps messing up the sheet format
+        // Pre-process rows to fix shifting columns before feeding to parser
+        const normalizedRows = rawData.map(row => {
             let startIdx = 0;
-            while (startIdx < row.length && (!row[startIdx] || row[startIdx].trim() === '')) {
+            while (startIdx < row.length && (!row[startIdx] || typeof row[startIdx] === 'string' && row[startIdx].trim() === '')) {
                 startIdx++;
             }
+            return startIdx >= row.length ? [] : row.slice(startIdx);
+        }).filter(row => row.length > 0);
 
-            if (startIdx >= row.length) return null;
-
-            const postData = {
-                id: row[startIdx] || `news-${index}`,
-                source: row[startIdx + 1] || 'OSR',
-                caption: row[startIdx + 2] || '',
-                imageUrl: row[startIdx + 3] || null,
-                publishedAt: row[startIdx + 4] || new Date().toISOString(),
-                fbLink: (row[startIdx + 5] && row[startIdx + 5].includes('facebook.com'))
-                    ? row[startIdx + 5]
-                    : 'https://www.facebook.com/rtu.osr',
-            };
-
-            const result = NewsPostSchema.safeParse(postData);
-            if (!result.success) {
-                return null;
+        const { validData } = parseSheetData({
+            rows: normalizedRows,
+            schema: NewsPostSchema,
+            mapping: [
+                { index: 0, key: 'id' },
+                { index: 1, key: 'source', defaultValue: 'OSR' },
+                { index: 2, key: 'caption', defaultValue: '' },
+                { index: 3, key: 'imageUrl', defaultValue: null },
+                { index: 4, key: 'publishedAt', defaultValue: new Date().toISOString() },
+                {
+                    index: 5,
+                    key: 'fbLink',
+                    transform: (val) => val && val.includes('facebook.com') ? val : 'https://www.facebook.com/rtu.osr'
+                }
+            ],
+            onError: (err, rowNum) => {
+                console.warn(`News Row ${rowNum} skipped:`, err);
             }
-            return result.data;
-        }).filter(Boolean);
+        });
+
+        // Generate fallback IDs
+        const posts = validData.map((post, index) => ({
+            ...post,
+            id: post.id || `news-${index}`,
+            fbLink: post.fbLink || 'https://www.facebook.com/rtu.osr',
+        }));
 
         return NextResponse.json({ data: posts });
 

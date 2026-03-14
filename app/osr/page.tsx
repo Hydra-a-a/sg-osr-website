@@ -61,7 +61,7 @@ export default async function OSRHome() {
                             </div>
                             <h1 className="text-4xl md:text-5xl font-bold text-white leading-tight mb-5">
                                 The Voice of{' '}
-                                <span className="text-gradient-gold">Every Rizalian</span>
+                                <span className="text-gradient-gold">Every Rizaliano</span>
                             </h1>
                             <p className="text-lg text-white/70 max-w-xl mb-8">
                                 The OSR represents the student body in the Board of Regents — advocating
@@ -105,9 +105,7 @@ export default async function OSRHome() {
                                 Our Mission
                             </h2>
                             <p style={{ color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                                To serve as the principal advocate for student welfare in the highest governing body
-                                of Rizal Technological University, ensuring that every policy reflects the needs,
-                                rights, and aspirations of the student body across all campuses.
+                                Placeholder
                             </p>
                         </div>
                         <div className="card p-10">
@@ -115,9 +113,7 @@ export default async function OSRHome() {
                                 Our Vision
                             </h2>
                             <p style={{ color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                                A university where student governance is transparent, inclusive, and
-                                technology-driven — empowering every Rizalian to participate in the decisions
-                                that shape their academic and extracurricular experience.
+                                Placeholder
                             </p>
                         </div>
                     </div>

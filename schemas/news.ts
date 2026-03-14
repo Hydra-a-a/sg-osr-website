@@ -11,11 +11,16 @@ export const NewsPostSchema = z.object({
         z.null()
     ]).optional(),
     publishedAt: z.string(),
-    fbLink: z.string()
-        .url()
-        .refine(url => url.includes('facebook.com') || url.includes('fb.watch'), {
-            message: "Only official Facebook links allowed"
-        }),
+    fbLink: z.union([
+        z.string()
+            .url()
+            .refine(url => url.includes('facebook.com') || url.includes('fb.watch'), {
+                message: "Only official Facebook links allowed"
+            }),
+        z.literal(''),
+        z.null(),
+        z.undefined(),
+    ]).optional(),
 });
 
 export type NewsPost = z.infer<typeof NewsPostSchema>;

@@ -1,17 +1,26 @@
 import { google } from 'googleapis';
+import { getGoogleServiceAccountCredentials } from '@/lib/google-credentials';
 
-const auth = new google.auth.GoogleAuth({
-    credentials: {
-        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    },
-    // needed write access or the forms would crash
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
+let sheetsClient: ReturnType<typeof google.sheets> | null = null;
 
-const sheets = google.sheets({ version: 'v4', auth });
+function getSheetsClient() {
+    if (sheetsClient) {
+        return sheetsClient;
+    }
+
+    const auth = new google.auth.GoogleAuth({
+        credentials: getGoogleServiceAccountCredentials(),
+        // needed write access or the forms would crash
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+
+    sheetsClient = google.sheets({ version: 'v4', auth });
+    return sheetsClient;
+}
 
 export async function getSheetData(spreadsheetId: string, range: string) {
+    const sheets = getSheetsClient();
+
     try {
         const response = await sheets.spreadsheets.values.get(
             {
@@ -36,6 +45,8 @@ export async function getSheetData(spreadsheetId: string, range: string) {
 }
 
 export async function appendSheetData(spreadsheetId: string, range: string, values: any[][]) {
+    const sheets = getSheetsClient();
+
     try {
         const response = await sheets.spreadsheets.values.append(
             {
@@ -54,5 +65,29 @@ export async function appendSheetData(spreadsheetId: string, range: string, valu
     } catch (error) {
         console.error("Error appending Google Sheets data:", error);
         throw new Error("Failed to append data to Google Sheets");
+    }
+}
+
+export async function updateSheetCell(spreadsheetId: string, range: string, values: any[][]) {
+    const sheets = getSheetsClient();
+
+    try {
+        const response = await sheets.spreadsheets.values.update(
+            {
+                spreadsheetId,
+                range,
+                valueInputOption: 'USER_ENTERED',
+                requestBody: {
+                    values,
+                },
+            },
+            {
+                timeout: 8000
+            }
+        );
+        return response.data;
+    } catch (error) {
+        console.error("Error updating Google Sheets cell:", error);
+        throw new Error("Failed to update cell in Google Sheets");
     }
 }
