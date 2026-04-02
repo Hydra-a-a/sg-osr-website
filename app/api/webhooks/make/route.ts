@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { MakeWebhookPayloadSchema } from '@/schemas/webhooks';
 import { appendSheetData, getSheetData } from '@/lib/sheets';
-import { sanitizeText, getClientIp, isRecentWebhookTimestamp, verifyWebhookHmac } from '@/lib/security';
+import { sanitizeText, getClientIp, isRecentWebhookTimestamp, verifyWebhookHmac, redactErrorForLog } from '@/lib/security';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { logAuditAction } from '@/lib/audit';
+import { ApiError, toApiResponse } from '@/lib/api-errors';
 
 const replayCache = new Map<string, number>();
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
 
     if (!limit.success) {
         logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Rate limited' });
-        const response = NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+        const response = toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests'));
         if (limit.retryAfter) {
             response.headers.set('Retry-After', String(limit.retryAfter));
         }
@@ -49,37 +50,37 @@ export async function POST(request: Request) {
 
         if (!secret) {
             console.error('Missing MAKE_WEBHOOK_SECRET');
-            return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
+            return toApiResponse(new ApiError(500, 'WEBHOOK_NOT_CONFIGURED', 'Internal server error', undefined, false));
         }
 
         if (!isRecentWebhookTimestamp(timestampHeader)) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Invalid or stale webhook timestamp' });
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            return toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized'));
         }
 
         const timestamp = String(timestampHeader);
 
         if (!verifyWebhookHmac(rawBody, timestamp, signatureHeader, secret)) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Invalid webhook signature' });
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            return toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized'));
         }
 
         if (isReplayRequest(signatureHeader || '', timestamp)) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Webhook replay detected' });
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            return toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized'));
         }
 
         let body: unknown;
         try {
             body = JSON.parse(rawBody);
         } catch {
-            return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+            return toApiResponse(new ApiError(400, 'INVALID_JSON', 'Invalid request payload'));
         }
 
         const result = MakeWebhookPayloadSchema.safeParse(body);
         if (!result.success) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Schema validation mismatch on webhook payload' });
-            return NextResponse.json({ error: 'Invalid data' }, { status: 400 });
+            return toApiResponse(new ApiError(400, 'INVALID_PAYLOAD', 'Invalid request payload'));
         }
 
         const data = result.data;
@@ -144,7 +145,7 @@ export async function POST(request: Request) {
 
     } catch (error) {
         logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Internal exception during processing' });
-        console.error('Make Webhook Error:', error);
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+        console.error('Make Webhook Error:', redactErrorForLog(error));
+        return toApiResponse(error);
     }
 }

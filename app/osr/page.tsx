@@ -2,7 +2,7 @@ import { getSlidesData } from '../../lib/google';
 import SlideParser from '../../components/SlideParser';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Scale, Megaphone, Eye, Users, ArrowRight } from 'lucide-react';
+import { Scale, Megaphone, Heart, Users, ArrowRight } from 'lucide-react';
 
 export const revalidate = 24;
 
@@ -18,9 +18,9 @@ const pillars = [
         desc: 'Serving as the official voice of over 20,000 Rizalians in university governance.',
     },
     {
-        icon: Eye,
-        title: 'Transparency',
-        desc: 'Publishing financial reports, resolutions, and meeting minutes for full accountability.',
+        icon: Heart,
+        title: 'Inclusivity',
+        desc: 'Ensuring every Rizaliano is represented through inclusive programs, accessible services, and student-centered governance.',
     },
 ];
 
@@ -84,6 +84,7 @@ export default async function OSRHome() {
                                     src="/images/OSR_LOGO.jpg"
                                     alt="Office of the Student Regent Logo"
                                     fill
+                                    sizes="(max-width: 768px) 176px, 224px"
                                     className="object-contain rounded-full"
                                     style={{ filter: 'drop-shadow(0 8px 24px rgba(212, 168, 67, 0.3))' }}
                                     priority
@@ -97,22 +98,22 @@ export default async function OSRHome() {
             </section>
 
             {/* Mission & Vision */}
-            <section className="section" style={{ background: 'var(--bg-primary)' }}>
+            <section className="section bg-surface-base">
                 <div className="container-main">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="card p-10">
-                            <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--rtu-blue)' }}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+                        <div className="card p-7 md:p-10">
+                            <h2 className="text-2xl font-bold mb-4 text-brand">
                                 Our Mission
                             </h2>
-                            <p style={{ color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+                            <p className="text-body" style={{ lineHeight: 1.8 }}>
                                 Placeholder
                             </p>
                         </div>
-                        <div className="card p-10">
-                            <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--rtu-blue)' }}>
+                        <div className="card p-7 md:p-10">
+                            <h2 className="text-2xl font-bold mb-4 text-brand">
                                 Our Vision
                             </h2>
-                            <p style={{ color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+                            <p className="text-body" style={{ lineHeight: 1.8 }}>
                                 Placeholder
                             </p>
                         </div>
@@ -121,18 +122,18 @@ export default async function OSRHome() {
             </section>
 
             {/* What We Do */}
-            <section className="section" style={{ background: '#F2F1EE' }}>
+            <section className="section bg-surface-soft">
                 <div className="container-main">
-                    <h2 className="text-3xl font-bold mb-2 text-center section-heading" style={{ color: 'var(--rtu-blue)' }}>
+                    <h2 className="text-3xl font-bold mb-2 text-center section-heading text-brand">
                         What We Do
                     </h2>
-                    <p className="text-center mb-12" style={{ color: 'var(--text-muted)' }}>
-                        The three pillars of the Office of the Student Regent
+                    <p className="text-center mb-10 md:mb-12 text-subtle">
+                        The objectives of the Office of the Student Regent
                     </p>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-8">
                         {pillars.map((pillar) => (
-                            <div key={pillar.title} className="feature-card card p-8 text-center flex flex-col items-center">
+                            <div key={pillar.title} className="feature-card card p-6 md:p-8 text-center flex flex-col items-center">
                                 <div
                                     className="feature-icon w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
                                     style={{ background: 'rgba(212, 168, 67, 0.1)', color: 'var(--rtu-gold-dark)' }}
@@ -140,7 +141,7 @@ export default async function OSRHome() {
                                     <pillar.icon size={32} />
                                 </div>
                                 <h3 className="text-xl font-bold mb-3">{pillar.title}</h3>
-                                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                                <p className="text-sm text-subtle">
                                     {pillar.desc}
                                 </p>
                             </div>
@@ -150,20 +151,20 @@ export default async function OSRHome() {
             </section>
 
             {/* OSR Team Preview */}
-            <section className="section" style={{ background: 'var(--bg-primary)' }}>
+            <section className="section bg-surface-base">
                 <div className="container-main text-center">
-                    <h2 className="text-3xl font-bold mb-2 section-heading" style={{ color: 'var(--rtu-blue)' }}>
+                    <h2 className="text-3xl font-bold mb-2 section-heading text-brand">
                         Our Team
                     </h2>
-                    <p className="mb-10" style={{ color: 'var(--text-muted)' }}>
+                    <p className="mb-10 text-subtle">
                         The people behind the office
                     </p>
-                    <div className="card p-10 flex flex-col items-center">
-                        <Users size={48} style={{ color: 'var(--text-muted)', marginBottom: '1rem' }} />
-                        <p className="text-lg font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+                    <div className="card p-8 md:p-10 flex flex-col items-center">
+                        <Users size={48} className="text-subtle mb-4" />
+                        <p className="text-lg font-semibold mb-2 text-strong">
                             Meet the OSR Officers
                         </p>
-                        <p className="text-sm mb-6 max-w-md" style={{ color: 'var(--text-muted)' }}>
+                        <p className="text-sm mb-6 max-w-md text-subtle">
                             View the full roster of officers serving under the Office of the Student Regent.
                         </p>
                         <Link href="/directory" className="btn-primary no-underline flex items-center gap-2">
@@ -174,15 +175,14 @@ export default async function OSRHome() {
             </section>
 
             {/* Announcements from Google Slides */}
-            <section className="section" style={{ background: '#F2F1EE' }}>
+            <section className="section bg-surface-soft">
                 <div className="container-main">
                     <h2
-                        className="text-3xl font-bold mb-2 text-center section-heading"
-                        style={{ color: 'var(--rtu-blue)' }}
+                        className="text-3xl font-bold mb-2 text-center section-heading text-brand"
                     >
                         OSR Announcements
                     </h2>
-                    <p className="text-center mb-10" style={{ color: 'var(--text-muted)' }}>
+                    <p className="text-center mb-10 text-subtle">
                         Official updates from the Office of the Student Regent
                     </p>
                     <SlideParser slides={contentSlides} />

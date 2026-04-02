@@ -1,5 +1,72 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 
+const SENSITIVE_KEY_REGEX = /(authorization|token|secret|password|cookie|set-cookie|api[-_]?key|client[-_]?secret|refresh[-_]?token|access[-_]?token|id[-_]?token)/i;
+
+function redactStringValue(value: string): string {
+    return value
+        .replace(/(bearer\s+)[a-z0-9\-._~+/]+=*/gi, '$1[REDACTED]')
+        .replace(/AIza[0-9A-Za-z\-_]{20,}/g, '[REDACTED]')
+        .replace(/ya29\.[0-9A-Za-z\-_]+/g, '[REDACTED]')
+        .replace(/-----BEGIN [A-Z ]+-----[\s\S]*?-----END [A-Z ]+-----/g, '[REDACTED]');
+}
+
+function redactUnknownValue(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+    if (value === null || value === undefined) {
+        return value;
+    }
+
+    if (typeof value === 'string') {
+        return redactStringValue(value);
+    }
+
+    if (typeof value !== 'object') {
+        return value;
+    }
+
+    if (value instanceof Error) {
+        const redactedError: Record<string, unknown> = {
+            name: value.name,
+            message: redactStringValue(value.message),
+        };
+
+        if (process.env.NODE_ENV !== 'production' && value.stack) {
+            redactedError.stack = redactStringValue(value.stack);
+        }
+
+        return redactedError;
+    }
+
+    if (seen.has(value)) {
+        return '[Circular]';
+    }
+
+    if (depth >= 4) {
+        return '[Truncated]';
+    }
+
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+        return value.map((item) => redactUnknownValue(item, depth + 1, seen));
+    }
+
+    const output: Record<string, unknown> = {};
+    for (const [key, itemValue] of Object.entries(value as Record<string, unknown>)) {
+        if (SENSITIVE_KEY_REGEX.test(key)) {
+            output[key] = '[REDACTED]';
+            continue;
+        }
+
+        output[key] = redactUnknownValue(itemValue, depth + 1, seen);
+    }
+
+    return output;
+}
+
+export function redactErrorForLog(error: unknown): unknown {
+    return redactUnknownValue(error);
+}
+
 function isValidIp(value: string): boolean {
     const ipv4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
     const ipv6 = /^[0-9a-fA-F:]+$/;
@@ -141,16 +208,24 @@ export function validateServerFetchUrl(url: string): boolean {
 
         // block localhost so i can sleep at night
         const hostname = parsed.hostname;
+        const normalizedHostname = hostname.replace(/^\[|\]$/g, '').toLowerCase();
         const blockedPatterns = [
             /^localhost$/i,
             /^127\.\d+\.\d+\.\d+$/, // 127.0.0.0/8
             /^10\.\d+\.\d+\.\d+$/,   // 10.0.0.0/8
             /^192\.168\.\d+\.\d+$/,  // 192.168.0.0/16
             /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/, // 172.16.0.0/12
-            /^169\.254\.\d+\.\d+$/   // link-local
+            /^169\.254\.\d+\.\d+$/,  // IPv4 link-local
+            /^0\.0\.0\.0$/,            // wildcard bind address
+            /^::1$/i,                     // IPv6 loopback
+            /^fe80:/i,                    // IPv6 link-local
+            /^f[cd][0-9a-f]*:/i,          // IPv6 ULA fc00::/7
+            /^::ffff:/i,                  // IPv4-mapped IPv6
+            /(?:^|\.)metadata\.google\.internal$/i,
+            /(?:^|\.)metadata\.internal$/i
         ];
 
-        if (blockedPatterns.some(pattern => pattern.test(hostname))) {
+        if (blockedPatterns.some(pattern => pattern.test(normalizedHostname))) {
             return false;
         }
 
@@ -167,14 +242,17 @@ export function getClientIp(request: Request): string {
     const vercelForwardedFor = normalizeIp(request.headers.get('x-vercel-forwarded-for'));
     if (vercelForwardedFor) return vercelForwardedFor;
 
-    const realIp = normalizeIp(request.headers.get('x-real-ip'));
-    if (realIp) return realIp;
+    // In production, avoid trusting spoofable forwarding headers.
+    if (process.env.NODE_ENV !== 'production') {
+        const realIp = normalizeIp(request.headers.get('x-real-ip'));
+        if (realIp) return realIp;
 
-    const cfIp = normalizeIp(request.headers.get('cf-connecting-ip'));
-    if (cfIp) return cfIp;
+        const cfIp = normalizeIp(request.headers.get('cf-connecting-ip'));
+        if (cfIp) return cfIp;
 
-    const xff = normalizeIp(request.headers.get('x-forwarded-for'));
-    if (xff) return xff;
+        const xff = normalizeIp(request.headers.get('x-forwarded-for'));
+        if (xff) return xff;
+    }
 
     return 'anonymous';
 }

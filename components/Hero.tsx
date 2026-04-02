@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import useSWR from 'swr';
 import Image from 'next/image';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { FileText, Users, Newspaper, ExternalLink, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { QuickLink } from '@/schemas/links';
@@ -45,18 +45,73 @@ const councils = [
     },
     {
         id: 'mccsc',
-        name: 'Mandaluyong City College Student Council',
+        name: 'Mandaluyong Campus Central Student Council',
         abbr: 'MCCSC',
         src: '/images/MCCSC.png',
         glow: 'rgba(126, 34, 206, 0.5)',
         gradientFrom: '#7e22ce',
         gradientTo: '#fbbf24',
     },
+    {
+        id: 'cassc',
+        name: 'College of Arts and Sciences Student Council',
+        abbr: 'CASSC',
+        src: '/images/RTU_CASSC.jpg',
+        glow: 'rgba(22, 163, 74, 0.5)',
+        gradientFrom: '#15803d',
+        gradientTo: '#4ade80',
+    },
+    {
+        id: 'cedsc',
+        name: 'College of Education Student Council',
+        abbr: 'CEDSC',
+        src: '/images/RTU_CEDSC.jpg',
+        glow: 'rgba(37, 99, 235, 0.45)',
+        gradientFrom: '#1d4ed8',
+        gradientTo: '#f59e0b',
+    },
+    {
+        id: 'iasc',
+        name: 'Institute of Architecture Student Council',
+        abbr: 'IASC',
+        src: '/images/RTU_IASC.jpg',
+        glow: 'rgba(220, 38, 38, 0.45)',
+        gradientFrom: '#b91c1c',
+        gradientTo: '#ef4444',
+    },
+    {
+        id: 'icssc',
+        name: 'Institute of Computer Studies Student Council',
+        abbr: 'ICSSC',
+        src: '/images/RTU_ICSSC.jpg',
+        glow: 'rgba(37, 99, 235, 0.45)',
+        gradientFrom: '#2563eb',
+        gradientTo: '#a855f7',
+    },
+    {
+        id: 'ihksc',
+        name: 'Institute of Human Kinetics Student Council',
+        abbr: 'IHKSC',
+        src: '/images/RTU_IHKSC.jpg',
+        glow: 'rgba(217, 70, 239, 0.45)',
+        gradientFrom: '#d946ef',
+        gradientTo: '#f0abfc',
+    },
+    {
+        id: 'pccsc',
+        name: 'Pasig Campus Central Student Council',
+        abbr: 'PCCSC',
+        src: '/images/RTU_PCCSC.jpg',
+        glow: 'rgba(185, 28, 28, 0.5)',
+        gradientFrom: '#b91c1c',
+        gradientTo: '#f59e0b',
+    },
 ];
 
 export default function Hero() {
     const { data: linksResponse } = useSWR('/api/config/links', (url: string) => fetch(url).then(r => r.json()));
     const links: QuickLink[] = linksResponse?.data || [];
+    const prefersReducedMotion = useReducedMotion();
     const [activeIdx, setActiveIdx] = useState(0);
     const lastInteraction = useRef(0);
 
@@ -81,6 +136,10 @@ export default function Hero() {
 
     // auto-rotate every 5 seconds, but only if user hasn't interacted for 10 seconds
     useEffect(() => {
+        if (prefersReducedMotion) {
+            return;
+        }
+
         const interval = setInterval(() => {
             const now = Date.now();
             if (now - lastInteraction.current > 10000) {
@@ -88,12 +147,12 @@ export default function Hero() {
             }
         }, 5000);
         return () => clearInterval(interval);
-    }, []);
+    }, [prefersReducedMotion]);
 
     const heroLinks = links.length > 0 ? links.slice(0, 3) : [
-        { id: '1', label: 'Services & Forms', desc: 'Need student assistance?', href: '/services', icon: 'FileText' },
-        { id: '2', label: 'Officer Directory', desc: 'Meet our student leaders', href: '/directory', icon: 'Users' },
-        { id: '3', label: 'Latest News', desc: 'Stay updated with SG', href: '/news', icon: 'Newspaper' },
+        { id: '1', label: 'Student Grievances', desc: 'Use the Official Student Grievance Form', href: '/services', icon: 'FileText' },
+        { id: '2', label: 'Directory', desc: 'A unified directory for all administrative offices, organizations, and councils of Rizal Technological University', href: '/directory', icon: 'Users' },
+        { id: '3', label: 'Latest News', desc: 'Stay updated with the latest announcements', href: '/news', icon: 'Newspaper' },
     ];
 
     const active = councils[activeIdx];
@@ -101,7 +160,7 @@ export default function Hero() {
     const rightIdx = (activeIdx + 1) % councils.length;
 
     return (
-        <section className="bg-gradient-rtu relative overflow-hidden min-h-[90vh] flex items-center">
+        <section className="bg-gradient-rtu relative overflow-hidden min-h-[84vh] md:min-h-[90vh] flex items-center">
 
             {/* Animated dot grid background for depth */}
             <div className="absolute inset-0 pointer-events-none z-0">
@@ -117,12 +176,13 @@ export default function Hero() {
                 style={{ background: 'var(--rtu-gold-light)' }}
             />
 
-            <div className="container-main relative z-10 py-24 md:py-32">
-                <div className="flex flex-col md:flex-row items-center gap-12">
+            <div className="container-main relative z-10 py-16 md:py-24 lg:py-28">
+                <div className="flex flex-col md:flex-row items-center gap-10 lg:gap-14">
 
                     <motion.div
+                        suppressHydrationWarning
                         className="flex-1 text-center md:text-left"
-                        initial={{ opacity: 0, y: 20 }}
+                        initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.6, ease: 'easeOut' }}
                     >
@@ -132,7 +192,7 @@ export default function Hero() {
                         >
                             Rizal Technological University
                         </p>
-                        <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight mb-6 min-h-[3em] md:min-h-0">
+                        <h1 className="text-4xl md:text-6xl font-bold text-white leading-tight mb-5 md:mb-6 min-h-[3em] md:min-h-0">
                             RTU Student{' '}
                             <motion.span
                                 key={active.id}
@@ -146,21 +206,22 @@ export default function Hero() {
                                 initial={{ opacity: 0, y: 8 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -8 }}
-                                transition={{ duration: 0.4 }}
+                                transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4 }}
                             >
                                 Government Portal
                             </motion.span>
                         </h1>
-                        <p className="text-lg text-white/70 max-w-xl mb-8">
-                            Empowering Rizalians through transparent, responsive, and inclusive student governance.
-                            The unified digital home of the Supreme Student Council and the Office of the Student Regent.
+                        <p className="text-base md:text-lg text-white/70 max-w-xl mb-7 md:mb-8">
+                            Empowering Rizalianos through transparent, responsive, and inclusive student governance.
+                            The unified digital home of the Supreme Student Council, its Constitutional Commissions,
+                            and the Office of the Student Regent.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
                             <Link href="/services" className="btn-primary text-base no-underline text-center">
                                 Access Services
                             </Link>
-                            <Link href="/osr" className="btn-secondary text-base no-underline text-center">
-                                About OSR
+                            <Link href="/about" className="btn-secondary text-base no-underline text-center">
+                                {`About ${active.abbr}`}
                             </Link>
                         </div>
                     </motion.div>
@@ -168,14 +229,15 @@ export default function Hero() {
 
                     {/* ── Logo Carousel ── */}
                     <motion.div
+                        suppressHydrationWarning
                         className="flex-shrink-0 w-full md:w-auto"
-                        initial={{ opacity: 0 }}
+                        initial={prefersReducedMotion ? false : { opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ duration: 0.6, delay: 0.15, ease: 'easeOut' }}
                     >
                         <div className="relative flex flex-col items-center">
                             {/* Logo stage */}
-                            <div className="relative w-full max-w-[22rem] h-64 md:h-72 flex items-center justify-center">
+                            <div className="relative w-full max-w-[20rem] md:max-w-[22rem] h-60 md:h-72 flex items-center justify-center">
                                 {/* Dynamic glow */}
                                 <motion.div
                                     className="absolute inset-[10%] rounded-full blur-[40px] md:blur-[50px] z-0"
@@ -187,7 +249,7 @@ export default function Hero() {
                                 {/* Left (prev) logo */}
                                 <motion.div
                                     key={`left-${leftIdx}`}
-                                    className="absolute w-28 h-28 md:w-36 md:h-36 z-10 cursor-pointer"
+                                    className="absolute hidden md:block w-28 h-28 md:w-36 md:h-36 z-10 cursor-pointer"
                                     style={{ left: '-5%', top: '50%' }}
                                     onClick={prev}
                                     initial={{ opacity: 0, x: 20, y: '-50%', scale: 0.7 }}
@@ -200,6 +262,7 @@ export default function Hero() {
                                         src={councils[leftIdx].src}
                                         alt={councils[leftIdx].name}
                                         fill
+                                        sizes="(max-width: 768px) 0px, 144px"
                                         className="object-contain rounded-full brightness-75 transition-all"
                                     />
                                 </motion.div>
@@ -220,6 +283,7 @@ export default function Hero() {
                                                 src={active.src}
                                                 alt={active.name}
                                                 fill
+                                                sizes="(max-width: 768px) 192px, 224px"
                                                 className="object-contain rounded-full shadow-2xl"
                                                 style={{
                                                     filter: `drop-shadow(0 12px 32px ${active.glow})`,
@@ -233,7 +297,7 @@ export default function Hero() {
                                 {/* Right (next) logo */}
                                 <motion.div
                                     key={`right-${rightIdx}`}
-                                    className="absolute w-28 h-28 md:w-36 md:h-36 z-10 cursor-pointer"
+                                    className="absolute hidden md:block w-28 h-28 md:w-36 md:h-36 z-10 cursor-pointer"
                                     style={{ right: '-5%', top: '50%' }}
                                     onClick={next}
                                     initial={{ opacity: 0, x: -20, y: '-50%', scale: 0.7 }}
@@ -246,17 +310,17 @@ export default function Hero() {
                                         src={councils[rightIdx].src}
                                         alt={councils[rightIdx].name}
                                         fill
+                                        sizes="(max-width: 768px) 0px, 144px"
                                         className="object-contain rounded-full brightness-75 transition-all"
                                     />
                                 </motion.div>
                             </div>
 
                             {/* Navigation arrows + label */}
-                            <div className="flex items-center gap-4 mt-6">
+                            <div className="flex items-center gap-4 mt-4 md:mt-6">
                                 <button
                                     onClick={prev}
-                                    className="w-10 h-10 rounded-full flex items-center justify-center transition-colors hover:bg-white/20"
-                                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}
+                                    className="hero-control-btn"
                                     aria-label="Previous council"
                                 >
                                     <ChevronLeft className="text-white" size={20} />
@@ -283,8 +347,7 @@ export default function Hero() {
 
                                 <button
                                     onClick={next}
-                                    className="w-10 h-10 rounded-full flex items-center justify-center transition-colors hover:bg-white/20"
-                                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}
+                                    className="hero-control-btn"
                                     aria-label="Next council"
                                 >
                                     <ChevronRight className="text-white" size={20} />
@@ -313,8 +376,9 @@ export default function Hero() {
 
 
                 <motion.div
-                    className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-16"
-                    initial={{ opacity: 0, y: 20 }}
+                    suppressHydrationWarning
+                    className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mt-12 md:mt-16"
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.3, ease: 'easeOut' }}
                 >
@@ -326,8 +390,7 @@ export default function Hero() {
                             <Link
                                 key={item.label}
                                 href={item.href}
-                                className="hero-quick-card card p-6 flex items-start gap-4 no-underline group"
-                                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
+                                className="hero-quick-card hero-quick-card-shell card p-6 flex items-start gap-4 no-underline group"
                             >
                                 <IconComponent className="text-white/80 mt-1 group-hover:text-white transition-colors" size={24} />
                                 <div>
@@ -342,15 +405,16 @@ export default function Hero() {
 
             {/* Scroll indicator */}
             <motion.div
-                className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-10"
-                initial={{ opacity: 0 }}
+                suppressHydrationWarning
+                className="absolute bottom-5 md:bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-10"
+                initial={prefersReducedMotion ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1, duration: 0.8 }}
             >
                 <span className="text-white/30 text-[10px] uppercase tracking-[0.2em]">Explore</span>
                 <motion.div
-                    animate={{ y: [0, 6, 0] }}
-                    transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
+                    animate={prefersReducedMotion ? { y: 0 } : { y: [0, 6, 0] }}
+                    transition={prefersReducedMotion ? { duration: 0 } : { repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
                 >
                     <ChevronDown className="text-white/30" size={20} />
                 </motion.div>

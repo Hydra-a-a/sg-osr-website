@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:forms-auth-guard": "node tests/test-forms-auth-guard.js"
+    "test:forms-auth-guard": "node tests/test-forms-auth-guard.js",
+    "test:api-error-envelope": "node tests/test-api-error-envelope.js",
+    "test:csp-policy": "node tests/test-csp-policy.js",
+    "test:redacted-logging": "node tests/test-redacted-logging.js",
+    "test:security": "npm run test:forms-auth-guard && npm run test:api-error-envelope && npm run test:csp-policy && npm run test:redacted-logging"
   },
   "overrides": {
     "jsdom": {
@@ -15,11 +19,12 @@
     }
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.45.0",
     "framer-motion": "^12.35.0",
     "googleapis": "^171.4.0",
     "isomorphic-dompurify": "^3.3.0",
     "lucide-react": "^0.577.0",
-    "next": "16.1.6",
+    "next": "^16.2.2",
     "next-auth": "^5.0.0-beta.30",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -27,12 +32,13 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@google/gemini-cli": "^0.34.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^25.3.3",
     "@types/react": "^19.2.14",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "^16.2.2",
     "eslint-plugin-security": "^4.0.0",
     "tailwindcss": "^4",
     "typescript": "^5.9.3",

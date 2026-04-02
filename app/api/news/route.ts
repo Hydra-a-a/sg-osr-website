@@ -3,7 +3,8 @@ import { getSheetData } from '@/lib/sheets';
 import { parseSheetData } from '@/lib/sheets-parser';
 import { NewsPostSchema } from '@/schemas/news';
 import { rateLimit } from '@/lib/rate-limit';
-import { getClientIp } from '@/lib/security';
+import { getClientIp, redactErrorForLog } from '@/lib/security';
+import { ApiError, toApiResponse } from '@/lib/api-errors';
 
 export const revalidate = 3600; // vercel pls cache this i can't afford more api hits
 
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
     const limit = rateLimit(`news_api_${ip}`, 30, 60000); // 30 reqs/min pls don't ddos me bro i have midterms
 
     if (!limit.success) {
-        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+        return toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests'));
     }
 
     try {
@@ -20,7 +21,7 @@ export async function GET(request: Request) {
         const RANGE = 'News!A2:Z'; // reading a ton of cols because idk who keeps shifting the sheet
 
         if (!SPREADSHEET_ID) {
-            return NextResponse.json({ error: 'Missing configuration' }, { status: 500 });
+            return toApiResponse(new ApiError(500, 'SERVICE_MISCONFIGURED', 'Internal server error', undefined, false));
         }
 
         const rawData = await getSheetData(SPREADSHEET_ID, RANGE);
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ data: posts });
 
     } catch (error) {
-        console.error('News API Error:', error);
-        return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });
+        console.error('News API Error:', redactErrorForLog(error));
+        return toApiResponse(error);
     }
 }

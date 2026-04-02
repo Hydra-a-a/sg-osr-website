@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { z } from 'zod';
 import { getGoogleServiceAccountCredentials } from '@/lib/google-credentials';
+import { redactErrorForLog } from '@/lib/security';
 
 // ───── Zod Schemas for Google Slides API ─────
 // Now captures text, images, AND videos from slide page elements.
@@ -66,7 +67,7 @@ export async function getSlidesData(): Promise<SlideData[]> {
         return parsedSlides;
 
     } catch (error) {
-        console.error("Failed API or Validation parsing", error);
+        console.error("Failed API or Validation parsing", redactErrorForLog(error));
         return [];
     }
 }

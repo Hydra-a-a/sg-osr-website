@@ -80,15 +80,15 @@ export default function NewsPage() {
                     <h1 className="font-bold text-white mb-3">
                         News & <span className="text-gradient-gold">Updates</span>
                     </h1>
-                    <p className="text-white/60 max-w-lg mx-auto">
+                    <p className="page-header-subtitle max-w-lg mx-auto">
                         Live from our official Facebook pages — automatically aggregated.
                     </p>
                 </div>
             </section>
 
             {/* Feed */}
-            <section className="section">
-                <div className="container-main" style={{ maxWidth: '42rem' }}>
+            <section className="section-tight">
+                <div className="container-main max-w-2xl">
                     {isLoading ? (
                         /* loading state nobody looks at */
                         <div className="flex flex-col gap-4">
@@ -193,7 +193,7 @@ export default function NewsPage() {
                         </div>
                     )}
 
-                    <p className="text-center mt-10 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <p className="text-center mt-10 text-xs text-subtle">
                         This feed updates automatically whenever a new Facebook post is detected.
                     </p>
                 </div>

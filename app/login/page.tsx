@@ -11,7 +11,16 @@ import { ShieldCheck, ChevronLeft, AlertTriangle } from 'lucide-react';
 function LoginContent() {
     const [isLoading, setIsLoading] = useState(false);
     const [activePortal, setActivePortal] = useState<'student' | 'leader' | null>(null);
+    const [localSimError, setLocalSimError] = useState<string | null>(null);
+    const [devEmail, setDevEmail] = useState('student@rtu.edu.ph');
+    const [devRole, setDevRole] = useState<'student' | 'leader'>('student');
+    const [devToken, setDevToken] = useState('');
     const searchParams = useSearchParams();
+    const isLocalHost = typeof window !== 'undefined'
+        && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+    const localDevLoginEnabled = process.env.NODE_ENV !== 'production'
+        && process.env.NEXT_PUBLIC_ENABLE_LOCAL_LOGIN_SIMULATION === 'true'
+        && isLocalHost;
 
     const requestedCallbackUrl = searchParams.get('callbackUrl');
     const callbackUrl = requestedCallbackUrl?.startsWith('/') && !requestedCallbackUrl.startsWith('//')
@@ -23,19 +32,54 @@ function LoginContent() {
     const errorMessages: Record<string, string> = {
         AccessDenied: 'Access denied. Only @rtu.edu.ph email addresses are permitted.',
         OAuthAccountNotLinked: 'This email is already linked to another sign-in method.',
+        CredentialsSignin: 'Local simulation login failed. Check your token and try again.',
+        Configuration: 'Local simulation is not fully configured on the server.',
         Default: 'An unexpected error occurred. Please try again.',
     };
 
-    const errorMessage = errorParam
+    const authErrorMessage = errorParam
         ? errorMessages[errorParam] || errorMessages.Default
         : null;
+    const errorMessage = localSimError || authErrorMessage;
 
     const handleLogin = async (portal: 'student' | 'leader') => {
+        setLocalSimError(null);
         setIsLoading(true);
         setActivePortal(portal);
         try {
             await signIn('google', { callbackUrl });
         } catch {
+            setIsLoading(false);
+            setActivePortal(null);
+        }
+    };
+
+    const handleLocalDevLogin = async () => {
+        const normalizedEmail = devEmail.trim().toLowerCase();
+        const normalizedToken = devToken.trim();
+
+        if (!normalizedEmail.endsWith('@rtu.edu.ph')) {
+            setLocalSimError('Use an @rtu.edu.ph email for local simulation.');
+            return;
+        }
+
+        if (!normalizedToken) {
+            setLocalSimError('Enter your local simulation token.');
+            return;
+        }
+
+        setLocalSimError(null);
+        setIsLoading(true);
+        setActivePortal(devRole);
+        try {
+            await signIn('dev-sim', {
+                email: normalizedEmail,
+                role: devRole,
+                devToken: normalizedToken,
+                callbackUrl,
+            });
+        } catch {
+            setLocalSimError(errorMessages.Default);
             setIsLoading(false);
             setActivePortal(null);
         }
@@ -66,6 +110,7 @@ function LoginContent() {
                                 src="/images/OSR_LOGO.jpg"
                                 alt="Logo"
                                 fill
+                                sizes="80px"
                                 className="object-contain rounded-full shadow-lg"
                             />
                         </div>
@@ -132,6 +177,52 @@ function LoginContent() {
                                     </button>
                                 </div>
 
+                                {localDevLoginEnabled && (
+                                    <div className="mt-6 pt-5 border-t border-amber-100">
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-3">
+                                            Localhost Login Simulation
+                                        </h4>
+                                        <div className="space-y-3">
+                                            <input
+                                                type="email"
+                                                value={devEmail}
+                                                onChange={(e) => setDevEmail(e.target.value)}
+                                                placeholder="student@rtu.edu.ph"
+                                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                                            />
+                                            <select
+                                                value={devRole}
+                                                onChange={(e) => setDevRole(e.target.value === 'leader' ? 'leader' : 'student')}
+                                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
+                                            >
+                                                <option value="student">Student</option>
+                                                <option value="leader">Student Leader</option>
+                                            </select>
+                                            <input
+                                                type="password"
+                                                value={devToken}
+                                                onChange={(e) => setDevToken(e.target.value)}
+                                                placeholder="Local simulation token"
+                                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                                            />
+                                            <button
+                                                onClick={handleLocalDevLogin}
+                                                disabled={isLoading || !devToken}
+                                                className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition-all duration-200 shadow-sm disabled:opacity-70"
+                                            >
+                                                {isLoading && activePortal === devRole ? (
+                                                    <div className="w-5 h-5 border-2 border-amber-700 border-t-transparent rounded-full animate-spin" />
+                                                ) : (
+                                                    <span className="font-semibold text-amber-800">Simulate Local Login</span>
+                                                )}
+                                            </button>
+                                            <p className="text-[11px] text-amber-700/80 leading-relaxed">
+                                                Enabled only in non-production with explicit env flags and localhost checks.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="mt-8 pt-6 border-t border-gray-100">
                                     <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg">
                                         <ShieldCheck className="text-rtu-blue mt-0.5 shrink-0" size={18} />
@@ -148,7 +239,7 @@ function LoginContent() {
                     </div>
 
                     <p className="text-center text-[10px] text-text-muted mt-8 opacity-50">
-                        &copy; 2026 RTU Supreme Student Council &middot; Digital Transformation Initiative
+                        &copy; 2026 RTU Supreme Student Council &middot; Rizaliano Konek Initiative
                     </p>
                 </motion.div>
             </div>

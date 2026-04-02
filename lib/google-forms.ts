@@ -1,5 +1,18 @@
-export async function submitToGoogleForm(formType: string, data: any) {
-    const formConfigs: Record<string, { url?: string; entries: Record<string, string> }> = {
+export type GoogleFormType = 'grievance';
+
+export interface GrievanceFormData {
+    name?: string;
+    email?: string;
+    subject?: string;
+    message?: string;
+}
+
+type GoogleFormDataByType = {
+    grievance: GrievanceFormData;
+};
+
+export async function submitToGoogleForm<T extends GoogleFormType>(formType: T, data: GoogleFormDataByType[T]) {
+    const formConfigs: Record<GoogleFormType, { url?: string; entries: Record<string, string> }> = {
         grievance: {
             url: process.env.GOOGLE_FORM_GRIEVANCE_URL,
             entries: {
@@ -8,28 +21,10 @@ export async function submitToGoogleForm(formType: string, data: any) {
                 subject: process.env.GOOGLE_FORM_GRIEVANCE_SUBJECT || 'entry.333333',
                 message: process.env.GOOGLE_FORM_GRIEVANCE_MESSAGE || 'entry.444444',
             }
-        },
-        feedback: {
-            url: process.env.GOOGLE_FORM_FEEDBACK_URL,
-            entries: {
-                name: process.env.GOOGLE_FORM_FEEDBACK_NAME || 'entry.111111',
-                email: process.env.GOOGLE_FORM_FEEDBACK_EMAIL || 'entry.222222',
-                subject: process.env.GOOGLE_FORM_FEEDBACK_SUBJECT || 'entry.333333',
-                message: process.env.GOOGLE_FORM_FEEDBACK_MESSAGE || 'entry.444444',
-            }
-        },
-        contact: {
-            url: process.env.GOOGLE_FORM_CONTACT_URL,
-            entries: {
-                name: process.env.GOOGLE_FORM_CONTACT_NAME || 'entry.111111',
-                email: process.env.GOOGLE_FORM_CONTACT_EMAIL || 'entry.222222',
-                subject: process.env.GOOGLE_FORM_CONTACT_SUBJECT || 'entry.333333',
-                message: process.env.GOOGLE_FORM_CONTACT_MESSAGE || 'entry.444444',
-            }
         }
     };
 
-    const config = formConfigs[formType as keyof typeof formConfigs];
+    const config = formConfigs[formType];
 
     if (!config || !config.url) {
         throw new Error(`Missing Google Form configuration for ${formType}. Set GOOGLE_FORM_${formType.toUpperCase()}_URL.`);

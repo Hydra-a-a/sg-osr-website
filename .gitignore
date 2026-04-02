@@ -82,6 +82,18 @@ skills-lock.json
 /tests/sheet-dump*.json
 /tests/sheet_dump*.json
 
+# Local auth simulation artifacts
+.env.local-login*
+.env.login-sim*
+app/login/local-dev-*
+lib/auth.local-dev-*
+
+# Local helper/testing scripts
+/test-*.js
+verify_webhook.js
+testing-rtu-osr-website-*.json
+*.code-workspace
+
 # vercel
 .vercel
 

@@ -12,6 +12,18 @@ export { GET };
  * Allows 5 sign-in attempts per IP per 15-minute window.
  */
 export async function POST(req: NextRequest) {
+    const pathname = req.nextUrl.pathname;
+    const isCallbackPost = pathname.includes('/api/auth/callback/');
+    const isLocalDevSimCallback =
+        process.env.NODE_ENV !== 'production'
+        && process.env.ENABLE_LOCAL_LOGIN_SIMULATION === 'true'
+        && pathname.endsWith('/api/auth/callback/dev-sim');
+
+    // Avoid rate-limiting non-authentication POST routes (logout/csrf/session etc.).
+    if (!isCallbackPost || isLocalDevSimCallback) {
+        return nextAuthPOST(req);
+    }
+
     const ip = getClientIp(req);
     const result = await checkAuthRateLimit(ip);
 

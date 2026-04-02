@@ -12,7 +12,6 @@ import { SiteConfig } from '@/lib/slideConfig';
 
 const baseNavLinks = [
     { href: '/', label: 'Home' },
-    { href: '/osr', label: 'OSR' },
     { href: '/directory', label: 'Directory' },
     { href: '/services', label: 'Services' },
     { href: '/news', label: 'News' },
@@ -46,6 +45,26 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        if (!mobileOpen) {
+            document.body.style.overflow = '';
+            return;
+        }
+
+        document.body.style.overflow = 'hidden';
+        const onEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setMobileOpen(false);
+            }
+        };
+
+        window.addEventListener('keydown', onEscape);
+        return () => {
+            document.body.style.overflow = '';
+            window.removeEventListener('keydown', onEscape);
+        };
+    }, [mobileOpen]);
+
     // dynamic links because the regents wanted elections to disappear sometimes
     const navLinks = [...baseNavLinks];
     if (config.electionsActive) {
@@ -57,10 +76,10 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
     return (
         <header className="sticky top-0 z-50">
             {config.alertBanner && <AlertBanner message={config.alertBanner} />}
-            <nav className="glass-nav" style={{ background: scrolled ? 'rgba(255,255,255,0.97)' : undefined, transition: 'background 0.3s ease' }}>
-                <div className="container-main flex items-center justify-between h-16">
+            <nav className={`glass-nav relative transition-[background,box-shadow] duration-300 ${scrolled ? 'glass-nav-scrolled' : ''}`}>
+                <div className="container-main flex items-center justify-between h-16 md:h-[4.5rem]">
                     {/* logo block */}
-                    <Link href="/" className="flex items-center gap-3 no-underline">
+                    <Link href="/" className="flex items-center gap-3 no-underline" onClick={() => { setMobileOpen(false); setProfileOpen(false); }}>
                         <Image
                             src="/images/OSR_LOGO.jpg"
                             alt="Office of the Student Regent Logo"
@@ -68,7 +87,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                             height={40}
                             className="rounded-full"
                         />
-                        <span className="font-bold text-sm md:text-lg" style={{ color: 'var(--rtu-blue)' }}>
+                        <span className="font-bold text-sm md:text-lg text-brand">
                             RTU Student Government Portal
                         </span>
                     </Link>
@@ -79,10 +98,9 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                             <Link
                                 key={link.href}
                                 href={link.href}
-                                className={`text-sm font-medium no-underline transition-colors duration-200 ${pathname === link.href ? 'nav-link-active' : ''}`}
-                                style={{ color: pathname === link.href ? 'var(--rtu-blue)' : 'var(--text-secondary)' }}
-                                onMouseEnter={e => (e.currentTarget.style.color = 'var(--rtu-blue)')}
-                                onMouseLeave={e => { if (pathname !== link.href) e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                                className={`text-sm font-medium no-underline nav-link ${pathname === link.href ? 'nav-link-active' : ''}`}
+                                aria-current={pathname === link.href ? 'page' : undefined}
+                                onClick={() => setProfileOpen(false)}
                             >
                                 {link.label}
                             </Link>
@@ -145,7 +163,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                 </AnimatePresence>
                             </div>
                         ) : (
-                            <Link href="/login" className="btn-primary text-sm no-underline px-6">
+                            <Link href="/login" className="btn-primary text-sm no-underline px-6" onClick={() => setProfileOpen(false)}>
                                 Login
                             </Link>
                         )}
@@ -153,10 +171,12 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
 
                     {/* the hamburger menu that gave me a headache */}
                     <button
-                        className="md:hidden p-2"
+                        className="md:hidden p-2 rounded-lg"
                         onClick={() => setMobileOpen(!mobileOpen)}
                         aria-label="Toggle navigation"
-                        style={{ color: 'var(--rtu-blue)' }}
+                        aria-expanded={mobileOpen}
+                        aria-controls="mobile-nav-panel"
+                        style={{ color: 'var(--accent-primary)' }}
                     >
                         {mobileOpen ? <X size={24} /> : <Menu size={24} />}
                     </button>
@@ -165,63 +185,75 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                 {/* animated mobile menu */}
                 <AnimatePresence>
                     {mobileOpen && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="md:hidden overflow-hidden"
-                            style={{ background: 'var(--glass-bg)' }}
-                        >
-                            <div className="container-main py-4 flex flex-col gap-4">
-                                {navLinks.map(link => (
-                                    <Link
-                                        key={link.href}
-                                        href={link.href}
-                                        className="text-base font-medium no-underline py-2"
-                                        style={{ color: 'var(--text-primary)' }}
-                                        onClick={() => setMobileOpen(false)}
-                                    >
-                                        {link.label}
-                                    </Link>
-                                ))}
-
-                                {/* Mobile auth */}
-                                {session?.user ? (
-                                    <div className="pt-3 border-t border-gray-200">
-                                        <div className="flex items-center gap-3 mb-3">
-                                            {session.user.image ? (
-                                                <Image src={session.user.image} alt="" width={32} height={32} className="rounded-full" />
-                                            ) : (
-                                                <div className="w-8 h-8 rounded-full bg-rtu-blue flex items-center justify-center">
-                                                    <User size={16} className="text-white" />
-                                                </div>
-                                            )}
-                                            <div>
-                                                <p className="text-sm font-semibold">{session.user.name || 'Student'}</p>
-                                                {isLeader && (
-                                                    <span className="text-[10px] text-amber-600 font-bold uppercase">Student Leader</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => { signOut({ callbackUrl: '/' }); setMobileOpen(false); }}
-                                            className="w-full flex items-center justify-center gap-2 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                        <>
+                            <motion.button
+                                type="button"
+                                aria-label="Close mobile navigation"
+                                className="md:hidden fixed inset-0 top-16 z-40 bg-[#0f2037]/35 backdrop-blur-[1px]"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() => setMobileOpen(false)}
+                            />
+                            <motion.div
+                                id="mobile-nav-panel"
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                className="md:hidden relative z-50 overflow-hidden border-t border-soft"
+                                style={{ background: 'var(--glass-bg)' }}
+                            >
+                                <div className="container-main py-4 flex flex-col gap-2">
+                                    {navLinks.map(link => (
+                                        <Link
+                                            key={link.href}
+                                            href={link.href}
+                                            className={`text-base font-medium no-underline text-strong mobile-nav-link ${pathname === link.href ? 'mobile-nav-link-active' : ''}`}
+                                            aria-current={pathname === link.href ? 'page' : undefined}
+                                            onClick={() => setMobileOpen(false)}
                                         >
-                                            <LogOut size={16} />
-                                            Sign Out
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <Link
-                                        href="/login"
-                                        className="btn-primary text-sm text-center no-underline"
-                                        onClick={() => setMobileOpen(false)}
-                                    >
-                                        Login
-                                    </Link>
-                                )}
-                            </div>
-                        </motion.div>
+                                            {link.label}
+                                        </Link>
+                                    ))}
+
+                                    {/* Mobile auth */}
+                                    {session?.user ? (
+                                        <div className="pt-3 mt-1 border-t border-gray-200">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                {session.user.image ? (
+                                                    <Image src={session.user.image} alt="" width={32} height={32} className="rounded-full" />
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded-full bg-rtu-blue flex items-center justify-center">
+                                                        <User size={16} className="text-white" />
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <p className="text-sm font-semibold">{session.user.name || 'Student'}</p>
+                                                    {isLeader && (
+                                                        <span className="text-[10px] text-amber-600 font-bold uppercase">Student Leader</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => { signOut({ callbackUrl: '/' }); setMobileOpen(false); }}
+                                                className="w-full flex items-center justify-center gap-2 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                                            >
+                                                <LogOut size={16} />
+                                                Sign Out
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <Link
+                                            href="/login"
+                                            className="btn-primary text-sm text-center no-underline"
+                                            onClick={() => setMobileOpen(false)}
+                                        >
+                                            Login
+                                        </Link>
+                                    )}
+                                </div>
+                            </motion.div>
+                        </>
                     )}
                 </AnimatePresence>
             </nav>

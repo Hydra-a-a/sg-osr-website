@@ -1,4 +1,5 @@
 import { getSlidesData, SlideData } from './google';
+import { redactErrorForLog } from './security';
 
 export interface SlidePage {
     slug: string;
@@ -72,7 +73,7 @@ export async function getSlidePages(): Promise<SlidePage[]> {
 
         return pages;
     } catch (error) {
-        console.error("Failed to parse Dynamic Slide Pages", error);
+        console.error("Failed to parse Dynamic Slide Pages", redactErrorForLog(error));
         return [];
     }
 }

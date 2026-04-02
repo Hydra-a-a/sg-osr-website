@@ -1,4 +1,5 @@
 import { getSlidesData, SlideData } from './google';
+import { redactErrorForLog } from './security';
 
 export interface SiteConfig {
     maintenanceMode: boolean;
@@ -63,7 +64,7 @@ export async function getSiteConfig(): Promise<SiteConfig> {
         return config;
 
     } catch (error) {
-        console.error("Failed to fetch Site Config, failing open to DEFAULT_CONFIG", error);
+        console.error("Failed to fetch Site Config, failing open to DEFAULT_CONFIG", redactErrorForLog(error));
         return DEFAULT_CONFIG;
     }
 }

@@ -42,18 +42,22 @@ export type MakeWebhookPayload = z.infer<typeof MakeWebhookPayloadSchema>;
 
 // Schema for form submission data
 export const FormSubmissionSchema = z.object({
-    formType: z.enum(['grievance', 'feedback', 'contact']),
+    formType: z.enum(['grievance']),
 
     name: z.string()
         .trim()
-        .min(2, "Name is required")
         .max(100, "Name is too long")
-        .regex(/^[a-zA-Z\s.',\-ñÑ]+$/, "Name contains invalid characters"),
+        .regex(/^[a-zA-Z\s.',\-ñÑ]*$/, "Name contains invalid characters")
+        .optional()
+        .default(''),
 
     email: z.string()
         .trim()
         .email("Invalid email address")
-        .max(254, "Email is too long"),
+        .max(254, "Email is too long")
+        .optional()
+        .or(z.literal(''))
+        .default(''),
 
     subject: z.string()
         .trim()
@@ -74,6 +78,24 @@ export const FormSubmissionSchema = z.object({
 
     // Security: Allow students to submit grievances without PII attached
     isAnonymous: z.boolean().optional().default(false),
+}).superRefine((data, ctx) => {
+    if (!data.isAnonymous) {
+        if (!data.name || data.name.trim().length < 2) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['name'],
+                message: 'Name is required',
+            });
+        }
+
+        if (!data.email || data.email.trim().length === 0) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['email'],
+                message: 'Email is required',
+            });
+        }
+    }
 });
 
 export type FormSubmission = z.infer<typeof FormSubmissionSchema>;

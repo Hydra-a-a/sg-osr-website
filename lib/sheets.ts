@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { getGoogleServiceAccountCredentials } from '@/lib/google-credentials';
+import { redactErrorForLog } from '@/lib/security';
 
 let sheetsClient: ReturnType<typeof google.sheets> | null = null;
 
@@ -39,8 +40,47 @@ export async function getSheetData(spreadsheetId: string, range: string) {
         }
         return rows;
     } catch (error) {
-        console.error("Error fetching Google Sheets data:", error);
+        console.error("Error fetching Google Sheets data:", redactErrorForLog(error));
         throw new Error("Failed to fetch data from Google Sheets");
+    }
+}
+
+export async function getSheetDataWithHyperlinks(spreadsheetId: string, range: string) {
+    const sheets = getSheetsClient();
+
+    try {
+        const response = await sheets.spreadsheets.get(
+            {
+                spreadsheetId,
+                ranges: [range],
+                includeGridData: true,
+            },
+            {
+                timeout: 8000,
+            }
+        );
+
+        const rowData = response.data.sheets?.[0]?.data?.[0]?.rowData || [];
+        return rowData.map((row) =>
+            (row.values || []).map((cell) => {
+                const hyperlink = cell.hyperlink;
+                if (hyperlink) {
+                    return hyperlink;
+                }
+
+                const formula = cell.userEnteredValue?.formulaValue || '';
+                const hyperlinkMatch = formula.match(/^=\s*HYPERLINK\(\s*"([^"]+)"\s*,/i);
+                if (hyperlinkMatch?.[1]) {
+                    return hyperlinkMatch[1];
+                }
+
+                const effectiveValue = cell.effectiveValue?.stringValue || cell.effectiveValue?.numberValue?.toString() || '';
+                return effectiveValue || cell.formattedValue || '';
+            })
+        );
+    } catch (error) {
+        console.error('Error fetching Google Sheets hyperlink data:', redactErrorForLog(error));
+        throw new Error('Failed to fetch hyperlink data from Google Sheets');
     }
 }
 
@@ -63,7 +103,7 @@ export async function appendSheetData(spreadsheetId: string, range: string, valu
         );
         return response.data;
     } catch (error) {
-        console.error("Error appending Google Sheets data:", error);
+        console.error("Error appending Google Sheets data:", redactErrorForLog(error));
         throw new Error("Failed to append data to Google Sheets");
     }
 }
@@ -76,7 +116,7 @@ export async function updateSheetCell(spreadsheetId: string, range: string, valu
             {
                 spreadsheetId,
                 range,
-                valueInputOption: 'USER_ENTERED',
+                valueInputOption: 'RAW',
                 requestBody: {
                     values,
                 },
@@ -87,7 +127,7 @@ export async function updateSheetCell(spreadsheetId: string, range: string, valu
         );
         return response.data;
     } catch (error) {
-        console.error("Error updating Google Sheets cell:", error);
+        console.error("Error updating Google Sheets cell:", redactErrorForLog(error));
         throw new Error("Failed to update cell in Google Sheets");
     }
 }
