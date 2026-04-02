@@ -84,10 +84,18 @@ export default auth((req) => {
 
     // Define route protection tiers
     const publicRoutes = ['/', '/login', '/news', '/directory', '/services', '/transparency', '/hub', '/osr', '/about'];
+    const publicRoutePrefixes = ['/projects'];
     const leaderOnlyRoutes: string[] = [];
 
+    const normalizedPathname = pathname !== '/' && pathname.endsWith('/')
+        ? pathname.slice(0, -1)
+        : pathname;
+
     // Allow public pages and all API/static/image routes through
-    const isPublic = publicRoutes.some((r) => pathname === r || pathname.startsWith('/api/') || pathname.startsWith('/_next'));
+    const isPublicRoute = publicRoutes.includes(normalizedPathname);
+    const isPublicPrefixedRoute = publicRoutePrefixes.some((prefix) => normalizedPathname === prefix || normalizedPathname.startsWith(`${prefix}/`));
+    const isFrameworkOrApiRoute = normalizedPathname.startsWith('/api/') || normalizedPathname.startsWith('/_next');
+    const isPublic = isPublicRoute || isPublicPrefixedRoute || isFrameworkOrApiRoute;
     if (isPublic) {
         // If already logged in and visiting /login, redirect to home
         if (pathname === '/login' && isLoggedIn) {
