@@ -415,20 +415,20 @@ export async function GET(request: Request) {
 
     try {
         const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_DIRECTORY_ID || process.env.GOOGLE_SHEETS_INFO_ID;
-        const LEGACY_OFFICERS_RANGE = 'Officers!A2:G';
-        const LEGACY_OFFICES_RANGE = 'Offices!A2:F';
+        const LEGACY_OFFICERS_RANGE_CANDIDATES = ['Officers!A2:G', 'OFFICERS!A2:G'];
+        const LEGACY_OFFICES_RANGE_CANDIDATES = ['Offices!A2:F', 'OFFICES!A2:F'];
 
         const WORKBOOK_ORG_RANGES = [
-            { range: 'ORGANIZATIONS!A1:G', nameIndex: 0, acronymIndex: -1, emailIndex: 1, facebookIndex: 3, categoryIndex: 2, sourceLabel: 'Organizations', fallbackBranch: 'Academic Organization' },
-            { range: 'INSTITUTES!A1:D', nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Institutes', fallbackBranch: 'College / Institute Organization' },
-            { range: 'Central Student Councils!A1:D', nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Central Student Councils', fallbackBranch: 'Central Student Council' },
-            { range: 'Supreme Student Council!A1:D', nameIndex: 0, acronymIndex: -1, emailIndex: 1, facebookIndex: 3, categoryIndex: 2, sourceLabel: 'Supreme Student Council', fallbackBranch: 'Supreme Student Council' },
-            { range: 'BONI!A1:D', nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Boni', fallbackBranch: 'Academic Organization' },
-            { range: 'PASIG!A1:D', nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Pasig', fallbackBranch: 'Academic Organization' },
-            { range: 'Non-Academic Organization!A1:D', nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Non-Academic Organization', fallbackBranch: 'Non-Academic Organization' },
+            { ranges: ['ORGANIZATIONS!A1:G', 'Organizations!A1:G'], nameIndex: 0, acronymIndex: -1, emailIndex: 1, facebookIndex: 3, categoryIndex: 2, sourceLabel: 'Organizations', fallbackBranch: 'Academic Organization' },
+            { ranges: ['INSTITUTES!A1:D', 'Institutes!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Institutes', fallbackBranch: 'College / Institute Organization' },
+            { ranges: ['Central Student Councils!A1:D', 'CENTRAL STUDENT COUNCILS!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Central Student Councils', fallbackBranch: 'Central Student Council' },
+            { ranges: ['Supreme Student Council!A1:D', 'SUPREME STUDENT COUNCIL!A1:D'], nameIndex: 0, acronymIndex: -1, emailIndex: 1, facebookIndex: 3, categoryIndex: 2, sourceLabel: 'Supreme Student Council', fallbackBranch: 'Supreme Student Council' },
+            { ranges: ['BONI!A1:D', 'Boni!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Boni', fallbackBranch: 'Academic Organization' },
+            { ranges: ['PASIG!A1:D', 'Pasig!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Pasig', fallbackBranch: 'Academic Organization' },
+            { ranges: ['Non-Academic Organization!A1:D', 'NON-ACADEMIC ORGANIZATION!A1:D', 'Non-Academic Organizations!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Non-Academic Organization', fallbackBranch: 'Non-Academic Organization' },
         ] as const;
 
-        const WORKBOOK_OFFICES_RANGE = 'OFFICES!A1:G';
+        const WORKBOOK_OFFICES_RANGE_CANDIDATES = ['OFFICES!A1:G', 'Offices!A1:G'];
 
         if (!SPREADSHEET_ID) {
             return toApiResponse(new ApiError(500, 'SERVICE_MISCONFIGURED', 'Internal server error', undefined, false));
@@ -443,6 +443,17 @@ export async function GET(request: Request) {
             }
         };
 
+        const fetchFirstAvailableRangeSafe = async (ranges: readonly string[]) => {
+            for (const range of ranges) {
+                const rows = await fetchRangeSafe(range);
+                if (rows.length > 0) {
+                    return rows;
+                }
+            }
+
+            return [] as string[][];
+        };
+
         const fetchRangeWithLinksSafe = async (range: string) => {
             try {
                 return await getSheetDataWithHyperlinks(SPREADSHEET_ID, range);
@@ -452,12 +463,23 @@ export async function GET(request: Request) {
             }
         };
 
+        const fetchFirstAvailableRangeWithLinksSafe = async (ranges: readonly string[]) => {
+            for (const range of ranges) {
+                const rows = await fetchRangeWithLinksSafe(range);
+                if (rows.length > 0) {
+                    return rows;
+                }
+            }
+
+            return [] as string[][];
+        };
+
         const [
             legacyOfficerRows,
             ...workbookOrganizationRows
         ] = await Promise.all([
-            fetchRangeSafe(LEGACY_OFFICERS_RANGE),
-            ...WORKBOOK_ORG_RANGES.map((config) => fetchRangeWithLinksSafe(config.range)),
+            fetchFirstAvailableRangeSafe(LEGACY_OFFICERS_RANGE_CANDIDATES),
+            ...WORKBOOK_ORG_RANGES.map((config) => fetchFirstAvailableRangeWithLinksSafe(config.ranges)),
         ]);
 
         const { validData: rawLegacyOfficers, invalidCount: invalidLegacyOfficerCount } = parseSheetData({
@@ -510,8 +532,8 @@ export async function GET(request: Request) {
         let officeSheetUnavailable = false;
         try {
             [legacyOfficeRows, workbookOfficeRows] = await Promise.all([
-                fetchRangeSafe(LEGACY_OFFICES_RANGE),
-                fetchRangeSafe(WORKBOOK_OFFICES_RANGE),
+                fetchFirstAvailableRangeSafe(LEGACY_OFFICES_RANGE_CANDIDATES),
+                fetchFirstAvailableRangeSafe(WORKBOOK_OFFICES_RANGE_CANDIDATES),
             ]);
         } catch (officeFetchError) {
             officeSheetUnavailable = true;
