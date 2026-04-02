@@ -131,3 +131,26 @@ export async function updateSheetCell(spreadsheetId: string, range: string, valu
         throw new Error("Failed to update cell in Google Sheets");
     }
 }
+
+export async function getSpreadsheetSheetTitles(spreadsheetId: string): Promise<string[]> {
+    const sheets = getSheetsClient();
+
+    try {
+        const response = await sheets.spreadsheets.get(
+            {
+                spreadsheetId,
+                fields: 'sheets(properties(title))',
+            },
+            {
+                timeout: 8000,
+            }
+        );
+
+        return (response.data.sheets || [])
+            .map((sheet) => sheet.properties?.title || '')
+            .filter((title) => title.trim().length > 0);
+    } catch (error) {
+        console.error('Error fetching spreadsheet metadata:', redactErrorForLog(error));
+        return [];
+    }
+}

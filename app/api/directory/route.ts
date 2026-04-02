@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSheetData, getSheetDataWithHyperlinks } from '@/lib/sheets';
+import { getSheetData, getSheetDataWithHyperlinks, getSpreadsheetSheetTitles } from '@/lib/sheets';
 import { parseSheetData } from '@/lib/sheets-parser';
 import { OfficerSchema, OfficeSchema } from '@/schemas/directory';
 import { rateLimit } from '@/lib/rate-limit';
@@ -222,6 +222,38 @@ function dedupeByKey<T>(items: T[], getKey: (item: T) => string): T[] {
     return deduped;
 }
 
+function normalizeSheetTitle(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function buildResolvedRanges(candidates: readonly string[], availableTitles: readonly string[]): string[] {
+    const resolved: string[] = [];
+
+    for (const candidate of candidates) {
+        const bangIndex = candidate.indexOf('!');
+        if (bangIndex <= 0) {
+            resolved.push(candidate);
+            continue;
+        }
+
+        const configuredTitle = candidate.slice(0, bangIndex).trim();
+        const cellRange = candidate.slice(bangIndex + 1);
+        const normalizedConfiguredTitle = normalizeSheetTitle(configuredTitle);
+
+        const matchedTitle = availableTitles.find(
+            (title) => normalizeSheetTitle(title) === normalizedConfiguredTitle
+        );
+
+        if (matchedTitle) {
+            resolved.push(`${matchedTitle}!${cellRange}`);
+        }
+
+        resolved.push(candidate);
+    }
+
+    return dedupeByKey(resolved, (range) => range);
+}
+
 function isSupremeStudentCouncilEntry(entry: { name?: string; branch?: string; category?: string }): boolean {
     const normalizedCategory = normalizeOrganizationCategory(entry.category || '');
     if (normalizedCategory === 'Supreme Student Council') {
@@ -434,6 +466,8 @@ export async function GET(request: Request) {
             return toApiResponse(new ApiError(500, 'SERVICE_MISCONFIGURED', 'Internal server error', undefined, false));
         }
 
+        const spreadsheetTitles = await getSpreadsheetSheetTitles(SPREADSHEET_ID);
+
         const fetchRangeSafe = async (range: string) => {
             try {
                 return await getSheetData(SPREADSHEET_ID, range);
@@ -444,7 +478,7 @@ export async function GET(request: Request) {
         };
 
         const fetchFirstAvailableRangeSafe = async (ranges: readonly string[]) => {
-            for (const range of ranges) {
+            for (const range of buildResolvedRanges(ranges, spreadsheetTitles)) {
                 const rows = await fetchRangeSafe(range);
                 if (rows.length > 0) {
                     return rows;
@@ -464,7 +498,7 @@ export async function GET(request: Request) {
         };
 
         const fetchFirstAvailableRangeWithLinksSafe = async (ranges: readonly string[]) => {
-            for (const range of ranges) {
+            for (const range of buildResolvedRanges(ranges, spreadsheetTitles)) {
                 const rows = await fetchRangeWithLinksSafe(range);
                 if (rows.length > 0) {
                     return rows;
