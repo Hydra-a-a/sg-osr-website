@@ -42,6 +42,8 @@ function LoginContent() {
     // Map NextAuth error codes to user-friendly messages
     const errorMessages: Record<string, string> = {
         AccessDenied: 'Access denied. Only @rtu.edu.ph email addresses are permitted.',
+        OAuthSignin: 'Google sign-in was blocked by your current browser session. This commonly happens in in-app browsers. Open this page in Chrome, Firefox, Safari, or Edge and try again.',
+        OAuthCallback: 'Google sign-in could not complete in this browser. Open this page in Chrome, Firefox, Safari, or Edge and try again.',
         OAuthAccountNotLinked: 'This email is already linked to another sign-in method.',
         CredentialsSignin: 'Local simulation login failed. Check your token and try again.',
         Configuration: 'Local simulation is not fully configured on the server.',

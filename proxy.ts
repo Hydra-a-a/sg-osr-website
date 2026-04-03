@@ -19,11 +19,11 @@ function generateNonce(): string {
 function buildCspHeader(nonce: string): string {
     const isProduction = process.env.NODE_ENV === 'production';
     const scriptSrc = isProduction
-        ? `script-src 'self' 'unsafe-inline';`
+        ? `script-src 'self' 'nonce-${nonce}' 'unsafe-inline';`
         : `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'unsafe-eval';`;
     const styleSrc = isProduction
-        ? `style-src 'self' 'unsafe-inline';`
-        : `style-src 'self' 'unsafe-inline';`;
+        ? `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'; style-src-attr 'unsafe-inline';`
+        : `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'; style-src-attr 'unsafe-inline';`;
 
 
     return `
@@ -32,26 +32,44 @@ function buildCspHeader(nonce: string): string {
       ${styleSrc}
       img-src 'self' blob: data: https://*.googleusercontent.com https://www.google.com https://*.fbcdn.net https://*.facebook.com;
       font-src 'self';
+      media-src 'self' blob:;
       object-src 'none';
       base-uri 'self';
       form-action 'self' https://accounts.google.com;
-      frame-src 'self' https://*.youtube.com https://*.drive.google.com;
+      frame-src 'self' https://*.youtube.com https://*.drive.google.com https://accounts.google.com;
       frame-ancestors 'self';
-      connect-src 'self' https://*.google.com https://accounts.google.com https://oauth2.googleapis.com https://*.ingest.sentry.io https://ingest.sentry.io;
+      connect-src 'self' https://*.google.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.ingest.sentry.io https://ingest.sentry.io;
+      worker-src 'self' blob:;
+      manifest-src 'self';
       script-src-attr 'none';
       upgrade-insecure-requests;
     `.replace(/\s{2,}/g, ' ').trim();
 }
 
-function applySecurityHeaders(response: NextResponse, nonce: string, cspHeader: string): NextResponse {
+function applySecurityHeaders(response: NextResponse, nonce: string, cspHeader: string, pathname?: string): NextResponse {
     if (process.env.NODE_ENV === 'production') {
         response.headers.set('x-nonce', nonce);
         response.headers.set('Content-Security-Policy', cspHeader);
+        response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
     }
+
+    if (pathname === '/login') {
+        response.headers.set('Cache-Control', 'no-store, max-age=0');
+        response.headers.set('Pragma', 'no-cache');
+    }
+
     response.headers.set('X-Content-Type-Options', 'nosniff');
     response.headers.set('X-Frame-Options', 'SAMEORIGIN');
     response.headers.set('X-XSS-Protection', '1; mode=block');
     response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+    response.headers.set('Origin-Agent-Cluster', '?1');
+    response.headers.set('X-Permitted-Cross-Domain-Policies', 'none');
+    response.headers.set(
+        'Permissions-Policy',
+        'accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()'
+    );
     return response;
 }
 
@@ -67,7 +85,7 @@ function nextWithSecurityHeaders(req: Parameters<ReturnType<typeof auth>>[0], no
         },
     });
 
-    return applySecurityHeaders(response, nonce, cspHeader);
+    return applySecurityHeaders(response, nonce, cspHeader, req.nextUrl.pathname);
 }
 
 /**
@@ -100,7 +118,7 @@ export default auth((req) => {
     if (isPublic) {
         // If already logged in and visiting /login, redirect to home
         if (pathname === '/login' && isLoggedIn) {
-            return applySecurityHeaders(NextResponse.redirect(new URL('/', nextUrl)), nonce, cspHeader);
+            return applySecurityHeaders(NextResponse.redirect(new URL('/', nextUrl)), nonce, cspHeader, '/');
         }
         return nextWithSecurityHeaders(req, nonce, cspHeader);
     }
@@ -109,13 +127,13 @@ export default auth((req) => {
     if (!isLoggedIn) {
         const loginUrl = new URL('/login', nextUrl);
         loginUrl.searchParams.set('callbackUrl', pathname);
-        return applySecurityHeaders(NextResponse.redirect(loginUrl), nonce, cspHeader);
+        return applySecurityHeaders(NextResponse.redirect(loginUrl), nonce, cspHeader, '/login');
     }
 
     // Leader-only enforcement
     const isLeaderRoute = leaderOnlyRoutes.some((r) => pathname.startsWith(r));
     if (isLeaderRoute && session.user.role !== 'leader') {
-        return applySecurityHeaders(NextResponse.redirect(new URL('/?error=unauthorized', nextUrl)), nonce, cspHeader);
+        return applySecurityHeaders(NextResponse.redirect(new URL('/?error=unauthorized', nextUrl)), nonce, cspHeader, '/');
     }
 
     return nextWithSecurityHeaders(req, nonce, cspHeader);
