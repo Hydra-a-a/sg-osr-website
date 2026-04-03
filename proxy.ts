@@ -19,11 +19,11 @@ function generateNonce(): string {
 function buildCspHeader(nonce: string): string {
     const isProduction = process.env.NODE_ENV === 'production';
     const scriptSrc = isProduction
-        ? `script-src 'self' 'nonce-${nonce}' 'unsafe-inline';`
-        : `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'unsafe-eval';`;
+        ? `script-src 'self' 'unsafe-inline'; script-src-elem 'self';`
+        : `script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-elem 'self';`;
     const styleSrc = isProduction
-        ? `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'; style-src-attr 'unsafe-inline';`
-        : `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'; style-src-attr 'unsafe-inline';`;
+        ? `style-src 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline';`
+        : `style-src 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline';`;
 
 
     return `
@@ -46,10 +46,34 @@ function buildCspHeader(nonce: string): string {
     `.replace(/\s{2,}/g, ' ').trim();
 }
 
+function buildCspReportOnlyHeader(nonce: string): string {
+    return `
+      default-src 'self';
+      script-src 'self' 'nonce-${nonce}';
+      script-src-elem 'self' 'nonce-${nonce}';
+      style-src 'self' 'nonce-${nonce}';
+      style-src-attr 'unsafe-inline';
+      img-src 'self' blob: data: https://*.googleusercontent.com https://www.google.com https://*.fbcdn.net https://*.facebook.com;
+      font-src 'self';
+      media-src 'self' blob:;
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self' https://accounts.google.com;
+      frame-src 'self' https://*.youtube.com https://*.drive.google.com https://accounts.google.com;
+      frame-ancestors 'self';
+      connect-src 'self' https://*.google.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.ingest.sentry.io https://ingest.sentry.io;
+      worker-src 'self' blob:;
+      manifest-src 'self';
+      script-src-attr 'none';
+      upgrade-insecure-requests;
+    `.replace(/\s{2,}/g, ' ').trim();
+}
+
 function applySecurityHeaders(response: NextResponse, nonce: string, cspHeader: string, pathname?: string): NextResponse {
     if (process.env.NODE_ENV === 'production') {
         response.headers.set('x-nonce', nonce);
         response.headers.set('Content-Security-Policy', cspHeader);
+        response.headers.set('Content-Security-Policy-Report-Only', buildCspReportOnlyHeader(nonce));
         response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
     }
 
