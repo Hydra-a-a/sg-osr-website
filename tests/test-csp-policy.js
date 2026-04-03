@@ -16,7 +16,7 @@ function assert(condition, message) {
 assert(!nextConfig.includes("'unsafe-inline'"), 'Unsafe inline CSP directive still present in next.config.mjs.');
 assert(!nextConfig.includes('Content-Security-Policy'), 'Static CSP header should not be set in next.config.mjs after nonce migration.');
 
-assert(proxySource.includes("script-src 'self' 'unsafe-inline'; script-src-elem 'self';"), 'Compatibility-safe script CSP is missing in proxy.');
+assert(proxySource.includes("script-src 'self' 'unsafe-inline'; script-src-elem 'self' 'unsafe-inline';"), 'Compatibility-safe script CSP is missing in proxy.');
 assert(!proxySource.includes("'strict-dynamic'"), 'strict-dynamic should remain disabled because it breaks Next.js parser-inserted chunks in production.');
 assert(proxySource.includes("style-src 'self' 'unsafe-inline';"), 'Compatibility-safe style CSP is missing in proxy.');
 assert(proxySource.includes("style-src-attr 'unsafe-inline'"), 'CSP should allow inline style attributes used by React inline style props.');
