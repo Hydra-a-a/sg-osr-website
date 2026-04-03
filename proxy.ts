@@ -19,9 +19,12 @@ function generateNonce(): string {
 function buildCspHeader(nonce: string): string {
     const isProduction = process.env.NODE_ENV === 'production';
     const scriptSrc = isProduction
-        ? `script-src 'self' 'nonce-${nonce}';`
-        : `script-src 'self' 'nonce-${nonce}' 'unsafe-eval';`;
-    const styleSrc = `style-src 'self' 'nonce-${nonce}'; style-src-attr 'unsafe-inline';`;
+        ? `script-src 'self' 'unsafe-inline';`
+        : `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'unsafe-eval';`;
+    const styleSrc = isProduction
+        ? `style-src 'self' 'unsafe-inline';`
+        : `style-src 'self' 'unsafe-inline';`;
+
 
     return `
       default-src 'self';
