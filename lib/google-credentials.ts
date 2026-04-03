@@ -19,15 +19,40 @@ function getFirstEnvValue(keys: readonly string[]): string | undefined {
 }
 
 function stripWrappingQuotes(value: string): string {
-    const trimmed = value.trim();
-    if (trimmed.length >= 2) {
-        const startsWithDouble = trimmed.startsWith('"') && trimmed.endsWith('"');
-        const startsWithSingle = trimmed.startsWith("'") && trimmed.endsWith("'");
-        if (startsWithDouble || startsWithSingle) {
-            return trimmed.slice(1, -1);
+    let normalized = value.trim();
+
+    // Some env providers/local .env files end up with nested or escaped wrapping
+    // quotes around PEM blocks (for example: \"-----BEGIN...-----\").
+    // Strip outer wrappers repeatedly to recover the raw key body safely.
+    for (let i = 0; i < 3; i++) {
+        const hasDirectDoubleQuotes = normalized.length >= 2
+            && normalized.startsWith('"')
+            && normalized.endsWith('"');
+        const hasDirectSingleQuotes = normalized.length >= 2
+            && normalized.startsWith("'")
+            && normalized.endsWith("'");
+
+        const hasEscapedDoubleQuotes = normalized.length >= 4
+            && normalized.startsWith('\\"')
+            && normalized.endsWith('\\"');
+        const hasEscapedSingleQuotes = normalized.length >= 4
+            && normalized.startsWith("\\'")
+            && normalized.endsWith("\\'");
+
+        if (hasEscapedDoubleQuotes || hasEscapedSingleQuotes) {
+            normalized = normalized.slice(2, -2).trim();
+            continue;
         }
+
+        if (hasDirectDoubleQuotes || hasDirectSingleQuotes) {
+            normalized = normalized.slice(1, -1).trim();
+            continue;
+        }
+
+        break;
     }
-    return trimmed;
+
+    return normalized;
 }
 
 function normalizePrivateKey(rawKey: string): string {

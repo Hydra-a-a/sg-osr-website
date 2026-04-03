@@ -144,7 +144,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                                 <p className="font-semibold text-sm text-gray-900 truncate">{session.user.name || 'Student'}</p>
                                                 <p className="text-xs text-gray-500 truncate mt-0.5">{session.user.email}</p>
                                                 {isLeader && (
-                                                    <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                                                    <span className="pill-label pill-label-tight mt-2 bg-amber-100 text-amber-800">
                                                         <Shield size={10} /> Student Leader
                                                     </span>
                                                 )}
@@ -164,7 +164,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                             </div>
                         ) : (
                             <Link href="/login" className="btn-primary text-sm no-underline px-6" onClick={() => setProfileOpen(false)}>
-                                Login
+                                Sign In
                             </Link>
                         )}
                     </div>
@@ -230,7 +230,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                                 <div>
                                                     <p className="text-sm font-semibold">{session.user.name || 'Student'}</p>
                                                     {isLeader && (
-                                                        <span className="text-[10px] text-amber-600 font-bold uppercase">Student Leader</span>
+                                                        <span className="pill-label pill-label-tight mt-1 bg-amber-100 text-amber-700">Student Leader</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -248,7 +248,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                             className="btn-primary text-sm text-center no-underline"
                                             onClick={() => setMobileOpen(false)}
                                         >
-                                            Login
+                                            Sign In
                                         </Link>
                                     )}
                                 </div>

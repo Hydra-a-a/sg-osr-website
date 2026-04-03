@@ -27,9 +27,10 @@ export default function RootLayout({ children }) {
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
       >
+        <a href="#main-content" className="skip-link">Skip to main content</a>
         <AuthProvider>
           <Navbar />
-          <main className="flex-1">
+          <main id="main-content" className="flex-1" tabIndex={-1}>
             <PageTransition>
               {children}
             </PageTransition>

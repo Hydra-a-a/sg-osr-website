@@ -112,31 +112,89 @@ export default function Hero() {
     const { data: linksResponse } = useSWR('/api/config/links', (url: string) => fetch(url).then(r => r.json()));
     const links: QuickLink[] = linksResponse?.data || [];
     const prefersReducedMotion = useReducedMotion();
+    const [isMotionConservative, setIsMotionConservative] = useState(false);
+    const [isHeroInView, setIsHeroInView] = useState(true);
+    const [isPageVisible, setIsPageVisible] = useState(true);
     const [activeIdx, setActiveIdx] = useState(0);
     const lastInteraction = useRef(0);
+    const sectionRef = useRef<HTMLElement | null>(null);
+
+    useEffect(() => {
+        const nav = navigator as Navigator & { deviceMemory?: number };
+        const mobileViewport = window.matchMedia('(max-width: 900px)').matches;
+        const noHoverInput = window.matchMedia('(hover: none)').matches;
+        const lowCpu = typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 6;
+        const lowMemory = typeof nav.deviceMemory === 'number' && nav.deviceMemory <= 4;
+
+        const frame = window.requestAnimationFrame(() => {
+            if (mobileViewport && (noHoverInput || lowCpu || lowMemory)) {
+                setIsMotionConservative(true);
+            }
+        });
+
+        return () => window.cancelAnimationFrame(frame);
+    }, []);
+
+    const reduceHeroMotion = prefersReducedMotion || isMotionConservative;
+    const activeCouncilIndex = reduceHeroMotion ? 0 : activeIdx;
 
     useEffect(() => {
         lastInteraction.current = Date.now();
+    }, []);
+
+    useEffect(() => {
+        const section = sectionRef.current;
+        if (!section) {
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                setIsHeroInView(entry.isIntersecting);
+            },
+            { threshold: 0.1 }
+        );
+
+        observer.observe(section);
+        return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
+        const onVisibilityChange = () => {
+            setIsPageVisible(document.visibilityState === 'visible');
+        };
+
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', onVisibilityChange);
     }, []);
 
     const next = useCallback(() => {
+        if (reduceHeroMotion) {
+            return;
+        }
         setActiveIdx((i) => (i + 1) % councils.length);
         lastInteraction.current = Date.now();
-    }, []);
+    }, [reduceHeroMotion]);
 
     const prev = useCallback(() => {
+        if (reduceHeroMotion) {
+            return;
+        }
         setActiveIdx((i) => (i - 1 + councils.length) % councils.length);
         lastInteraction.current = Date.now();
-    }, []);
+    }, [reduceHeroMotion]);
 
     const jumpTo = useCallback((idx: number) => {
+        if (reduceHeroMotion) {
+            return;
+        }
         setActiveIdx(idx);
         lastInteraction.current = Date.now();
-    }, []);
+    }, [reduceHeroMotion]);
 
     // auto-rotate every 5 seconds, but only if user hasn't interacted for 10 seconds
     useEffect(() => {
-        if (prefersReducedMotion) {
+        if (reduceHeroMotion || !isHeroInView || !isPageVisible) {
             return;
         }
 
@@ -147,7 +205,7 @@ export default function Hero() {
             }
         }, 5000);
         return () => clearInterval(interval);
-    }, [prefersReducedMotion]);
+    }, [reduceHeroMotion, isHeroInView, isPageVisible]);
 
     const heroLinks = links.length > 0 ? links.slice(0, 3) : [
         { id: '1', label: 'Student Grievances', desc: 'Use the Official Student Grievance Form', href: '/services', icon: 'FileText' },
@@ -155,26 +213,32 @@ export default function Hero() {
         { id: '3', label: 'Latest News', desc: 'Stay updated with the latest announcements', href: '/news', icon: 'Newspaper' },
     ];
 
-    const active = councils[activeIdx];
-    const leftIdx = (activeIdx - 1 + councils.length) % councils.length;
-    const rightIdx = (activeIdx + 1) % councils.length;
+    const active = councils[activeCouncilIndex];
+    const leftIdx = (activeCouncilIndex - 1 + councils.length) % councils.length;
+    const rightIdx = (activeCouncilIndex + 1) % councils.length;
 
     return (
-        <section className="bg-gradient-rtu relative overflow-hidden min-h-[84vh] md:min-h-[90vh] flex items-center">
+        <section ref={sectionRef} className="hero-banner bg-gradient-rtu relative overflow-hidden min-h-[84vh] md:min-h-[90vh] flex items-center">
 
             {/* Animated dot grid background for depth */}
-            <div className="absolute inset-0 pointer-events-none z-0">
-                <div className="hero-dot-grid" />
-            </div>
+            {!reduceHeroMotion && (
+                <div className="absolute inset-0 pointer-events-none z-0">
+                    <div className="hero-dot-grid" />
+                </div>
+            )}
 
-            <div
-                className="absolute -top-40 -right-40 w-96 max-w-[50vw] h-96 rounded-full opacity-10 pointer-events-none"
-                style={{ background: 'var(--rtu-gold)' }}
-            />
-            <div
-                className="absolute -bottom-20 -left-20 w-72 max-w-[40vw] h-72 rounded-full opacity-10 pointer-events-none"
-                style={{ background: 'var(--rtu-gold-light)' }}
-            />
+            {!reduceHeroMotion && (
+                <>
+                    <div
+                        className="absolute -top-40 -right-40 w-96 max-w-[50vw] h-96 rounded-full opacity-10 pointer-events-none"
+                        style={{ background: 'var(--rtu-gold)' }}
+                    />
+                    <div
+                        className="absolute -bottom-20 -left-20 w-72 max-w-[40vw] h-72 rounded-full opacity-10 pointer-events-none"
+                        style={{ background: 'var(--rtu-gold-light)' }}
+                    />
+                </>
+            )}
 
             <div className="container-main relative z-10 py-16 md:py-24 lg:py-28">
                 <div className="flex flex-col md:flex-row items-center gap-10 lg:gap-14">
@@ -182,9 +246,9 @@ export default function Hero() {
                     <motion.div
                         suppressHydrationWarning
                         className="flex-1 text-center md:text-left"
-                        initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
+                        initial={reduceHeroMotion ? false : { opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                        transition={reduceHeroMotion ? { duration: 0 } : { duration: 0.6, ease: 'easeOut' }}
                     >
                         <p
                             className="text-sm font-semibold tracking-widest uppercase mb-4"
@@ -206,7 +270,7 @@ export default function Hero() {
                                 initial={{ opacity: 0, y: 8 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -8 }}
-                                transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4 }}
+                                transition={reduceHeroMotion ? { duration: 0 } : { duration: 0.4 }}
                             >
                                 Government Portal
                             </motion.span>
@@ -231,54 +295,58 @@ export default function Hero() {
                     <motion.div
                         suppressHydrationWarning
                         className="flex-shrink-0 w-full md:w-auto"
-                        initial={prefersReducedMotion ? false : { opacity: 0 }}
+                        initial={reduceHeroMotion ? false : { opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        transition={{ duration: 0.6, delay: 0.15, ease: 'easeOut' }}
+                        transition={reduceHeroMotion ? { duration: 0 } : { duration: 0.6, delay: 0.15, ease: 'easeOut' }}
                     >
                         <div className="relative flex flex-col items-center">
                             {/* Logo stage */}
                             <div className="relative w-full max-w-[20rem] md:max-w-[22rem] h-60 md:h-72 flex items-center justify-center">
                                 {/* Dynamic glow */}
-                                <motion.div
-                                    className="absolute inset-[10%] rounded-full blur-[40px] md:blur-[50px] z-0"
-                                    animate={{ background: active.glow }}
-                                    transition={{ duration: 0.6 }}
-                                    style={{ opacity: 0.5 }}
-                                />
+                                {!reduceHeroMotion && (
+                                    <motion.div
+                                        className="absolute inset-[10%] rounded-full blur-[40px] md:blur-[50px] z-0"
+                                        animate={{ background: active.glow }}
+                                        transition={{ duration: 0.6 }}
+                                        style={{ opacity: 0.5 }}
+                                    />
+                                )}
 
                                 {/* Left (prev) logo */}
-                                <motion.div
-                                    key={`left-${leftIdx}`}
-                                    className="absolute hidden md:block w-28 h-28 md:w-36 md:h-36 z-10 cursor-pointer"
-                                    style={{ left: '-5%', top: '50%' }}
-                                    onClick={prev}
-                                    initial={{ opacity: 0, x: 20, y: '-50%', scale: 0.7 }}
-                                    animate={{ opacity: 0.4, x: 0, y: '-50%', scale: 0.7 }}
-                                    exit={{ opacity: 0, x: 20, y: '-50%', scale: 0.7 }}
-                                    transition={{ duration: 0.5 }}
-                                    whileHover={{ opacity: 0.7, scale: 0.75, y: '-50%' }}
-                                >
-                                    <Image
-                                        src={councils[leftIdx].src}
-                                        alt={councils[leftIdx].name}
-                                        fill
-                                        sizes="(max-width: 768px) 0px, 144px"
-                                        className="object-contain rounded-full brightness-75 transition-all"
-                                    />
-                                </motion.div>
+                                {!reduceHeroMotion && (
+                                    <motion.div
+                                        key={`left-${leftIdx}`}
+                                        className="absolute hidden md:block w-28 h-28 md:w-36 md:h-36 z-10 cursor-pointer"
+                                        style={{ left: '-5%', top: '50%' }}
+                                        onClick={prev}
+                                        initial={{ opacity: 0, x: 20, y: '-50%', scale: 0.7 }}
+                                        animate={{ opacity: 0.4, x: 0, y: '-50%', scale: 0.7 }}
+                                        exit={{ opacity: 0, x: 20, y: '-50%', scale: 0.7 }}
+                                        transition={{ duration: 0.5 }}
+                                        whileHover={{ opacity: 0.7, scale: 0.75, y: '-50%' }}
+                                    >
+                                        <Image
+                                            src={councils[leftIdx].src}
+                                            alt={councils[leftIdx].name}
+                                            fill
+                                            sizes="(max-width: 768px) 0px, 144px"
+                                            className="object-contain rounded-full brightness-75 transition-all"
+                                        />
+                                    </motion.div>
+                                )}
 
                                 {/* Center (active) logo */}
                                 <AnimatePresence mode="wait">
                                     <motion.div
-                                        key={`center-${activeIdx}`}
+                                        key={`center-${activeCouncilIndex}`}
                                         className="absolute w-48 h-48 md:w-56 md:h-56 z-20 flex items-center justify-center"
                                         style={{ top: '50%', left: '50%' }}
                                         initial={{ opacity: 0, scale: 0.8, x: '-50%', y: '-50%' }}
                                         animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
                                         exit={{ opacity: 0, scale: 0.8, x: '-50%', y: '-50%' }}
-                                        transition={{ duration: 0.45, ease: 'easeOut' }}
+                                        transition={reduceHeroMotion ? { duration: 0 } : { duration: 0.45, ease: 'easeOut' }}
                                     >
-                                        <div className="w-full h-full animate-float relative flex items-center justify-center">
+                                        <div className={`w-full h-full relative flex items-center justify-center ${reduceHeroMotion ? '' : 'animate-float'}`}>
                                             <Image
                                                 src={active.src}
                                                 alt={active.name}
@@ -286,7 +354,7 @@ export default function Hero() {
                                                 sizes="(max-width: 768px) 192px, 224px"
                                                 className="object-contain rounded-full shadow-2xl"
                                                 style={{
-                                                    filter: `drop-shadow(0 12px 32px ${active.glow})`,
+                                                    filter: reduceHeroMotion ? 'none' : `drop-shadow(0 12px 32px ${active.glow})`,
                                                 }}
                                                 priority
                                             />
@@ -295,25 +363,27 @@ export default function Hero() {
                                 </AnimatePresence>
 
                                 {/* Right (next) logo */}
-                                <motion.div
-                                    key={`right-${rightIdx}`}
-                                    className="absolute hidden md:block w-28 h-28 md:w-36 md:h-36 z-10 cursor-pointer"
-                                    style={{ right: '-5%', top: '50%' }}
-                                    onClick={next}
-                                    initial={{ opacity: 0, x: -20, y: '-50%', scale: 0.7 }}
-                                    animate={{ opacity: 0.4, x: 0, y: '-50%', scale: 0.7 }}
-                                    exit={{ opacity: 0, x: -20, y: '-50%', scale: 0.7 }}
-                                    transition={{ duration: 0.5 }}
-                                    whileHover={{ opacity: 0.7, scale: 0.75, y: '-50%' }}
-                                >
-                                    <Image
-                                        src={councils[rightIdx].src}
-                                        alt={councils[rightIdx].name}
-                                        fill
-                                        sizes="(max-width: 768px) 0px, 144px"
-                                        className="object-contain rounded-full brightness-75 transition-all"
-                                    />
-                                </motion.div>
+                                {!reduceHeroMotion && (
+                                    <motion.div
+                                        key={`right-${rightIdx}`}
+                                        className="absolute hidden md:block w-28 h-28 md:w-36 md:h-36 z-10 cursor-pointer"
+                                        style={{ right: '-5%', top: '50%' }}
+                                        onClick={next}
+                                        initial={{ opacity: 0, x: -20, y: '-50%', scale: 0.7 }}
+                                        animate={{ opacity: 0.4, x: 0, y: '-50%', scale: 0.7 }}
+                                        exit={{ opacity: 0, x: -20, y: '-50%', scale: 0.7 }}
+                                        transition={{ duration: 0.5 }}
+                                        whileHover={{ opacity: 0.7, scale: 0.75, y: '-50%' }}
+                                    >
+                                        <Image
+                                            src={councils[rightIdx].src}
+                                            alt={councils[rightIdx].name}
+                                            fill
+                                            sizes="(max-width: 768px) 0px, 144px"
+                                            className="object-contain rounded-full brightness-75 transition-all"
+                                        />
+                                    </motion.div>
+                                )}
                             </div>
 
                             {/* Navigation arrows + label */}
@@ -322,6 +392,7 @@ export default function Hero() {
                                     onClick={prev}
                                     className="hero-control-btn"
                                     aria-label="Previous council"
+                                    disabled={reduceHeroMotion}
                                 >
                                     <ChevronLeft className="text-white" size={20} />
                                 </button>
@@ -349,27 +420,30 @@ export default function Hero() {
                                     onClick={next}
                                     className="hero-control-btn"
                                     aria-label="Next council"
+                                    disabled={reduceHeroMotion}
                                 >
                                     <ChevronRight className="text-white" size={20} />
                                 </button>
                             </div>
 
                             {/* Dot indicators */}
-                            <div className="flex gap-3 mt-4">
-                                {councils.map((c, i) => (
-                                    <button
-                                        key={c.id}
-                                        onClick={() => jumpTo(i)}
-                                        className="w-2.5 h-2.5 rounded-full transition-all duration-300"
-                                        style={{
-                                            background: i === activeIdx ? active.gradientFrom : 'rgba(255,255,255,0.2)',
-                                            transform: i === activeIdx ? 'scale(1.3)' : 'scale(1)',
-                                            boxShadow: i === activeIdx ? `0 0 10px ${active.glow}` : 'none'
-                                        }}
-                                        aria-label={`Switch to ${c.abbr}`}
-                                    />
-                                ))}
-                            </div>
+                            {!reduceHeroMotion && (
+                                <div className="flex gap-3 mt-4">
+                                    {councils.map((c, i) => (
+                                        <button
+                                            key={c.id}
+                                            onClick={() => jumpTo(i)}
+                                            className="w-2.5 h-2.5 rounded-full transition-all duration-300"
+                                            style={{
+                                                background: i === activeCouncilIndex ? active.gradientFrom : 'rgba(255,255,255,0.2)',
+                                                transform: i === activeCouncilIndex ? 'scale(1.3)' : 'scale(1)',
+                                                boxShadow: i === activeCouncilIndex ? `0 0 10px ${active.glow}` : 'none'
+                                            }}
+                                            aria-label={`Switch to ${c.abbr}`}
+                                        />
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 </div>
@@ -378,9 +452,9 @@ export default function Hero() {
                 <motion.div
                     suppressHydrationWarning
                     className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mt-12 md:mt-16"
-                    initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
+                    initial={reduceHeroMotion ? false : { opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.3, ease: 'easeOut' }}
+                    transition={reduceHeroMotion ? { duration: 0 } : { duration: 0.5, delay: 0.3, ease: 'easeOut' }}
                 >
                     {heroLinks.map((item) => {
 
@@ -407,14 +481,14 @@ export default function Hero() {
             <motion.div
                 suppressHydrationWarning
                 className="absolute bottom-5 md:bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-10"
-                initial={prefersReducedMotion ? false : { opacity: 0 }}
+                initial={reduceHeroMotion ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 1, duration: 0.8 }}
+                transition={reduceHeroMotion ? { duration: 0 } : { delay: 1, duration: 0.8 }}
             >
                 <span className="text-white/30 text-[10px] uppercase tracking-[0.2em]">Explore</span>
                 <motion.div
-                    animate={prefersReducedMotion ? { y: 0 } : { y: [0, 6, 0] }}
-                    transition={prefersReducedMotion ? { duration: 0 } : { repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
+                    animate={reduceHeroMotion ? { y: 0 } : { y: [0, 6, 0] }}
+                    transition={reduceHeroMotion ? { duration: 0 } : { repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
                 >
                     <ChevronDown className="text-white/30" size={20} />
                 </motion.div>

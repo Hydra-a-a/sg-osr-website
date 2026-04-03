@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 // Strict sanitization regex: letters, numbers, spaces, common punctuation, Filipino characters
 const safeTextRegex = /^[a-zA-Z0-9\s.,'\-ñÑ()&/]+$/;
+const safeOptionalTextRegex = /^$|^[a-zA-Z0-9\s.,'\-ñÑ()&/]+$/;
 
 export const OfficerSchema = z.object({
     id: z.string().trim().max(50).optional(),
@@ -68,14 +69,14 @@ export const OfficeSchema = z.object({
     location: z.string()
         .trim()
         .max(200, 'Location is too long')
-        .regex(safeTextRegex, 'Location contains invalid characters')
+        .regex(safeOptionalTextRegex, 'Location contains invalid characters')
         .optional()
         .default(''),
 
     headDirector: z.string()
         .trim()
         .max(120, 'Head/Director name is too long')
-        .regex(safeTextRegex, 'Head/Director contains invalid characters')
+        .regex(safeOptionalTextRegex, 'Head/Director contains invalid characters')
         .optional()
         .default(''),
 
@@ -88,7 +89,7 @@ export const OfficeSchema = z.object({
     branch: z.string()
         .trim()
         .max(100, 'Branch name is too long')
-        .regex(safeTextRegex, 'Branch contains invalid characters')
+        .regex(safeOptionalTextRegex, 'Branch contains invalid characters')
         .optional()
         .default(''),
 

@@ -140,7 +140,7 @@ export default function Home() {
                 <p className="text-lg opacity-80 mb-8">
                   {isLoggedIn
                     ? `You are signed in${session?.user?.email ? ` as ${session.user.email}` : ''}. You can now use protected portal features.`
-                    : 'Certain features like document submission and officer management require authentication via your institutional RTU Google Account.'}
+                    : 'Certain features like grievance handling, classroom submissions, and officer-only tools require authentication via your institutional RTU Google Account.'}
                 </p>
                 {status !== 'loading' && (
                   <div className="flex gap-4 flex-wrap">
@@ -178,7 +178,7 @@ export default function Home() {
                   </li>
                   <li className="flex items-center gap-3">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'var(--rtu-gold)' }} />
-                    Officer Access: Sync Classroom & upload financials.
+                    Student Leader Access: Sync Classroom & upload transparency files.
                   </li>
                   <li className="flex items-center gap-3">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'var(--rtu-gold)' }} />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
@@ -15,12 +15,23 @@ function LoginContent() {
     const [devEmail, setDevEmail] = useState('student@rtu.edu.ph');
     const [devRole, setDevRole] = useState<'student' | 'leader'>('student');
     const [devToken, setDevToken] = useState('');
+    const [isLocalHost, setIsLocalHost] = useState(false);
     const searchParams = useSearchParams();
-    const isLocalHost = typeof window !== 'undefined'
-        && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
     const localDevLoginEnabled = process.env.NODE_ENV !== 'production'
         && process.env.NEXT_PUBLIC_ENABLE_LOCAL_LOGIN_SIMULATION === 'true'
         && isLocalHost;
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const frame = window.requestAnimationFrame(() => {
+            setIsLocalHost(['localhost', '127.0.0.1', '::1'].includes(window.location.hostname));
+        });
+
+        return () => window.cancelAnimationFrame(frame);
+    }, []);
 
     const requestedCallbackUrl = searchParams.get('callbackUrl');
     const callbackUrl = requestedCallbackUrl?.startsWith('/') && !requestedCallbackUrl.startsWith('//')
@@ -86,7 +97,7 @@ function LoginContent() {
     };
 
     return (
-        <main className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#fafafa]">
+        <section className="min-h-screen flex items-center justify-center relative overflow-hidden bg-surface-base" aria-label="Login section">
             {/* Background Decorations */}
             <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
                 <div className="absolute top-[-10%] right-[-5%] w-[40vw] h-[40vw] rounded-full bg-rtu-blue opacity-[0.03] blur-3xl" />
@@ -95,12 +106,12 @@ function LoginContent() {
 
             <div className="container-main relative z-10 flex justify-center">
                 <motion.div
-                    className="w-full max-w-md"
+                    className="w-full max-w-lg"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
                 >
-                    <div className="text-center mb-8">
+                    <div className="text-center mb-10 md:mb-11">
                         <Link href="/" className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-rtu-blue transition-colors mb-6 no-underline">
                             <ChevronLeft size={16} />
                             Back to Portal
@@ -114,11 +125,11 @@ function LoginContent() {
                                 className="object-contain rounded-full shadow-lg"
                             />
                         </div>
-                        <h1 className="text-2xl font-bold text-rtu-blue">Identity Access Management</h1>
-                        <p className="text-text-muted mt-2">RTU Student Government Portal</p>
+                        <h1 className="page-header-title text-[clamp(1.65rem,2.2vw+0.9rem,2.3rem)] font-bold text-rtu-blue">RTU Account Sign In</h1>
+                        <p className="text-text-muted mt-2 text-sm leading-relaxed max-w-md mx-auto">Access the grievance portal with your official RTU email.</p>
                     </div>
 
-                    <div className="card shadow-xl border-t-4 border-t-rtu-blue bg-white p-8 overflow-hidden relative">
+                    <div className="card shadow-xl border-t-4 border-t-rtu-blue bg-white p-6 sm:p-8 overflow-hidden relative">
                         <AnimatePresence mode="wait">
                             <motion.div
                                 key="login-step"
@@ -126,10 +137,10 @@ function LoginContent() {
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: 20 }}
                             >
-                                <div className="mb-8">
-                                    <h2 className="text-xl font-bold mb-2">Sign In</h2>
-                                    <p className="text-sm text-text-muted">
-                                        Authorized access only. Use your institutional <strong>@rtu.edu.ph</strong> email to continue.
+                                <div className="mb-7">
+                                    <h2 className="text-xl font-bold text-strong leading-tight mb-2">Sign In</h2>
+                                    <p className="text-sm text-text-muted leading-relaxed">
+                                        Use your institutional <strong>@rtu.edu.ph</strong> account to submit grievances, track tickets, and access role-based portal tools.
                                     </p>
                                 </div>
 
@@ -149,14 +160,19 @@ function LoginContent() {
                                     <button
                                         onClick={() => handleLogin('student')}
                                         disabled={isLoading}
-                                        className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all duration-200 shadow-sm group disabled:opacity-70"
+                                        className="w-full flex items-center justify-between gap-3 px-4 py-3.5 bg-white border border-soft rounded-xl hover:bg-gray-50 transition-all duration-200 shadow-sm group disabled:opacity-70"
                                     >
                                         {isLoading && activePortal === 'student' ? (
                                             <div className="w-5 h-5 border-2 border-rtu-blue border-t-transparent rounded-full animate-spin" />
                                         ) : (
                                             <>
-                                                <Image src="https://www.google.com/favicon.ico" alt="Google" width={18} height={18} />
-                                                <span className="font-semibold text-gray-700">Student Access (RTU Email)</span>
+                                                <div className="flex items-center gap-3 text-left">
+                                                    <Image src="https://www.google.com/favicon.ico" alt="Google" width={18} height={18} />
+                                                    <div>
+                                                        <p className="font-semibold text-strong">Student Access</p>
+                                                        <p className="text-xs text-subtle leading-relaxed">Submit and track grievances</p>
+                                                    </div>
+                                                </div>
                                             </>
                                         )}
                                     </button>
@@ -164,14 +180,19 @@ function LoginContent() {
                                     <button
                                         onClick={() => handleLogin('leader')}
                                         disabled={isLoading}
-                                        className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border border-amber-200 rounded-xl hover:bg-amber-50 transition-all duration-200 shadow-sm group disabled:opacity-70"
+                                        className="w-full flex items-center justify-between gap-3 px-4 py-3.5 bg-white border border-amber-200 rounded-xl hover:bg-amber-50 transition-all duration-200 shadow-sm group disabled:opacity-70"
                                     >
                                         {isLoading && activePortal === 'leader' ? (
                                             <div className="w-5 h-5 border-2 border-rtu-gold-dark border-t-transparent rounded-full animate-spin" />
                                         ) : (
                                             <>
-                                                <Image src="https://www.google.com/favicon.ico" alt="Google" width={18} height={18} />
-                                                <span className="font-semibold text-gray-700">Student Leader Access</span>
+                                                <div className="flex items-center gap-3 text-left">
+                                                    <Image src="https://www.google.com/favicon.ico" alt="Google" width={18} height={18} />
+                                                    <div>
+                                                        <p className="font-semibold text-strong">Student Leader Access</p>
+                                                        <p className="text-xs text-subtle leading-relaxed">Review leadership-only portal tools</p>
+                                                    </div>
+                                                </div>
                                             </>
                                         )}
                                     </button>
@@ -179,7 +200,7 @@ function LoginContent() {
 
                                 {localDevLoginEnabled && (
                                     <div className="mt-6 pt-5 border-t border-amber-100">
-                                        <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-3">
+                                        <h4 className="pill-label pill-label-tight mb-3 bg-amber-100 text-amber-700">
                                             Localhost Login Simulation
                                         </h4>
                                         <div className="space-y-3">
@@ -216,7 +237,7 @@ function LoginContent() {
                                                     <span className="font-semibold text-amber-800">Simulate Local Login</span>
                                                 )}
                                             </button>
-                                            <p className="text-[11px] text-amber-700/80 leading-relaxed">
+                                            <p className="micro-note text-amber-700/80">
                                                 Enabled only in non-production with explicit env flags and localhost checks.
                                             </p>
                                         </div>
@@ -227,9 +248,9 @@ function LoginContent() {
                                     <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg">
                                         <ShieldCheck className="text-rtu-blue mt-0.5 shrink-0" size={18} />
                                         <div>
-                                            <h4 className="text-xs font-bold text-rtu-blue uppercase tracking-wider">Enterprise Security</h4>
-                                            <p className="text-[11px] text-rtu-blue/70 leading-relaxed mt-1">
-                                                Our Zero-Trust architecture ensures your credentials are encrypted and never stored on local servers.
+                                            <h4 className="pill-label pill-label-tight bg-blue-100 text-rtu-blue">Security Notice</h4>
+                                            <p className="micro-note text-rtu-blue/70 mt-1">
+                                                Authentication is handled by Google sign-in; this portal does not store your password.
                                             </p>
                                         </div>
                                     </div>
@@ -238,19 +259,19 @@ function LoginContent() {
                         </AnimatePresence>
                     </div>
 
-                    <p className="text-center text-[10px] text-text-muted mt-8 opacity-50">
+                    <p className="text-center micro-note text-text-muted mt-8 opacity-50">
                         &copy; 2026 RTU Supreme Student Council &middot; Rizaliano Konek Initiative
                     </p>
                 </motion.div>
             </div>
-        </main>
+        </section>
     );
 }
 
 export default function LoginPage() {
     return (
         <Suspense fallback={
-            <main className="min-h-screen flex items-center justify-center bg-[#fafafa]">
+            <main className="min-h-screen flex items-center justify-center bg-surface-base">
                 <div className="w-8 h-8 border-2 border-rtu-blue border-t-transparent rounded-full animate-spin" />
             </main>
         }>

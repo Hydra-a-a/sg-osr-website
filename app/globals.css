@@ -29,6 +29,7 @@
   --surface-base: var(--bg-primary);
   --surface-elevated: var(--bg-card);
   --surface-soft: #F2F1EE;
+  --surface-muted: #EEF2F7;
   --text-strong: var(--text-primary);
   --text-body: var(--text-secondary);
   --text-subtle: var(--text-muted);
@@ -65,6 +66,26 @@ html {
   box-sizing: border-box;
 }
 
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 9999;
+  background: #ffffff;
+  color: var(--rtu-blue-dark);
+  border: 2px solid var(--rtu-gold);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(26, 51, 82, 0.18);
+}
+
+.skip-link:focus-visible {
+  top: 0.75rem;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -99,6 +120,10 @@ h3 {
   background: var(--surface-soft);
 }
 
+.bg-surface-muted {
+  background: var(--surface-muted);
+}
+
 .text-strong {
   color: var(--text-strong);
 }
@@ -121,10 +146,46 @@ h3 {
 
 .page-header-subtitle {
   color: rgba(255, 255, 255, 0.7);
+  font-size: clamp(0.95rem, 1.2vw + 0.55rem, 1.1rem);
+  line-height: 1.65;
+}
+
+.page-header-title {
+  line-height: 1.15;
+  letter-spacing: -0.01em;
 }
 
 .border-soft {
   border-color: var(--border-soft);
+}
+
+.pill-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.pill-label-tight {
+  letter-spacing: 0.05em;
+}
+
+.eyebrow-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.micro-note {
+  font-size: 0.6875rem;
+  line-height: 1.5;
 }
 
 .icon-chip-blue,
@@ -294,6 +355,42 @@ h3 {
   .feature-icon,
   .nav-link {
     transition: none !important;
+  }
+}
+
+@media (prefers-reduced-data: reduce) {
+  .bg-gradient-rtu,
+  .bg-gradient-rtu-footer,
+  .animate-float,
+  .text-gradient-gold-shimmer,
+  .skeleton,
+  .hero-dot-grid {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .hero-banner.bg-gradient-rtu {
+    animation: none;
+    background-size: 100% 100%, 100% 100%, 100% 100%;
+    background-position: 50% 50%, 50% 50%, 50% 50%;
+    will-change: auto;
+  }
+
+  .hero-banner .hero-dot-grid,
+  .hero-banner .animate-float {
+    animation: none !important;
+  }
+
+  .hero-banner .hero-quick-card,
+  .hero-banner .hero-control-btn {
+    transition: none;
+  }
+
+  .hero-banner .hero-quick-card-shell {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: none;
   }
 }
 

@@ -49,8 +49,13 @@ export async function POST(request: Request) {
         const rawBody = await request.text();
 
         if (!secret) {
-            console.error('Missing MAKE_WEBHOOK_SECRET');
+            logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Webhook secret is not configured' });
             return toApiResponse(new ApiError(500, 'WEBHOOK_NOT_CONFIGURED', 'Internal server error', undefined, false));
+        }
+
+        if (!signatureHeader || !timestampHeader) {
+            logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Missing webhook signature or timestamp header' });
+            return toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized'));
         }
 
         if (!isRecentWebhookTimestamp(timestampHeader)) {
@@ -65,7 +70,7 @@ export async function POST(request: Request) {
             return toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized'));
         }
 
-        if (isReplayRequest(signatureHeader || '', timestamp)) {
+        if (isReplayRequest(signatureHeader, timestamp)) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Webhook replay detected' });
             return toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized'));
         }

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
-import { Search, Facebook, Linkedin, Users, Grid, List as ListIcon, Loader2, Mail, MapPin, Building2 } from 'lucide-react';
+import { Search, Facebook, Linkedin, Users, Grid, List as ListIcon, Mail, MapPin, Building2 } from 'lucide-react';
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import { isSafeNavigationHref } from '@/lib/security';
 
@@ -14,6 +14,11 @@ const councilBranchGroups = {
 
 type CouncilMode = keyof typeof councilBranchGroups;
 type DirectoryMode = CouncilMode | 'academic' | 'nonAcademic' | 'offices';
+type SortMode = 'relevance' | 'nameAsc';
+type ViewMode = 'grid' | 'list';
+
+const DIRECTORY_UI_PREFERENCES_KEY = 'directory-ui-preferences-v1';
+const DIRECTORY_UI_RESTORE_NOTICE_KEY = 'directory-ui-restored-notice-seen-v1';
 
 const modeButtons: Array<{ key: DirectoryMode; label: string; shortLabel: string }> = [
     { key: 'ssc', label: 'Supreme Student Council', shortLabel: 'SSC' },
@@ -23,6 +28,84 @@ const modeButtons: Array<{ key: DirectoryMode; label: string; shortLabel: string
     { key: 'nonAcademic', label: 'Non-Academic Organizations', shortLabel: 'Non-Academic' },
     { key: 'offices', label: 'University Offices', shortLabel: 'Offices' },
 ];
+
+const isDirectoryMode = (value: unknown): value is DirectoryMode =>
+    typeof value === 'string' && modeButtons.some((mode) => mode.key === value);
+
+const isSortMode = (value: unknown): value is SortMode => value === 'relevance' || value === 'nameAsc';
+const isViewMode = (value: unknown): value is ViewMode => value === 'grid' || value === 'list';
+
+const modeSearchPlaceholders: Record<DirectoryMode, string> = {
+    ssc: 'Search SSC officers by name, position, branch, or email.',
+    csc: 'Search Central Student Councils by name, acronym, branch, or email.',
+    cisc: 'Search College/Institute councils by name, acronym, branch, or email.',
+    academic: 'Search academic organizations by name, category, branch, or email.',
+    nonAcademic: 'Search non-academic organizations by name, category, branch, or email.',
+    offices: 'Search university offices by office name, head/director, branch, or email.',
+};
+
+const modeDisplayName: Record<DirectoryMode, string> = {
+    ssc: 'Supreme Student Council',
+    csc: 'Central Student Councils',
+    cisc: 'College / Institute Student Councils',
+    academic: 'Academic Organizations',
+    nonAcademic: 'Non-Academic Organizations',
+    offices: 'University Offices',
+};
+
+const modeEmptyStateMessage: Record<DirectoryMode, string> = {
+    ssc: 'No SSC entries matched your search.',
+    csc: 'No Central Student Council entries matched your search.',
+    cisc: 'No College/Institute council entries matched your search.',
+    academic: 'No academic organizations matched your search.',
+    nonAcademic: 'No non-academic organizations matched your search.',
+    offices: 'No university offices matched your search.',
+};
+
+const modeFallbackSuggestionChips: Record<DirectoryMode, string[]> = {
+    ssc: ['supreme', 'student regent', 'chairperson'],
+    csc: ['mccsc', 'pccsc', 'central'],
+    cisc: ['engineering', 'computer studies', 'architecture'],
+    academic: ['society', 'association', 'organization'],
+    nonAcademic: ['peer facilitator', 'osr', 'student council'],
+    offices: ['registrar', 'admissions', 'finance'],
+};
+
+const suggestionStopWords = new Set([
+    'the', 'and', 'for', 'from', 'with', 'office', 'offices', 'university', 'student', 'students', 'rtu', 'council',
+    'organization', 'organizations', 'college', 'institute', 'campus', 'committee', 'department', 'center',
+]);
+
+const buildSuggestionChips = (values: string[], fallback: string[]): string[] => {
+    const counts = new Map<string, number>();
+
+    for (const value of values) {
+        const tokens = value
+            .toLowerCase()
+            .split(/[^a-z0-9]+/)
+            .map((token) => token.trim())
+            .filter((token) => token.length >= 4 && !suggestionStopWords.has(token));
+
+        const uniqueTokens = new Set(tokens);
+        for (const token of uniqueTokens) {
+            counts.set(token, (counts.get(token) ?? 0) + 1);
+        }
+    }
+
+    const ranked = [...counts.entries()]
+        .sort((a, b) => {
+            if (b[1] !== a[1]) {
+                return b[1] - a[1];
+            }
+            return a[0].localeCompare(b[0], 'en-US');
+        })
+        .slice(0, 3)
+        .map(([token]) => token);
+
+    return ranked.length > 0 ? ranked : fallback;
+};
+
+const directoryBadgeBaseClass = 'pill-label max-w-full mb-2 border whitespace-normal break-normal';
 
 const branchMatchKeywords: Record<string, string[]> = {
     SSC: ['ssc', 'supreme student council'],
@@ -236,22 +319,108 @@ export default function DirectoryPage() {
     const prefersReducedMotion = useReducedMotion();
 
     const [search, setSearch] = useState('');
-    const [viewModeState, setViewModeState] = useState<'grid' | 'list'>('grid');
+    const [viewModeState, setViewModeState] = useState<ViewMode>('grid');
     const [userOverridden, setUserOverridden] = useState(false);
-    const [activeMode, setActiveMode] = useState<DirectoryMode>('ssc');
-    const [filterMode, setFilterMode] = useState<DirectoryMode>('ssc');
-    const [isPending, startTransition] = useTransition();
+    const [mode, setMode] = useState<DirectoryMode>('ssc');
+    const [sortMode, setSortMode] = useState<SortMode>('relevance');
+    const [prefsLoaded, setPrefsLoaded] = useState(false);
+    const [showRestoredHint, setShowRestoredHint] = useState(false);
 
-    const HeaderIcon = filterMode === 'offices' ? Building2 : Users;
-    const headerIconKey = filterMode === 'offices' ? 'offices' : 'organizations';
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem(DIRECTORY_UI_PREFERENCES_KEY);
+            if (!raw) {
+                setPrefsLoaded(true);
+                return;
+            }
 
-    // Derive effective view mode: default to list if many people, unless user manually chose
-    const currentCount = filterMode === 'offices' ? offices.length : officers.length;
+            let restoredAnyPreference = false;
+
+            const parsed = JSON.parse(raw) as {
+                mode?: unknown;
+                sortMode?: unknown;
+                viewMode?: unknown;
+                userOverridden?: unknown;
+            };
+
+            if (isDirectoryMode(parsed.mode)) {
+                setMode(parsed.mode);
+                restoredAnyPreference = true;
+            }
+
+            if (isSortMode(parsed.sortMode)) {
+                setSortMode(parsed.sortMode);
+                restoredAnyPreference = true;
+            }
+
+            if (isViewMode(parsed.viewMode)) {
+                setViewModeState(parsed.viewMode);
+                restoredAnyPreference = true;
+            }
+
+            if (typeof parsed.userOverridden === 'boolean') {
+                setUserOverridden(parsed.userOverridden);
+                restoredAnyPreference = true;
+            }
+
+            const restoreNoticeSeen = sessionStorage.getItem(DIRECTORY_UI_RESTORE_NOTICE_KEY) === '1';
+            if (restoredAnyPreference && !restoreNoticeSeen) {
+                setShowRestoredHint(true);
+                sessionStorage.setItem(DIRECTORY_UI_RESTORE_NOTICE_KEY, '1');
+            }
+        } catch {
+            // Ignore malformed storage and continue with defaults.
+        } finally {
+            setPrefsLoaded(true);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!showRestoredHint) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            setShowRestoredHint(false);
+        }, 3200);
+
+        return () => window.clearTimeout(timer);
+    }, [showRestoredHint]);
+
+    useEffect(() => {
+        if (!prefsLoaded) {
+            return;
+        }
+
+        sessionStorage.setItem(
+            DIRECTORY_UI_PREFERENCES_KEY,
+            JSON.stringify({
+                mode,
+                sortMode,
+                viewMode: viewModeState,
+                userOverridden,
+            })
+        );
+    }, [mode, sortMode, viewModeState, userOverridden, prefsLoaded]);
+
+    const HeaderIcon = mode === 'offices' ? Building2 : Users;
+    const headerIconKey = mode === 'offices' ? 'offices' : 'organizations';
+
+    const currentCount = mode === 'offices' ? offices.length : officers.length;
     const viewMode = (!userOverridden && currentCount > 15) ? 'list' : viewModeState;
 
     const handleViewChange = (mode: 'grid' | 'list') => {
         setViewModeState(mode);
         setUserOverridden(true);
+    };
+
+    const handleSuggestionChipClick = (value: string) => {
+        setSearch(value);
+    };
+
+    const clearFilters = () => {
+        setSearch('');
+        setSortMode('relevance');
     };
 
     const filteredOfficers = officers
@@ -273,13 +442,23 @@ export default function DirectoryPage() {
 
     const filteredAcademicOrganizations = filteredOfficers.filter((o) => belongsToMode(o, 'academic'));
     const filteredNonAcademicOrganizations = filteredOfficers.filter((o) => belongsToMode(o, 'nonAcademic'));
+    const baseAcademicOrganizations = officers.filter((o) => belongsToMode(o, 'academic'));
+    const baseNonAcademicOrganizations = officers.filter((o) => belongsToMode(o, 'nonAcademic'));
 
     const filteredCouncilLeaders = filteredOfficers.filter((officer) => {
-        if (!isCouncilMode(filterMode)) {
+        if (!isCouncilMode(mode)) {
             return false;
         }
 
-        return belongsToMode(officer, filterMode);
+        return belongsToMode(officer, mode);
+    });
+
+    const baseCouncilLeaders = officers.filter((officer) => {
+        if (!isCouncilMode(mode)) {
+            return false;
+        }
+
+        return belongsToMode(officer, mode);
     });
 
     const filteredOffices = offices
@@ -300,27 +479,45 @@ export default function DirectoryPage() {
         .map(({ office }) => office);
 
     const sectionDataCount =
-        filterMode === 'academic'
+        mode === 'academic'
             ? filteredAcademicOrganizations.length
-            : filterMode === 'nonAcademic'
+            : mode === 'nonAcademic'
                 ? filteredNonAcademicOrganizations.length
-                : filterMode === 'offices'
+                : mode === 'offices'
                     ? filteredOffices.length
                     : filteredCouncilLeaders.length;
 
-    const displayedOfficers = filterMode === 'academic'
+    const displayedOfficers = mode === 'academic'
         ? filteredAcademicOrganizations
-        : filterMode === 'nonAcademic'
+        : mode === 'nonAcademic'
             ? filteredNonAcademicOrganizations
             : filteredCouncilLeaders;
 
-    const officerBadge = filterMode === 'academic'
+    const sortedDisplayedOfficers = sortMode === 'nameAsc'
+        ? [...displayedOfficers].sort((a, b) => a.name.localeCompare(b.name, 'en-US', { sensitivity: 'base' }))
+        : displayedOfficers;
+
+    const sortedFilteredOffices = sortMode === 'nameAsc'
+        ? [...filteredOffices].sort((a, b) => a.officeName.localeCompare(b.officeName, 'en-US', { sensitivity: 'base' }))
+        : filteredOffices;
+
+    const suggestionSourceValues = mode === 'offices'
+        ? offices.flatMap((office) => [office.officeName, office.headDirector, office.branch].filter(Boolean) as string[])
+        : mode === 'academic'
+            ? baseAcademicOrganizations.flatMap((officer) => [officer.name, officer.position, officer.branch, officer.category].filter(Boolean) as string[])
+            : mode === 'nonAcademic'
+                ? baseNonAcademicOrganizations.flatMap((officer) => [officer.name, officer.position, officer.branch, officer.category].filter(Boolean) as string[])
+                : baseCouncilLeaders.flatMap((officer) => [officer.name, officer.position, officer.branch, officer.category].filter(Boolean) as string[]);
+
+    const suggestionChips = buildSuggestionChips(suggestionSourceValues, modeFallbackSuggestionChips[mode]);
+
+    const officerBadge = mode === 'academic'
         ? 'Academic Organization'
-        : filterMode === 'nonAcademic'
+        : mode === 'nonAcademic'
             ? 'Non-Academic Organization'
-            : filterMode === 'ssc'
+            : mode === 'ssc'
                 ? 'Supreme Student Council'
-                : filterMode === 'csc'
+                : mode === 'csc'
                     ? 'Central Student Council'
                     : 'College / Institute Student Council';
 
@@ -343,7 +540,7 @@ export default function DirectoryPage() {
                             </motion.div>
                         </AnimatePresence>
                     </div>
-                    <h1 className="font-bold text-white mb-3">
+                    <h1 className="page-header-title font-bold text-white mb-3">
                         University <span className="text-gradient-gold">Directory</span>
                     </h1>
                     <p className="page-header-subtitle max-w-lg mx-auto">
@@ -357,15 +554,12 @@ export default function DirectoryPage() {
                 <LayoutGroup id="directory-mode-tabs">
                     <div className="flex gap-3 md:gap-4 justify-center flex-wrap">
                         {modeButtons.map((modeButton) => {
-                            const isActive = activeMode === modeButton.key;
+                            const isActive = mode === modeButton.key;
                             return (
                                 <button
                                     key={modeButton.key}
                                     onClick={() => {
-                                        setActiveMode(modeButton.key);
-                                        startTransition(() => {
-                                            setFilterMode(modeButton.key);
-                                        });
+                                        setMode(modeButton.key);
                                     }}
                                     className="relative px-5 py-2.5 rounded-full text-sm font-semibold cursor-pointer border-2 transition-colors"
                                     aria-pressed={isActive}
@@ -403,22 +597,31 @@ export default function DirectoryPage() {
                         <Search size={20} className="text-subtle" />
                         <input
                             type="text"
-                            placeholder={filterMode === 'offices'
-                                ? 'Search offices by name, location, head/director, or email...'
-                                : isCouncilMode(filterMode)
-                                    ? 'Search council leaders by name, position, or branch...'
-                                : 'Search organizations by name, position, or branch...'}
+                            placeholder={modeSearchPlaceholders[mode]}
                             className="flex-1 min-w-0 outline-none text-base bg-transparent text-strong placeholder:text-subtle"
                             value={search}
                             onChange={(e) => {
                                 setSearch(e.target.value);
                             }}
                         />
-                        {isPending && <Loader2 size={16} className="animate-spin text-amber-500" />}
                     </div>
 
-                    {/* View Controls */}
-                    <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg self-end sm:self-auto">
+                    <div className="flex items-center gap-3 self-end sm:self-auto">
+                        <label className="text-xs text-subtle font-semibold uppercase tracking-[0.06em]">
+                            Sort
+                        </label>
+                        <select
+                            value={sortMode}
+                            onChange={(e) => setSortMode(e.target.value === 'nameAsc' ? 'nameAsc' : 'relevance')}
+                            className="h-9 rounded-lg border border-soft px-3 text-sm text-body bg-white outline-none"
+                            aria-label="Sort directory results"
+                        >
+                            <option value="relevance">Relevance</option>
+                            <option value="nameAsc">Name A-Z</option>
+                        </select>
+
+                        {/* View Controls */}
+                        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
                         <button
                             onClick={() => handleViewChange('grid')}
                             className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-amber-500' : 'text-gray-400 hover:text-gray-600'}`}
@@ -437,7 +640,28 @@ export default function DirectoryPage() {
                         >
                             <ListIcon size={18} />
                         </button>
+                        </div>
                     </div>
+                </div>
+            </section>
+
+            <section className="container-main mt-4 mb-2">
+                <div className="rounded-xl border border-soft bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <span className="pill-label bg-blue-50 text-blue-700 border border-blue-100">{modeDisplayName[mode]}</span>
+                        <span className="text-sm text-body font-semibold">{sectionDataCount} {sectionDataCount === 1 ? 'result' : 'results'}</span>
+                        {showRestoredHint && (
+                            <span className="micro-note text-blue-700 bg-blue-50 border border-blue-100 rounded-full px-2 py-0.5">
+                                Preferences restored
+                            </span>
+                        )}
+                    </div>
+                    <button
+                        onClick={clearFilters}
+                        className="text-sm font-medium text-subtle hover:text-body transition-colors"
+                    >
+                        Clear search and sort
+                    </button>
                 </div>
             </section>
 
@@ -463,22 +687,38 @@ export default function DirectoryPage() {
                         Showing {sectionDataCount} entries in {viewMode} view.
                     </p>
                     {!isLoading && !error && sectionDataCount === 0 && (
-                        <p className="text-center text-subtle">
-                            {search
-                                ? `No ${filterMode === 'offices' ? 'offices' : 'entries'} found matching your search.`
-                                : `No ${filterMode === 'offices' ? 'offices' : 'entries'} in the directory yet.`}
-                        </p>
+                        <div className="card p-6 text-center">
+                            <p className="text-body font-medium">
+                                {search
+                                    ? modeEmptyStateMessage[mode]
+                                    : `No ${mode === 'offices' ? 'offices' : 'entries'} in this section yet.`}
+                            </p>
+                            <p className="text-sm text-subtle mt-2">
+                                Try one of these suggested searches:
+                            </p>
+                            <div className="mt-3 flex flex-wrap justify-center gap-2">
+                                {suggestionChips.map((chip) => (
+                                    <button
+                                        key={chip}
+                                        onClick={() => handleSuggestionChipClick(chip)}
+                                        className="pill-label pill-label-tight bg-surface-base text-body border border-soft hover:bg-blue-50 hover:text-blue-700 hover:border-blue-100 transition-colors"
+                                    >
+                                        {chip}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     )}
                     <AnimatePresence mode="wait" initial={false}>
                         <motion.div
-                            key={`${filterMode}-results`}
+                            key={`${mode}-results`}
                             className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-4"}
                             initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
                             animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
                             exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
                             transition={{ duration: 0.2 }}
                         >
-                            {filterMode !== 'offices' && displayedOfficers.map((officer, idx) => (
+                            {mode !== 'offices' && sortedDisplayedOfficers.map((officer, idx) => (
                                 <div
                                     key={officer.id || idx}
                                     className={`card p-6 flex ${viewMode === 'list' ? 'flex-row items-start sm:items-center gap-4 sm:gap-6' : 'flex-col'} content-visibility-auto`}
@@ -491,18 +731,18 @@ export default function DirectoryPage() {
                                     {officer.name.charAt(0)}
                                 </div>
 
-                                <div className={viewMode === 'list' ? 'flex-1 min-w-0' : 'min-w-0'}>
+                                <div className={`${viewMode === 'list' ? 'flex-1 min-w-0' : 'min-w-0'} space-y-1.5`}>
                                     {/* Category Badge */}
-                                    <span className="inline-flex max-w-full px-2 py-0.5 mb-2 text-[10px] font-bold uppercase tracking-wider rounded-full bg-blue-50 text-blue-700 border border-blue-100 break-words">
+                                    <span className={`${directoryBadgeBaseClass} bg-blue-50 text-blue-700 border-blue-100`}>
                                         {officer.category || officerBadge}
                                     </span>
                                     {/* Organization Name */}
-                                    <h3 className="font-semibold mb-1 text-strong break-words leading-snug">
+                                    <h3 className="font-semibold text-strong break-words leading-snug">
                                         {officer.name}
                                     </h3>
                                     {/* Email */}
                                     {officer.email && (
-                                        <p className="text-sm mb-2 text-subtle break-words">
+                                        <p className="text-sm text-subtle break-words">
                                             {officer.email}
                                         </p>
                                     )}
@@ -554,7 +794,7 @@ export default function DirectoryPage() {
                                 </div>
                             ))}
 
-                            {filterMode === 'offices' && filteredOffices.map((office, idx) => (
+                            {mode === 'offices' && sortedFilteredOffices.map((office, idx) => (
                                 <div
                                     key={office.id || idx}
                                     className={`card p-6 flex ${viewMode === 'list' ? 'flex-row items-start sm:items-center gap-4 sm:gap-6' : 'flex-col'} content-visibility-auto`}
@@ -566,22 +806,22 @@ export default function DirectoryPage() {
                                     <Building2 size={22} />
                                 </div>
 
-                                <div className={viewMode === 'list' ? 'flex-1 min-w-0' : 'min-w-0'}>
-                                    <span className="inline-flex max-w-full px-2 py-0.5 mb-2 text-[10px] font-bold uppercase tracking-wider rounded-full bg-amber-50 text-amber-700 border border-amber-100 break-words">
+                                <div className={`${viewMode === 'list' ? 'flex-1 min-w-0' : 'min-w-0'} space-y-1.5`}>
+                                    <span className={`${directoryBadgeBaseClass} bg-amber-50 text-amber-700 border-amber-100`}>
                                         University Office
                                     </span>
-                                    <h3 className="font-semibold mb-1 text-strong break-words leading-snug">
+                                    <h3 className="font-semibold text-strong break-words leading-snug">
                                         {office.officeName}
                                     </h3>
 
                                     {office.headDirector && (
-                                        <p className="text-sm mb-1 break-words" style={{ color: 'var(--accent-primary)' }}>
+                                        <p className="text-sm break-words" style={{ color: 'var(--accent-primary)' }}>
                                             Head/Director: {office.headDirector}
                                         </p>
                                     )}
 
                                     {office.branch && (
-                                        <p className="text-xs mb-2 text-subtle break-words">
+                                        <p className="text-xs text-subtle break-words">
                                             {office.branch}
                                         </p>
                                     )}

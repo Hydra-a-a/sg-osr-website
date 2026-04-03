@@ -13,7 +13,7 @@ export default function Footer() {
         { href: '/directory', label: 'Officer Directory' },
         { href: '/services', label: 'Services & Forms' },
         { href: '/news', label: 'News & Updates' },
-        ...(!isLoggedIn ? [{ href: '/login', label: 'Portal Login' }] : []),
+        ...(!isLoggedIn ? [{ href: '/login', label: 'Portal Sign In' }] : []),
     ];
 
     return (
@@ -39,7 +39,7 @@ export default function Footer() {
 
                     {/* Quick Links */}
                     <div>
-                        <h4 className="font-semibold text-sm uppercase tracking-wider mb-4 text-accent">
+                        <h4 className="eyebrow-label mb-4 text-accent">
                             Quick Links
                         </h4>
                         <div className="flex flex-col gap-2">
@@ -57,7 +57,7 @@ export default function Footer() {
 
                     {/* Contact */}
                     <div>
-                        <h4 className="font-semibold text-sm uppercase tracking-wider mb-4 text-accent">
+                        <h4 className="eyebrow-label mb-4 text-accent">
                             Contact
                         </h4>
                         <p className="text-white/60 text-sm leading-relaxed">

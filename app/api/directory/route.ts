@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSheetData, getSheetDataWithHyperlinks, getSpreadsheetSheetTitles } from '@/lib/sheets';
 import { parseSheetData } from '@/lib/sheets-parser';
 import { OfficerSchema, OfficeSchema } from '@/schemas/directory';
-import { rateLimit } from '@/lib/rate-limit';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
 
@@ -388,6 +388,20 @@ function parseWorkbookOffices(rows: string[][]) {
     }> = [];
 
     let currentBranch = 'University Office';
+    let officeNameIndex = 0;
+    let acronymIndex = 1;
+    let emailIndex = 2;
+    let officialIndex = 3;
+    let titleIndex = 4;
+    let locationIndex = 5;
+    let branchIndex = -1;
+
+    const valueAt = (cells: string[], index: number): string => {
+        if (index < 0) {
+            return '';
+        }
+        return cells[index] || '';
+    };
 
     for (const row of rows) {
         if (!row || isRowEmpty(row)) {
@@ -399,22 +413,45 @@ function parseWorkbookOffices(rows: string[][]) {
             continue;
         }
 
+        const lowerCells = cells.map((cell) => cell.toLowerCase());
+        const detectedOfficeNameIndex = lowerCells.findIndex((cell) =>
+            cell.includes('office name') || cell.includes('organization name') || cell === 'name'
+        );
+        const detectedAcronymIndex = lowerCells.findIndex((cell) => cell.includes('acronym') || cell.includes('initials'));
+        const detectedEmailIndex = lowerCells.findIndex((cell) => cell.includes('contact email') || cell === 'email' || cell === 'emails');
+        const detectedBranchIndex = lowerCells.findIndex((cell) => cell.includes('category') || cell.includes('branch'));
+        const detectedOfficialIndex = lowerCells.findIndex((cell) => cell.includes('official') || cell.includes('head') || cell.includes('director'));
+        const detectedTitleIndex = lowerCells.findIndex((cell) => cell.includes('title') || cell.includes('position'));
+        const detectedLocationIndex = lowerCells.findIndex((cell) => cell.includes('location'));
+
+        if (detectedOfficeNameIndex >= 0 && (detectedEmailIndex >= 0 || detectedBranchIndex >= 0)) {
+            officeNameIndex = detectedOfficeNameIndex;
+            acronymIndex = detectedAcronymIndex >= 0 ? detectedAcronymIndex : -1;
+            emailIndex = detectedEmailIndex >= 0 ? detectedEmailIndex : -1;
+            branchIndex = detectedBranchIndex >= 0 ? detectedBranchIndex : -1;
+            officialIndex = detectedOfficialIndex >= 0 ? detectedOfficialIndex : -1;
+            titleIndex = detectedTitleIndex >= 0 ? detectedTitleIndex : -1;
+            locationIndex = detectedLocationIndex >= 0 ? detectedLocationIndex : -1;
+            continue;
+        }
+
         const hasLeadingGap = !cells[0] && !!cells[1];
         const base = hasLeadingGap ? 1 : 0;
 
-        const officeName = normalizeSafeText(cells[base] || '');
-        const acronym = normalizeSafeText(cells[base + 1] || '');
-        const email = cleanEmail(cells[base + 2] || '');
-        const official = normalizeSafeText(cells[base + 3] || '');
-        const title = normalizeSafeText(cells[base + 4] || '');
-        const location = normalizeSafeText(cells[base + 5] || '');
+        const officeName = normalizeSafeText(valueAt(cells, officeNameIndex >= 0 ? officeNameIndex : base));
+        const acronym = normalizeSafeText(valueAt(cells, acronymIndex >= 0 ? acronymIndex : base + 1));
+        const email = cleanEmail(valueAt(cells, emailIndex >= 0 ? emailIndex : base + 2));
+        const official = normalizeSafeText(valueAt(cells, officialIndex >= 0 ? officialIndex : base + 3));
+        const title = normalizeSafeText(valueAt(cells, titleIndex >= 0 ? titleIndex : base + 4));
+        const location = normalizeSafeText(valueAt(cells, locationIndex >= 0 ? locationIndex : base + 5));
+        const explicitBranch = normalizeSafeText(valueAt(cells, branchIndex));
 
         if (!officeName) {
             continue;
         }
 
         // Category rows have only a section label and no office details.
-        if (!acronym && !email && !official && !title && !location) {
+        if (!acronym && !email && !official && !title && !location && !explicitBranch) {
             currentBranch = officeName;
             continue;
         }
@@ -424,7 +461,7 @@ function parseWorkbookOffices(rows: string[][]) {
             location,
             headDirector: [official, title].filter(Boolean).join(' - '),
             email,
-            branch: currentBranch,
+            branch: explicitBranch || currentBranch,
             priority: undefined,
         };
 
@@ -439,10 +476,14 @@ function parseWorkbookOffices(rows: string[][]) {
 
 export async function GET(request: Request) {
     const ip = getClientIp(request);
-    const limit = rateLimit(`dir_api_${ip}`, 30, 60000); // 30 requests per minute per IP
+    const limit = await checkRateLimit(`dir_api_${ip}`, 30, 60000); // 30 requests per minute per IP
 
     if (!limit.success) {
-        return toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests'));
+        const response = toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests'));
+        if (limit.retryAfter) {
+            response.headers.set('Retry-After', String(limit.retryAfter));
+        }
+        return response;
     }
 
     try {
@@ -455,12 +496,15 @@ export async function GET(request: Request) {
             { ranges: ['INSTITUTES!A1:D', 'Institutes!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Institutes', fallbackBranch: 'College / Institute Organization' },
             { ranges: ['Central Student Councils!A1:D', 'CENTRAL STUDENT COUNCILS!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Central Student Councils', fallbackBranch: 'Central Student Council' },
             { ranges: ['Supreme Student Council!A1:D', 'SUPREME STUDENT COUNCIL!A1:D'], nameIndex: 0, acronymIndex: -1, emailIndex: 1, facebookIndex: 3, categoryIndex: 2, sourceLabel: 'Supreme Student Council', fallbackBranch: 'Supreme Student Council' },
-            { ranges: ['BONI!A1:D', 'Boni!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Boni', fallbackBranch: 'Academic Organization' },
-            { ranges: ['PASIG!A1:D', 'Pasig!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Pasig', fallbackBranch: 'Academic Organization' },
             { ranges: ['Non-Academic Organization!A1:D', 'NON-ACADEMIC ORGANIZATION!A1:D', 'Non-Academic Organizations!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Non-Academic Organization', fallbackBranch: 'Non-Academic Organization' },
         ] as const;
 
-        const WORKBOOK_OFFICES_RANGE_CANDIDATES = ['OFFICES!A1:G', 'Offices!A1:G'];
+        const WORKBOOK_OFFICES_RANGE_CANDIDATES = [
+            'UNIVERSITY OFFICES!A1:G',
+            'University Offices!A1:G',
+            'OFFICES!A1:G',
+            'Offices!A1:G',
+        ];
 
         if (!SPREADSHEET_ID) {
             return toApiResponse(new ApiError(500, 'SERVICE_MISCONFIGURED', 'Internal server error', undefined, false));
@@ -472,7 +516,7 @@ export async function GET(request: Request) {
             try {
                 return await getSheetData(SPREADSHEET_ID, range);
             } catch (rangeError) {
-                console.warn(`[Directory] Sheet range unavailable: ${range}`, rangeError);
+                console.warn(`[Directory] Sheet range unavailable: ${range}`, redactErrorForLog(rangeError));
                 return [] as string[][];
             }
         };
@@ -492,7 +536,7 @@ export async function GET(request: Request) {
             try {
                 return await getSheetDataWithHyperlinks(SPREADSHEET_ID, range);
             } catch (rangeError) {
-                console.warn(`[Directory] Hyperlink sheet range unavailable: ${range}`, rangeError);
+                console.warn(`[Directory] Hyperlink sheet range unavailable: ${range}`, redactErrorForLog(rangeError));
                 return [] as string[][];
             }
         };
@@ -506,6 +550,19 @@ export async function GET(request: Request) {
             }
 
             return [] as string[][];
+        };
+
+        const fetchAllAvailableRangesSafe = async (ranges: readonly string[]) => {
+            const mergedRows: string[][] = [];
+
+            for (const range of buildResolvedRanges(ranges, spreadsheetTitles)) {
+                const rows = await fetchRangeSafe(range);
+                if (rows.length > 0) {
+                    mergedRows.push(...rows);
+                }
+            }
+
+            return mergedRows;
         };
 
         const [
@@ -567,11 +624,11 @@ export async function GET(request: Request) {
         try {
             [legacyOfficeRows, workbookOfficeRows] = await Promise.all([
                 fetchFirstAvailableRangeSafe(LEGACY_OFFICES_RANGE_CANDIDATES),
-                fetchFirstAvailableRangeSafe(WORKBOOK_OFFICES_RANGE_CANDIDATES),
+                fetchAllAvailableRangesSafe(WORKBOOK_OFFICES_RANGE_CANDIDATES),
             ]);
         } catch (officeFetchError) {
             officeSheetUnavailable = true;
-            console.warn('[Directory:Offices] Office sheet unavailable or unreadable. Returning officers only.', officeFetchError);
+            console.warn('[Directory:Offices] Office sheet unavailable or unreadable. Returning officers only.', redactErrorForLog(officeFetchError));
         }
 
         const { validData: legacyOffices, invalidCount: invalidLegacyOfficeCount } = parseSheetData({

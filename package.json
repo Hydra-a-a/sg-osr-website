@@ -11,7 +11,8 @@
     "test:api-error-envelope": "node tests/test-api-error-envelope.js",
     "test:csp-policy": "node tests/test-csp-policy.js",
     "test:redacted-logging": "node tests/test-redacted-logging.js",
-    "test:security": "npm run test:forms-auth-guard && npm run test:api-error-envelope && npm run test:csp-policy && npm run test:redacted-logging"
+    "test:ticket-security-hardening": "node tests/test-ticket-security-hardening.js",
+    "test:security": "npm run test:forms-auth-guard && npm run test:api-error-envelope && npm run test:csp-policy && npm run test:redacted-logging && npm run test:ticket-security-hardening"
   },
   "overrides": {
     "jsdom": {
@@ -20,12 +21,14 @@
   },
   "dependencies": {
     "@sentry/nextjs": "^10.45.0",
+    "@types/nodemailer": "^7.0.11",
     "framer-motion": "^12.35.0",
     "googleapis": "^171.4.0",
     "isomorphic-dompurify": "^3.3.0",
     "lucide-react": "^0.577.0",
     "next": "^16.2.2",
     "next-auth": "^5.0.0-beta.30",
+    "nodemailer": "^8.0.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "swr": "^2.4.1",
