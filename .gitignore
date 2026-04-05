@@ -90,9 +90,21 @@ lib/auth.local-dev-*
 
 # Local helper/testing scripts
 /test-*.js
-verify_webhook.js
 testing-rtu-osr-website-*.json
 *.code-workspace
+
+# Local/internal artifacts
+.audit/
+
+# Sensitive credential files
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*service-account*.json
+*credentials*.json
+token.json
 
 # vercel
 .vercel

@@ -1,71 +1,68 @@
 # Student Maintainer Security Checklist
 
-This checklist is designed for regular student leaders to safely operate the website without removing Make.com or Google API integrations.
+This is the "please don't break prod" checklist for whoever is on duty this term.
 
-## Every Term Start (Required)
+## At term start
 
-1. Rotate these secrets in deployment environment:
-- MAKE_WEBHOOK_SECRET (or IFTTT_WEBHOOK_SECRET)
+1. Rotate these immediately:
+- MAKE_WEBHOOK_SECRET
 - AUTH_SECRET
 - AUTH_GOOGLE_SECRET
 
-2. Verify OAuth configuration:
-- Confirm redirect URI matches production domain exactly.
-- Confirm allowed scopes are only those needed.
+2. Re-check Google OAuth setup:
+- Redirect URI must match prod domain exactly.
+- Scopes should be minimal, no random extras.
 
-3. Verify Google Sheets IDs:
+3. Confirm sheet IDs are correct:
 - GOOGLE_SHEETS_INFO_ID
 - GOOGLE_SHEETS_AUTH_ID
 
-4. Run local quality checks:
+4. Confirm Redis is actually configured in prod:
+- UPSTASH_REDIS_REST_URL
+- UPSTASH_REDIS_REST_TOKEN
+
+5. Run local checks:
 - npm run lint
-- test form auth guard script if available
+- npm run test:security
 
-5. Verify Redis protection is active in production:
-- UPSTASH_REDIS_REST_URL is set
-- UPSTASH_REDIS_REST_TOKEN is set
-- Deploy logs do not show missing Redis configuration warnings
+## Before every release
 
-## Every Release (Required)
+1. Webhook checks still on:
+- signature validation
+- timestamp validation
+- replay blocking
 
-1. Validate webhook protections:
-- Signature required
-- Timestamp required
-- Replay attacks blocked
+2. Access checks still on:
+- unauthenticated users blocked on protected routes
+- leader-only routes still leader-only
 
-2. Validate role protections:
-- Non-logged in users cannot submit forms/classroom actions
-- Non-leaders cannot access leader-only classroom endpoints
+3. Error responses still safe:
+- no secrets
+- no stack traces in API responses
 
-3. Validate error safety:
-- API errors should not expose secrets or stack traces
+4. Submission protections still active:
+- duplicate blocking
+- https-only links where required
+- distributed limiter/dedupe (not just in-memory fallback)
 
-4. Validate submission integrity:
-- Duplicate submissions are blocked in short window
-- HTTPS links only for classroom submissions
-- Distributed rate limit/dedupe is active (not local-memory fallback in production)
+## If something weird is happening
 
-## Incident Quick Actions
-
-If suspicious activity is detected:
-
-1. Rotate MAKE_WEBHOOK_SECRET immediately.
-2. Rotate AUTH_SECRET and OAuth secret.
-3. Temporarily lower rate-limit thresholds if abuse spike is ongoing.
-4. Check structured audit logs for:
+1. Rotate MAKE_WEBHOOK_SECRET.
+2. Rotate AUTH_SECRET + AUTH_GOOGLE_SECRET.
+3. Temporarily tighten rate limits.
+4. Check audit events for:
 - WEBHOOK_FAILED_AUTH
 - CLASSROOM_SUBMISSION_REJECTED
 - CLASSROOM_DUPLICATE_BLOCKED
-5. Notify next term maintainer and document incident summary.
+5. Write a short incident note so next maintainer is not blind.
 
-## What Not To Change Without Review
+## Do not change these casually
 
-- Do not remove HMAC verification from webhook route.
-- Do not loosen classroom role checks.
-- Do not add wildcard external hosts for outbound calls.
-- Do not expose secrets with NEXT_PUBLIC_ variables.
+- Do not remove webhook HMAC validation.
+- Do not relax role checks.
+- Do not allow wildcard outbound hosts.
+- Do not expose secrets using NEXT_PUBLIC_.
 
-## Maintenance Principle
+## One-line rule
 
-Keep integrations, add guardrails around them.  
-When unsure: choose safer defaults and ask for review before relaxing controls.
+Keep integrations working, keep guardrails strict, and if unsure pick the safer option.

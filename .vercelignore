@@ -60,5 +60,4 @@ FEATURES.txt
 
 # Local integration/test scripts and creds
 test-*.js
-verify_webhook.js
 testing-rtu-osr-website-*.json
