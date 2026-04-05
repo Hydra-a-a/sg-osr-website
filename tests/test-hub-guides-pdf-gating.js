@@ -12,7 +12,8 @@ function assert(condition, message) {
 }
 
 const apiSource = read(path.join('app', 'api', 'hub', 'guides', 'route.ts'));
-assert(apiSource.includes("const RANGE = 'Transparency Hub!A2:F'"), 'Hub guides API should read from Transparency Hub sheet range.');
+assert(apiSource.includes("'Student Hub Control!A2:F'"), 'Hub guides API should support Student Hub Control sheet range.');
+assert(apiSource.includes("'Transparency Hub!A2:F'"), 'Hub guides API should support Transparency Hub sheet range.');
 assert(apiSource.includes('getSheetDataWithHyperlinks'), 'Hub guides API should read hyperlink-aware sheet data.');
 assert(apiSource.includes('extractGoogleDriveFileId'), 'Hub guides API should parse Google Drive file IDs.');
 assert(apiSource.includes("metadata.mimeType !== 'application/pdf'"), 'Hub guides API should strictly reject non-PDF Drive files.');

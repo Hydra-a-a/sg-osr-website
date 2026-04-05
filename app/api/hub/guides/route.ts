@@ -7,7 +7,11 @@ import { extractGoogleDriveFileId, getDriveFileMetadataById } from '@/lib/google
 import { TransparencyGuideSchema, type TransparencyGuide } from '@/schemas/transparency-hub';
 
 const DEFAULT_INFO_SPREADSHEET_ID = '1LSkRWGzqWAuTodMDIVlzYTMWr8AhFMywcUd3PoziXaw';
-const RANGE = 'Transparency Hub!A2:F';
+const CANDIDATE_RANGES = [
+    process.env.STUDENT_HUB_GUIDES_RANGE?.trim(),
+    'Student Hub Control!A2:F',
+    'Transparency Hub!A2:F',
+].filter((value): value is string => Boolean(value));
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -126,6 +130,21 @@ async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | n
     }
 }
 
+async function loadHubGuideRows(spreadsheetId: string): Promise<any[][]> {
+    for (const range of CANDIDATE_RANGES) {
+        try {
+            const rows = await getSheetDataWithHyperlinks(spreadsheetId, range);
+            if (rows.length > 0) {
+                return rows;
+            }
+        } catch {
+            // Keep falling back across candidate ranges.
+        }
+    }
+
+    return [];
+}
+
 export async function GET(request: Request) {
     const ip = getClientIp(request);
     const limit = await checkRateLimit(`hub_guides_${ip}`, 40, 60_000);
@@ -136,7 +155,7 @@ export async function GET(request: Request) {
 
     try {
         const spreadsheetId = process.env.GOOGLE_SHEETS_INFO_ID || DEFAULT_INFO_SPREADSHEET_ID;
-        const rawRows = await getSheetDataWithHyperlinks(spreadsheetId, RANGE);
+        const rawRows = await loadHubGuideRows(spreadsheetId);
 
         const guides = await Promise.all(rawRows.map(async (rawRow, index) => {
             const cells = rawRow.map((cell) => sanitizeText(String(cell || '')));
