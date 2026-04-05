@@ -97,7 +97,7 @@ export function extractGoogleDriveFileId(url: string): string | null {
     }
 }
 
-export async function getDriveFileMetadataById(fileId: string): Promise<{
+export async function getDriveFileMetadataById(fileId: string, resourceKey?: string): Promise<{
     id?: string | null;
     name?: string | null;
     mimeType?: string | null;
@@ -116,7 +116,8 @@ export async function getDriveFileMetadataById(fileId: string): Promise<{
             fileId: normalizedFileId,
             fields: 'id,name,mimeType,webViewLink,webContentLink',
             supportsAllDrives: true,
-        });
+            resourceKey,
+        } as any);
 
         return response.data || null;
     } catch (error) {

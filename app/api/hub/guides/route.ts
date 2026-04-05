@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSheetDataWithHyperlinks } from '@/lib/sheets';
+import { getSheetDataWithHyperlinks, getSpreadsheetSheetTitles } from '@/lib/sheets';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp, redactErrorForLog, sanitizeText } from '@/lib/security';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
@@ -7,11 +7,17 @@ import { extractGoogleDriveFileId, getDriveFileMetadataById } from '@/lib/google
 import { TransparencyGuideSchema, type TransparencyGuide } from '@/schemas/transparency-hub';
 
 const DEFAULT_INFO_SPREADSHEET_ID = '1LSkRWGzqWAuTodMDIVlzYTMWr8AhFMywcUd3PoziXaw';
-const CANDIDATE_RANGES = [
+const BASE_CANDIDATE_RANGES = [
     process.env.STUDENT_HUB_GUIDES_RANGE?.trim(),
     'Student Hub Control!A2:F',
     'Transparency Hub!A2:F',
 ].filter((value): value is string => Boolean(value));
+const CANDIDATE_SPREADSHEET_IDS = Array.from(new Set([
+    process.env.STUDENT_HUB_GUIDES_SPREADSHEET_ID?.trim(),
+    process.env.GOOGLE_SHEETS_INFO_ID?.trim(),
+    process.env.GOOGLE_SHEETS_DIRECTORY_ID?.trim(),
+    DEFAULT_INFO_SPREADSHEET_ID,
+].filter((value): value is string => Boolean(value))));
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -66,6 +72,12 @@ function createGuideId(title: string, url: string, index: number): string {
     return `${base || 'guide'}-${index + 1}`;
 }
 
+function rangeFromSheetTitle(title: string): string {
+    // Quote sheet names so spaces and punctuation remain valid in A1 notation.
+    const escaped = title.replace(/'/g, "''");
+    return `'${escaped}'!A2:F`;
+}
+
 function findFirstUrl(cells: string[]): string {
     for (const cell of cells) {
         if (/^https:\/\//i.test(cell.trim())) {
@@ -90,13 +102,14 @@ async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | n
 
         const driveFileId = extractGoogleDriveFileId(parsed.toString());
         if (driveFileId) {
-            const metadata = await getDriveFileMetadataById(driveFileId);
+            const candidateResourceKey = extractDriveResourceKey(parsed.toString());
+            const metadata = await getDriveFileMetadataById(driveFileId, candidateResourceKey || undefined);
             if (!metadata || metadata.mimeType !== 'application/pdf') {
                 return null;
             }
 
             const viewUrl = metadata.webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
-            const resourceKey = extractDriveResourceKey(metadata.webViewLink);
+            const resourceKey = extractDriveResourceKey(metadata.webViewLink) || candidateResourceKey;
             const embedUrl = resourceKey
                 ? `/api/hub/guides/preview/${encodeURIComponent(driveFileId)}?resourcekey=${encodeURIComponent(resourceKey)}`
                 : `/api/hub/guides/preview/${encodeURIComponent(driveFileId)}`;
@@ -130,16 +143,35 @@ async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | n
     }
 }
 
-async function loadHubGuideRows(spreadsheetId: string): Promise<any[][]> {
-    for (const range of CANDIDATE_RANGES) {
-        try {
-            const rows = await getSheetDataWithHyperlinks(spreadsheetId, range);
-            if (rows.length > 0) {
-                return rows;
+async function getCandidateRangesForSpreadsheet(spreadsheetId: string): Promise<string[]> {
+    const titles = await getSpreadsheetSheetTitles(spreadsheetId);
+    const discoveredRanges = titles
+        .filter((title) => /student\s*hub|transparency\s*hub|handbooks?|guides?/i.test(title))
+        .map((title) => rangeFromSheetTitle(title));
+
+    return Array.from(new Set([...BASE_CANDIDATE_RANGES, ...discoveredRanges]));
+}
+
+async function loadHubGuideRows(): Promise<any[][]> {
+    let hadReadError = false;
+
+    for (const spreadsheetId of CANDIDATE_SPREADSHEET_IDS) {
+        const ranges = await getCandidateRangesForSpreadsheet(spreadsheetId);
+        for (const range of ranges) {
+            try {
+                const rows = await getSheetDataWithHyperlinks(spreadsheetId, range);
+                if (rows.length > 0) {
+                    return rows;
+                }
+            } catch (error) {
+                hadReadError = true;
+                console.warn(`[Hub Guides API] Failed to read ${range} from spreadsheet ${spreadsheetId}:`, redactErrorForLog(error));
             }
-        } catch {
-            // Keep falling back across candidate ranges.
         }
+    }
+
+    if (hadReadError) {
+        throw new ApiError(502, 'HUB_GUIDES_SOURCE_UNAVAILABLE', 'Unable to read Student Hub guides from Google Sheets right now.');
     }
 
     return [];
@@ -154,8 +186,7 @@ export async function GET(request: Request) {
     }
 
     try {
-        const spreadsheetId = process.env.GOOGLE_SHEETS_INFO_ID || DEFAULT_INFO_SPREADSHEET_ID;
-        const rawRows = await loadHubGuideRows(spreadsheetId);
+        const rawRows = await loadHubGuideRows();
 
         const guides = await Promise.all(rawRows.map(async (rawRow, index) => {
             const cells = rawRow.map((cell) => sanitizeText(String(cell || '')));
@@ -210,7 +241,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json({ data });
     } catch (error) {
-        console.error('[Hub Guides API] Failed to fetch Transparency Hub guides:', redactErrorForLog(error));
+        console.error('[Hub Guides API] Failed to fetch Student Hub guides:', redactErrorForLog(error));
         return toApiResponse(error);
     }
 }

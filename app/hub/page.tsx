@@ -345,7 +345,7 @@ export default function HubPage() {
                         </div>
                     ) : guides.length === 0 ? (
                         <div className="card p-8 text-center text-subtle">
-                            No PDF guides are published yet. Add or unhide rows in the Transparency Hub sheet to make guides appear here.
+                            No PDF guides are published yet. Add or unhide rows in Student Hub Control (or Transparency Hub) to make guides appear here.
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
