@@ -4,14 +4,20 @@ import { useEffect, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { AlertCircle, ChevronLeft, ChevronRight, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
+if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerPort) {
+    pdfjs.GlobalWorkerOptions.workerPort = new Worker(
+        new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url),
+        { type: 'module' }
+    );
+}
 
 type PdfGuideViewerProps = {
     fileUrl: string;
     title: string;
+    onRenderError?: (message: string) => void;
 };
 
-export default function PdfGuideViewer({ fileUrl, title }: PdfGuideViewerProps) {
+export default function PdfGuideViewer({ fileUrl, title, onRenderError }: PdfGuideViewerProps) {
     const [numPages, setNumPages] = useState(0);
     const [pageNumber, setPageNumber] = useState(1);
     const [zoomLevel, setZoomLevel] = useState(1);
@@ -58,8 +64,10 @@ export default function PdfGuideViewer({ fileUrl, title }: PdfGuideViewerProps) 
                     return;
                 }
 
+                const message = 'Unable to render this PDF in custom mode. Use Open or Download instead.';
                 setPdfBytes(null);
-                setLoadError('Unable to render this PDF in custom mode. Use Open or Download instead.');
+                setLoadError(message);
+                onRenderError?.(message);
             } finally {
                 if (!isDisposed) {
                     setIsLoadingPdf(false);
@@ -73,7 +81,7 @@ export default function PdfGuideViewer({ fileUrl, title }: PdfGuideViewerProps) 
             isDisposed = true;
             controller.abort();
         };
-    }, [fileUrl]);
+    }, [fileUrl, onRenderError]);
 
     useEffect(() => {
         const element = viewerRef.current;
@@ -177,7 +185,9 @@ export default function PdfGuideViewer({ fileUrl, title }: PdfGuideViewerProps) 
                             setPageNumber((current) => Math.min(current, totalPages || 1));
                         }}
                         onLoadError={() => {
-                            setLoadError('Unable to render this PDF in custom mode. Use Open or Download instead.');
+                            const message = 'Unable to render this PDF in custom mode. Use Open or Download instead.';
+                            setLoadError(message);
+                            onRenderError?.(message);
                         }}
                         error={
                             <div className="h-full min-h-[16rem] flex items-center justify-center p-6">

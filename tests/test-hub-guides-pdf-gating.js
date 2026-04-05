@@ -36,9 +36,12 @@ assert(hubPageSource.includes("useSWR('/api/hub/guides'"), 'Student Hub page sho
 assert(hubPageSource.includes('Student Handbooks &amp; Guides'), 'Student Hub page should render Student Handbooks & Guides section.');
 assert(hubPageSource.includes('PDF-only enforcement is active. Non-PDF links are ignored automatically.'), 'Student Hub page should communicate PDF-only enforcement.');
 assert(hubPageSource.includes('<PdfGuideViewer'), 'Student Hub page should render selected guide PDF preview using custom viewer component.');
+assert(hubPageSource.includes('useNativeGuideFallback'), 'Student Hub page should support fallback rendering when custom viewer fails.');
+assert(hubPageSource.includes('toolbar=0'), 'Fallback PDF iframe should request hidden native toolbar controls.');
 
 const viewerSource = read(path.join('components', 'PdfGuideViewer.tsx'));
 assert(viewerSource.includes('react-pdf'), 'Custom guide viewer should use react-pdf for in-app rendering.');
 assert(viewerSource.includes('renderAnnotationLayer={false}'), 'Custom guide viewer should hide default annotation controls for cleaner embed UI.');
+assert(viewerSource.includes('onRenderError?.('), 'Custom guide viewer should expose render errors to parent fallback logic.');
 
 console.log('test-hub-guides-pdf-gating: PASS');
