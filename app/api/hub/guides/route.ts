@@ -76,11 +76,28 @@ async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | n
                 return null;
             }
 
+            const viewUrl = metadata.webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
+            let embedUrl = `https://drive.google.com/file/d/${driveFileId}/preview`;
+
+            // Keep Drive query params (like resourcekey) when available so embeds work
+            // for files that require explicit resource-key access metadata.
+            if (metadata.webViewLink) {
+                try {
+                    const parsedViewUrl = new URL(metadata.webViewLink);
+                    parsedViewUrl.pathname = parsedViewUrl.pathname.replace(/\/view$/, '/preview');
+                    embedUrl = parsedViewUrl.toString();
+                } catch {
+                    // Fall back to ID-based preview URL above.
+                }
+            }
+
+            const downloadUrl = metadata.webContentLink || `https://drive.google.com/uc?export=download&id=${driveFileId}`;
+
             return {
                 source: 'drive',
-                embedUrl: `https://drive.google.com/file/d/${driveFileId}/preview`,
-                viewUrl: metadata.webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`,
-                downloadUrl: `https://drive.google.com/uc?export=download&id=${driveFileId}`,
+                embedUrl,
+                viewUrl,
+                downloadUrl,
                 fileName: sanitizeText(metadata.name || ''),
             };
         }
