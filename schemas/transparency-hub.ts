@@ -16,6 +16,7 @@ export const TransparencyGuideSchema = z.object({
     downloadUrl: z.string().url().max(2048).refine(isSafeNavigationHref, {
         message: 'Download URL must be a safe HTTPS URL',
     }),
+    canEmbed: z.boolean().default(false),
     mimeType: z.literal('application/pdf'),
     sortOrder: z.number().int().min(0),
     updatedAt: z.string(),

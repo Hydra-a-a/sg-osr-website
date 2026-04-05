@@ -45,6 +45,7 @@ type HubGuide = {
     embedUrl: string;
     viewUrl: string;
     downloadUrl: string;
+    canEmbed: boolean;
     mimeType: 'application/pdf';
     sortOrder: number;
     updatedAt: string;
@@ -352,13 +353,22 @@ export default function HubPage() {
                                     </div>
 
                                     <div className="rounded-xl overflow-hidden border border-soft bg-white">
-                                        <iframe
-                                            title={`${selectedGuide.title} PDF Preview`}
-                                            src={selectedGuide.embedUrl}
-                                            className="w-full h-[38rem] bg-white"
-                                            loading="lazy"
-                                            referrerPolicy="strict-origin-when-cross-origin"
-                                        />
+                                        {selectedGuide.canEmbed ? (
+                                            <iframe
+                                                title={`${selectedGuide.title} PDF Preview`}
+                                                src={selectedGuide.embedUrl}
+                                                className="w-full h-[38rem] bg-white"
+                                                loading="lazy"
+                                                referrerPolicy="strict-origin-when-cross-origin"
+                                            />
+                                        ) : (
+                                            <div className="h-[38rem] flex flex-col items-center justify-center text-center p-8 bg-surface-soft">
+                                                <p className="text-strong font-semibold mb-2">Preview unavailable for this file</p>
+                                                <p className="text-sm text-subtle max-w-md">
+                                                    This guide can still be opened or downloaded safely. Some external providers block embedded previews even for valid PDFs.
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <p className="micro-note text-subtle mt-3">

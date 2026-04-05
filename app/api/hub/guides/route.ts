@@ -16,6 +16,7 @@ type ResolvedPdfLink = {
     embedUrl: string;
     viewUrl: string;
     downloadUrl: string;
+    canEmbed: boolean;
     fileName?: string;
 };
 
@@ -98,6 +99,7 @@ async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | n
                 embedUrl,
                 viewUrl,
                 downloadUrl,
+                canEmbed: false,
                 fileName: sanitizeText(metadata.name || ''),
             };
         }
@@ -112,6 +114,7 @@ async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | n
             embedUrl: safeUrl,
             viewUrl: safeUrl,
             downloadUrl: safeUrl,
+            canEmbed: true,
         };
     } catch {
         return null;
@@ -162,6 +165,7 @@ export async function GET(request: Request) {
                 embedUrl: resolved.embedUrl,
                 viewUrl: resolved.viewUrl,
                 downloadUrl: resolved.downloadUrl,
+                canEmbed: resolved.canEmbed,
                 mimeType: 'application/pdf',
                 sortOrder: parseSortOrder(sortOrderCell, index),
                 updatedAt: new Date().toISOString(),
