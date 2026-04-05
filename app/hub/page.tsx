@@ -119,6 +119,7 @@ export default function HubPage() {
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [dragging, setDragging] = useState(false);
     const [selectedGuideId, setSelectedGuideId] = useState('');
+    const [loadedGuideFrameKey, setLoadedGuideFrameKey] = useState('');
     const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
     const { data: guidesResponse, error: guidesError, isLoading: guidesLoading } = useSWR('/api/hub/guides', hubFetcher, {
         revalidateOnFocus: false,
@@ -137,6 +138,8 @@ export default function HubPage() {
     const shouldAttemptGuideEmbed = selectedGuide
         ? (selectedGuide.source === 'drive' ? Boolean(selectedGuideEmbedUrl) : selectedGuide.canEmbed)
         : false;
+    const guideFrameKey = selectedGuide ? `${selectedGuide.id}:${selectedGuideEmbedUrl}` : '';
+    const guidePreviewLoading = Boolean(shouldAttemptGuideEmbed && guideFrameKey && loadedGuideFrameKey !== guideFrameKey);
 
     const goToGuides = () => {
         if (typeof window === 'undefined') {
@@ -375,56 +378,90 @@ export default function HubPage() {
                             </div>
 
                             {selectedGuide && (
-                                <div className="card p-4 sm:p-6">
-                                    <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                                        <div>
-                                            <h3 className="text-xl font-bold text-brand">{selectedGuide.title}</h3>
-                                            {selectedGuide.description && (
-                                                <p className="text-sm text-subtle mt-1">{selectedGuide.description}</p>
-                                            )}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <a
-                                                href={selectedGuide.viewUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="btn-secondary text-sm inline-flex items-center gap-1.5"
-                                            >
-                                                <ExternalLink size={14} /> Open
-                                            </a>
-                                            <a
-                                                href={selectedGuide.downloadUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="btn-primary text-sm inline-flex items-center gap-1.5"
-                                            >
-                                                <Download size={14} /> Download PDF
-                                            </a>
+                                <div className="card overflow-hidden p-0">
+                                    <div
+                                        className="px-4 py-4 sm:px-6 border-b border-soft"
+                                        style={{
+                                            background: 'linear-gradient(90deg, rgba(0,43,127,0.05), rgba(212,168,67,0.08))',
+                                        }}
+                                    >
+                                        <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div>
+                                                <h3 className="text-xl font-bold text-brand">{selectedGuide.title}</h3>
+                                                {selectedGuide.description && (
+                                                    <p className="text-sm text-subtle mt-1">{selectedGuide.description}</p>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <a
+                                                    href={selectedGuide.viewUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="btn-secondary text-sm inline-flex items-center gap-1.5"
+                                                >
+                                                    <ExternalLink size={14} /> Open
+                                                </a>
+                                                <a
+                                                    href={selectedGuide.downloadUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="btn-primary text-sm inline-flex items-center gap-1.5"
+                                                >
+                                                    <Download size={14} /> Download PDF
+                                                </a>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div className="rounded-xl overflow-hidden border border-soft bg-white">
-                                        {shouldAttemptGuideEmbed ? (
-                                            <iframe
-                                                title={`${selectedGuide.title} PDF Preview`}
-                                                src={selectedGuideEmbedUrl}
-                                                className="w-full h-[38rem] bg-white"
-                                                loading="lazy"
-                                                referrerPolicy="strict-origin-when-cross-origin"
-                                            />
-                                        ) : (
-                                            <div className="h-[38rem] flex flex-col items-center justify-center text-center p-8 bg-surface-soft">
-                                                <p className="text-strong font-semibold mb-2">Preview unavailable for this file</p>
-                                                <p className="text-sm text-subtle max-w-md">
-                                                    This guide can still be opened or downloaded safely. Some external providers block embedded previews even for valid PDFs.
+                                    <div className="p-4 sm:p-5">
+                                        <div className="rounded-2xl overflow-hidden border border-slate-300/80 shadow-[0_12px_36px_rgba(15,23,42,0.18)] bg-slate-900">
+                                            <div className="h-11 border-b border-white/10 bg-slate-800/90 flex items-center justify-between px-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
+                                                    <span className="h-2.5 w-2.5 rounded-full bg-amber-300/85" />
+                                                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+                                                </div>
+                                                <p className="text-[11px] tracking-wide uppercase text-slate-200/80 font-semibold">
+                                                    Embedded Document Preview
                                                 </p>
                                             </div>
-                                        )}
-                                    </div>
 
-                                    <p className="micro-note text-subtle mt-3">
-                                        PDF-only enforcement is active. Non-PDF links are ignored automatically.
-                                    </p>
+                                            <div className="relative bg-white">
+                                                {shouldAttemptGuideEmbed ? (
+                                                    <>
+                                                        {guidePreviewLoading && (
+                                                            <div className="absolute inset-0 z-10 bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center">
+                                                                <div className="text-center">
+                                                                    <div className="mx-auto mb-3 h-10 w-10 rounded-full border-2 border-slate-300 border-t-[var(--rtu-blue)] animate-spin" />
+                                                                    <p className="text-sm text-slate-600">Loading guide preview...</p>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        <iframe
+                                                            key={guideFrameKey}
+                                                            title={`${selectedGuide.title} PDF Preview`}
+                                                            src={selectedGuideEmbedUrl}
+                                                            className={`w-full h-[40rem] bg-white transition-opacity duration-300 ${guidePreviewLoading ? 'opacity-0' : 'opacity-100'}`}
+                                                            loading="lazy"
+                                                            referrerPolicy="strict-origin-when-cross-origin"
+                                                            onLoad={() => setLoadedGuideFrameKey(guideFrameKey)}
+                                                        />
+                                                    </>
+                                                ) : (
+                                                    <div className="h-[40rem] flex flex-col items-center justify-center text-center p-8 bg-surface-soft">
+                                                        <p className="text-strong font-semibold mb-2">Preview unavailable for this file</p>
+                                                        <p className="text-sm text-subtle max-w-md">
+                                                            This guide can still be opened or downloaded safely. Some external providers block embedded previews even for valid PDFs.
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <p className="micro-note text-subtle mt-3">
+                                            PDF-only enforcement is active. Non-PDF links are ignored automatically.
+                                        </p>
+                                    </div>
                                 </div>
                             )}
                         </div>
