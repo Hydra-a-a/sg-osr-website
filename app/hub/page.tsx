@@ -358,7 +358,6 @@ export default function HubPage() {
                                             className="w-full h-[38rem] bg-white"
                                             loading="lazy"
                                             referrerPolicy="strict-origin-when-cross-origin"
-                                            sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
                                         />
                                     </div>
 
