@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { AlertCircle, ChevronLeft, ChevronRight, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 type PdfGuideViewerProps = {
     fileUrl: string;
@@ -16,8 +16,64 @@ export default function PdfGuideViewer({ fileUrl, title }: PdfGuideViewerProps) 
     const [pageNumber, setPageNumber] = useState(1);
     const [zoomLevel, setZoomLevel] = useState(1);
     const [containerWidth, setContainerWidth] = useState(900);
+    const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
     const [loadError, setLoadError] = useState('');
+    const [isLoadingPdf, setIsLoadingPdf] = useState(true);
     const viewerRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        let isDisposed = false;
+
+        async function loadPdfBytes() {
+            try {
+                const response = await fetch(fileUrl, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    signal: controller.signal,
+                });
+
+                const contentType = (response.headers.get('content-type') || '').toLowerCase();
+                if (!response.ok) {
+                    throw new Error(`Preview request failed with status ${response.status}`);
+                }
+
+                if (!contentType.includes('application/pdf')) {
+                    throw new Error('Preview source did not return a PDF response.');
+                }
+
+                const buffer = await response.arrayBuffer();
+                if (!buffer.byteLength) {
+                    throw new Error('Preview response was empty.');
+                }
+
+                if (isDisposed) {
+                    return;
+                }
+
+                setPdfBytes(new Uint8Array(buffer));
+                setLoadError('');
+            } catch (error: unknown) {
+                if (isDisposed || (error as { name?: string })?.name === 'AbortError') {
+                    return;
+                }
+
+                setPdfBytes(null);
+                setLoadError('Unable to render this PDF in custom mode. Use Open or Download instead.');
+            } finally {
+                if (!isDisposed) {
+                    setIsLoadingPdf(false);
+                }
+            }
+        }
+
+        loadPdfBytes();
+
+        return () => {
+            isDisposed = true;
+            controller.abort();
+        };
+    }, [fileUrl]);
 
     useEffect(() => {
         const element = viewerRef.current;
@@ -102,29 +158,41 @@ export default function PdfGuideViewer({ fileUrl, title }: PdfGuideViewerProps) 
             </div>
 
             <div ref={viewerRef} className="flex-1 overflow-auto bg-gradient-to-b from-slate-100 to-slate-200/90">
-                <Document
-                    file={fileUrl}
-                    onLoadSuccess={({ numPages: totalPages }) => {
-                        setNumPages(totalPages);
-                        setPageNumber((current) => Math.min(current, totalPages || 1));
-                    }}
-                    onLoadError={() => {
-                        setLoadError('Unable to render this PDF in custom mode. Use Open or Download instead.');
-                    }}
-                    loading={
-                        <div className="h-full min-h-[16rem] flex items-center justify-center text-slate-600 text-sm">
-                            Rendering document...
+                {isLoadingPdf ? (
+                    <div className="h-full min-h-[16rem] flex items-center justify-center text-slate-600 text-sm">
+                        Rendering document...
+                    </div>
+                ) : loadError || !pdfBytes ? (
+                    <div className="h-full min-h-[16rem] flex items-center justify-center p-6">
+                        <div className="max-w-md w-full rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 text-sm flex items-start gap-3">
+                            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                            <p>{loadError || 'Unable to render this PDF in custom mode. Use Open or Download instead.'}</p>
                         </div>
-                    }
-                >
-                    {loadError ? (
-                        <div className="h-full min-h-[16rem] flex items-center justify-center p-6">
-                            <div className="max-w-md w-full rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 text-sm flex items-start gap-3">
-                                <AlertCircle size={18} className="shrink-0 mt-0.5" />
-                                <p>{loadError}</p>
+                    </div>
+                ) : (
+                    <Document
+                        file={{ data: pdfBytes }}
+                        onLoadSuccess={({ numPages: totalPages }) => {
+                            setNumPages(totalPages);
+                            setPageNumber((current) => Math.min(current, totalPages || 1));
+                        }}
+                        onLoadError={() => {
+                            setLoadError('Unable to render this PDF in custom mode. Use Open or Download instead.');
+                        }}
+                        error={
+                            <div className="h-full min-h-[16rem] flex items-center justify-center p-6">
+                                <div className="max-w-md w-full rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 text-sm flex items-start gap-3">
+                                    <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                                    <p>Unable to render this PDF in custom mode. Use Open or Download instead.</p>
+                                </div>
                             </div>
-                        </div>
-                    ) : (
+                        }
+                        loading={
+                            <div className="h-full min-h-[16rem] flex items-center justify-center text-slate-600 text-sm">
+                                Rendering document...
+                            </div>
+                        }
+                    >
                         <div className="py-5 px-2 sm:px-4 flex justify-center">
                             <Page
                                 pageNumber={pageNumber}
@@ -133,8 +201,8 @@ export default function PdfGuideViewer({ fileUrl, title }: PdfGuideViewerProps) 
                                 renderTextLayer={false}
                             />
                         </div>
-                    )}
-                </Document>
+                    </Document>
+                )}
             </div>
         </div>
     );

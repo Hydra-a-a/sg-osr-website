@@ -422,17 +422,6 @@ export default function HubPage() {
 
                                     <div className="p-4 sm:p-5">
                                         <div className="rounded-2xl overflow-hidden border border-slate-300/80 shadow-[0_12px_36px_rgba(15,23,42,0.18)] bg-slate-900">
-                                            <div className="h-11 border-b border-white/10 bg-slate-800/90 flex items-center justify-between px-4">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
-                                                    <span className="h-2.5 w-2.5 rounded-full bg-amber-300/85" />
-                                                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
-                                                </div>
-                                                <p className="text-[11px] tracking-wide uppercase text-slate-200/80 font-semibold">
-                                                    Embedded Document Preview
-                                                </p>
-                                            </div>
-
                                             <div className="relative bg-white">
                                                 {shouldAttemptGuideEmbed ? (
                                                     <PdfGuideViewer
