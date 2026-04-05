@@ -20,6 +20,19 @@ type ResolvedPdfLink = {
     fileName?: string;
 };
 
+function extractDriveResourceKey(viewUrl?: string | null): string {
+    if (!viewUrl) {
+        return '';
+    }
+
+    try {
+        const parsed = new URL(viewUrl);
+        return sanitizeText(parsed.searchParams.get('resourcekey') || '');
+    } catch {
+        return '';
+    }
+}
+
 function parseVisibility(value: string): boolean {
     const normalized = sanitizeText(value).toLowerCase();
     if (!normalized) {
@@ -78,19 +91,10 @@ async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | n
             }
 
             const viewUrl = metadata.webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
-            let embedUrl = `https://drive.google.com/file/d/${driveFileId}/preview`;
-
-            // Keep Drive query params (like resourcekey) when available so embeds work
-            // for files that require explicit resource-key access metadata.
-            if (metadata.webViewLink) {
-                try {
-                    const parsedViewUrl = new URL(metadata.webViewLink);
-                    parsedViewUrl.pathname = parsedViewUrl.pathname.replace(/\/view$/, '/preview');
-                    embedUrl = parsedViewUrl.toString();
-                } catch {
-                    // Fall back to ID-based preview URL above.
-                }
-            }
+            const resourceKey = extractDriveResourceKey(metadata.webViewLink);
+            const embedUrl = resourceKey
+                ? `/api/hub/guides/preview/${encodeURIComponent(driveFileId)}?resourcekey=${encodeURIComponent(resourceKey)}`
+                : `/api/hub/guides/preview/${encodeURIComponent(driveFileId)}`;
 
             const downloadUrl = metadata.webContentLink || `https://drive.google.com/uc?export=download&id=${driveFileId}`;
 
@@ -99,7 +103,7 @@ async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | n
                 embedUrl,
                 viewUrl,
                 downloadUrl,
-                canEmbed: false,
+                canEmbed: true,
                 fileName: sanitizeText(metadata.name || ''),
             };
         }

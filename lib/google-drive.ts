@@ -17,6 +17,55 @@ function getDriveClient() {
     return google.drive({ version: 'v3', auth });
 }
 
+export async function getDrivePdfStreamById(fileId: string, resourceKey?: string): Promise<{
+    stream: Readable;
+    fileName?: string | null;
+} | null> {
+    const normalizedFileId = (fileId || '').trim();
+    if (!normalizedFileId) {
+        return null;
+    }
+
+    const drive = getDriveClient();
+
+    try {
+        const metadataResponse = await drive.files.get({
+            fileId: normalizedFileId,
+            fields: 'id,name,mimeType',
+            supportsAllDrives: true,
+            resourceKey,
+        });
+
+        if (!metadataResponse.data || metadataResponse.data.mimeType !== 'application/pdf') {
+            return null;
+        }
+
+        const mediaResponse = await drive.files.get(
+            {
+                fileId: normalizedFileId,
+                alt: 'media',
+                supportsAllDrives: true,
+                resourceKey,
+            },
+            {
+                responseType: 'stream',
+            }
+        );
+
+        if (!mediaResponse.data) {
+            return null;
+        }
+
+        return {
+            stream: mediaResponse.data as Readable,
+            fileName: metadataResponse.data.name || null,
+        };
+    } catch (error) {
+        console.error('[Drive Preview] Failed to stream PDF:', redactErrorForLog(error));
+        return null;
+    }
+}
+
 export function extractGoogleDriveFileId(url: string): string | null {
     if (!url) {
         return null;
