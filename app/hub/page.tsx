@@ -3,9 +3,19 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { MapPin, Bus, BookOpen, Lock, Calendar, ZoomIn, ZoomOut, RotateCcw, X, Search, ExternalLink, Download, FileText } from 'lucide-react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import useSWR from 'swr';
+
+const PdfGuideViewer = dynamic(() => import('@/components/PdfGuideViewer'), {
+    ssr: false,
+    loading: () => (
+        <div className="h-[40rem] flex items-center justify-center bg-slate-100 text-slate-600 text-sm">
+            Loading document viewer...
+        </div>
+    ),
+});
 
 const hubItems = [
     {
@@ -119,7 +129,6 @@ export default function HubPage() {
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [dragging, setDragging] = useState(false);
     const [selectedGuideId, setSelectedGuideId] = useState('');
-    const [loadedGuideFrameKey, setLoadedGuideFrameKey] = useState('');
     const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
     const { data: guidesResponse, error: guidesError, isLoading: guidesLoading } = useSWR('/api/hub/guides', hubFetcher, {
         revalidateOnFocus: false,
@@ -138,8 +147,6 @@ export default function HubPage() {
     const shouldAttemptGuideEmbed = selectedGuide
         ? (selectedGuide.source === 'drive' ? Boolean(selectedGuideEmbedUrl) : selectedGuide.canEmbed)
         : false;
-    const guideFrameKey = selectedGuide ? `${selectedGuide.id}:${selectedGuideEmbedUrl}` : '';
-    const guidePreviewLoading = Boolean(shouldAttemptGuideEmbed && guideFrameKey && loadedGuideFrameKey !== guideFrameKey);
 
     const goToGuides = () => {
         if (typeof window === 'undefined') {
@@ -428,25 +435,11 @@ export default function HubPage() {
 
                                             <div className="relative bg-white">
                                                 {shouldAttemptGuideEmbed ? (
-                                                    <>
-                                                        {guidePreviewLoading && (
-                                                            <div className="absolute inset-0 z-10 bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center">
-                                                                <div className="text-center">
-                                                                    <div className="mx-auto mb-3 h-10 w-10 rounded-full border-2 border-slate-300 border-t-[var(--rtu-blue)] animate-spin" />
-                                                                    <p className="text-sm text-slate-600">Loading guide preview...</p>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                        <iframe
-                                                            key={guideFrameKey}
-                                                            title={`${selectedGuide.title} PDF Preview`}
-                                                            src={selectedGuideEmbedUrl}
-                                                            className={`w-full h-[40rem] bg-white transition-opacity duration-300 ${guidePreviewLoading ? 'opacity-0' : 'opacity-100'}`}
-                                                            loading="lazy"
-                                                            referrerPolicy="strict-origin-when-cross-origin"
-                                                            onLoad={() => setLoadedGuideFrameKey(guideFrameKey)}
-                                                        />
-                                                    </>
+                                                    <PdfGuideViewer
+                                                        key={selectedGuideEmbedUrl}
+                                                        title={selectedGuide.title}
+                                                        fileUrl={selectedGuideEmbedUrl}
+                                                    />
                                                 ) : (
                                                     <div className="h-[40rem] flex flex-col items-center justify-center text-center p-8 bg-surface-soft">
                                                         <p className="text-strong font-semibold mb-2">Preview unavailable for this file</p>

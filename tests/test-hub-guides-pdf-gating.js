@@ -35,6 +35,10 @@ const hubPageSource = read(path.join('app', 'hub', 'page.tsx'));
 assert(hubPageSource.includes("useSWR('/api/hub/guides'"), 'Student Hub page should load guides from the hub guides API.');
 assert(hubPageSource.includes('Student Handbooks &amp; Guides'), 'Student Hub page should render Student Handbooks & Guides section.');
 assert(hubPageSource.includes('PDF-only enforcement is active. Non-PDF links are ignored automatically.'), 'Student Hub page should communicate PDF-only enforcement.');
-assert(hubPageSource.includes('src={selectedGuideEmbedUrl}'), 'Student Hub page should render selected guide PDF preview.');
+assert(hubPageSource.includes('<PdfGuideViewer'), 'Student Hub page should render selected guide PDF preview using custom viewer component.');
+
+const viewerSource = read(path.join('components', 'PdfGuideViewer.tsx'));
+assert(viewerSource.includes('react-pdf'), 'Custom guide viewer should use react-pdf for in-app rendering.');
+assert(viewerSource.includes('renderAnnotationLayer={false}'), 'Custom guide viewer should hide default annotation controls for cleaner embed UI.');
 
 console.log('test-hub-guides-pdf-gating: PASS');
