@@ -1,8 +1,40 @@
-import { Readable } from 'stream';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
 import { getClientIp } from '@/lib/security';
 import { getDrivePdfStreamById } from '@/lib/google-drive';
+
+function nodeReadableToWebStream(stream: NodeJS.ReadableStream): ReadableStream<Uint8Array> {
+    return new ReadableStream<Uint8Array>({
+        start(controller) {
+            stream.on('data', (chunk: unknown) => {
+                if (typeof chunk === 'string') {
+                    controller.enqueue(new TextEncoder().encode(chunk));
+                    return;
+                }
+
+                if (chunk instanceof Uint8Array) {
+                    controller.enqueue(chunk);
+                    return;
+                }
+
+                if (chunk instanceof ArrayBuffer) {
+                    controller.enqueue(new Uint8Array(chunk));
+                    return;
+                }
+
+                if (ArrayBuffer.isView(chunk)) {
+                    controller.enqueue(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+                    return;
+                }
+
+                controller.enqueue(new Uint8Array(Buffer.from(String(chunk))));
+            });
+
+            stream.on('end', () => controller.close());
+            stream.on('error', (error: unknown) => controller.error(error));
+        },
+    });
+}
 
 function sanitizeInlineFilename(name: string): string {
     const fallback = 'guide.pdf';
@@ -45,7 +77,7 @@ export async function GET(
         return toApiResponse(new ApiError(404, 'NOT_FOUND', 'Guide preview unavailable'));
     }
 
-    const stream = Readable.toWeb(file.stream as any);
+    const stream = nodeReadableToWebStream(file.stream);
     const filename = sanitizeInlineFilename(file.fileName || 'guide.pdf');
 
     return new Response(stream, {

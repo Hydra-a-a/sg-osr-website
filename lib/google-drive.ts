@@ -34,7 +34,7 @@ export async function getDrivePdfStreamById(fileId: string, resourceKey?: string
             fields: 'id,name,mimeType',
             supportsAllDrives: true,
             resourceKey,
-        });
+        } as any);
 
         if (!metadataResponse.data || metadataResponse.data.mimeType !== 'application/pdf') {
             return null;
@@ -46,7 +46,7 @@ export async function getDrivePdfStreamById(fileId: string, resourceKey?: string
                 alt: 'media',
                 supportsAllDrives: true,
                 resourceKey,
-            },
+            } as any,
             {
                 responseType: 'stream',
             }
