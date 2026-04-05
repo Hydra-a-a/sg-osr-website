@@ -3,19 +3,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { MapPin, Bus, BookOpen, Lock, Calendar, ZoomIn, ZoomOut, RotateCcw, X, Search, ExternalLink, Download, FileText } from 'lucide-react';
 import Image from 'next/image';
-import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import useSWR from 'swr';
-
-const PdfGuideViewer = dynamic(() => import('@/components/PdfGuideViewer'), {
-    ssr: false,
-    loading: () => (
-        <div className="h-[40rem] flex items-center justify-center bg-slate-100 text-slate-600 text-sm">
-            Loading document viewer...
-        </div>
-    ),
-});
 
 const hubItems = [
     {
@@ -106,6 +96,23 @@ function getDrivePreviewProxyUrl(guide: HubGuide): string {
     return `/api/hub/guides/preview/${encodedId}`;
 }
 
+function buildGuidePreviewUrl(urlValue: string): string {
+    const sanitizedUrl = (urlValue || '').trim();
+    if (!sanitizedUrl) {
+        return '';
+    }
+
+    const [base, hash = ''] = sanitizedUrl.split('#', 2);
+    const baseParams = hash
+        .split('&')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .filter((part) => !part.startsWith('toolbar=') && !part.startsWith('navpanes=') && !part.startsWith('scrollbar='));
+
+    baseParams.push('toolbar=0', 'navpanes=0', 'scrollbar=1');
+    return `${base}#${baseParams.join('&')}`;
+}
+
 const hubFetcher = async (url: string) => {
     const response = await fetch(url, { cache: 'no-store' });
     const json = await response.json().catch(() => ({}));
@@ -129,7 +136,6 @@ export default function HubPage() {
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [dragging, setDragging] = useState(false);
     const [selectedGuideId, setSelectedGuideId] = useState('');
-    const [failedGuidePreviewKey, setFailedGuidePreviewKey] = useState('');
     const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
     const { data: guidesResponse, error: guidesError, isLoading: guidesLoading } = useSWR('/api/hub/guides', hubFetcher, {
         revalidateOnFocus: false,
@@ -145,27 +151,10 @@ export default function HubPage() {
     const selectedGuideEmbedUrl = selectedGuide
         ? (getDrivePreviewProxyUrl(selectedGuide) || selectedGuide.embedUrl)
         : '';
+    const selectedGuidePreviewUrl = buildGuidePreviewUrl(selectedGuideEmbedUrl);
     const shouldAttemptGuideEmbed = selectedGuide
         ? (selectedGuide.source === 'drive' ? Boolean(selectedGuideEmbedUrl) : selectedGuide.canEmbed)
         : false;
-    const useNativeGuideFallback = Boolean(selectedGuideEmbedUrl) && failedGuidePreviewKey === selectedGuideEmbedUrl;
-
-    const buildNativePdfFallbackUrl = (urlValue: string): string => {
-        const sanitizedUrl = (urlValue || '').trim();
-        if (!sanitizedUrl) {
-            return '';
-        }
-
-        const [base, hash = ''] = sanitizedUrl.split('#', 2);
-        const baseParams = hash
-            .split('&')
-            .map((part) => part.trim())
-            .filter(Boolean)
-            .filter((part) => !part.startsWith('toolbar=') && !part.startsWith('navpanes=') && !part.startsWith('scrollbar='));
-
-        baseParams.push('toolbar=0', 'navpanes=0', 'scrollbar=1');
-        return `${base}#${baseParams.join('&')}`;
-    };
 
     const goToGuides = () => {
         if (typeof window === 'undefined') {
@@ -378,7 +367,7 @@ export default function HubPage() {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
-                            <div className="card p-4 sm:p-5 max-h-[34rem] overflow-auto">
+                            <div className="card p-4 sm:p-5 max-h-[34rem] overflow-auto custom-scrollbar">
                                 <h3 className="font-bold text-brand mb-3">Available Guides</h3>
                                 <div className="space-y-2">
                                     {guides.map((guide) => {
@@ -423,9 +412,14 @@ export default function HubPage() {
                                                     href={selectedGuide.viewUrl}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="btn-secondary text-sm inline-flex items-center gap-1.5"
+                                                    className="inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors"
+                                                    style={{
+                                                        borderColor: 'var(--rtu-blue)',
+                                                        color: 'var(--rtu-blue)',
+                                                        backgroundColor: 'rgba(35, 72, 116, 0.06)',
+                                                    }}
                                                 >
-                                                    <ExternalLink size={14} /> Open
+                                                    <ExternalLink size={14} /> Open in New Tab
                                                 </a>
                                                 <a
                                                     href={selectedGuide.downloadUrl}
@@ -443,22 +437,13 @@ export default function HubPage() {
                                         <div className="rounded-2xl overflow-hidden border border-slate-300/80 shadow-[0_12px_36px_rgba(15,23,42,0.18)] bg-slate-900">
                                             <div className="relative bg-white">
                                                 {shouldAttemptGuideEmbed ? (
-                                                    useNativeGuideFallback ? (
-                                                        <iframe
-                                                            title={`${selectedGuide.title} PDF Preview`}
-                                                            src={buildNativePdfFallbackUrl(selectedGuideEmbedUrl)}
-                                                            className="w-full h-[40rem] bg-white"
-                                                            loading="lazy"
-                                                            referrerPolicy="strict-origin-when-cross-origin"
-                                                        />
-                                                    ) : (
-                                                        <PdfGuideViewer
-                                                            key={selectedGuideEmbedUrl}
-                                                            title={selectedGuide.title}
-                                                            fileUrl={selectedGuideEmbedUrl}
-                                                            onRenderError={() => setFailedGuidePreviewKey(selectedGuideEmbedUrl)}
-                                                        />
-                                                    )
+                                                    <iframe
+                                                        title={`${selectedGuide.title} PDF Preview`}
+                                                        src={selectedGuidePreviewUrl}
+                                                        className="w-full h-[40rem] bg-white"
+                                                        loading="lazy"
+                                                        referrerPolicy="strict-origin-when-cross-origin"
+                                                    />
                                                 ) : (
                                                     <div className="h-[40rem] flex flex-col items-center justify-center text-center p-8 bg-surface-soft">
                                                         <p className="text-strong font-semibold mb-2">Preview unavailable for this file</p>
@@ -473,11 +458,6 @@ export default function HubPage() {
                                         <p className="micro-note text-subtle mt-3">
                                             PDF-only enforcement is active. Non-PDF links are ignored automatically.
                                         </p>
-                                        {useNativeGuideFallback && (
-                                            <p className="micro-note text-subtle mt-1">
-                                                Fallback render mode was activated for compatibility.
-                                            </p>
-                                        )}
                                     </div>
                                 </div>
                             )}

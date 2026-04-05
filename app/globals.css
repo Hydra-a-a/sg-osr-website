@@ -188,6 +188,31 @@ h3 {
   line-height: 1.5;
 }
 
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(35, 72, 116, 0.55) rgba(35, 72, 116, 0.14);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(35, 72, 116, 0.12);
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(35, 72, 116, 0.88), rgba(62, 101, 150, 0.86));
+  border-radius: 999px;
+  border: 2px solid rgba(35, 72, 116, 0.12);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(35, 72, 116, 0.96), rgba(62, 101, 150, 0.94));
+}
+
 .icon-chip-blue,
 .icon-chip-gold {
   width: 3.5rem;
