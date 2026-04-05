@@ -9,7 +9,8 @@ import { TransparencyGuideSchema, type TransparencyGuide } from '@/schemas/trans
 const DEFAULT_INFO_SPREADSHEET_ID = '1LSkRWGzqWAuTodMDIVlzYTMWr8AhFMywcUd3PoziXaw';
 const RANGE = 'Transparency Hub!A2:F';
 
-export const revalidate = 1800;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 type ResolvedPdfLink = {
     source: 'drive' | 'direct';

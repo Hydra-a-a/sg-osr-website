@@ -51,6 +51,51 @@ type HubGuide = {
     updatedAt: string;
 };
 
+function getDrivePreviewProxyUrl(guide: HubGuide): string {
+    if (guide.source !== 'drive') {
+        return '';
+    }
+
+    const extractFileId = (urlValue: string): string => {
+        try {
+            const parsed = new URL(urlValue);
+            const pathMatch = parsed.pathname.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+            if (pathMatch?.[1]) {
+                return pathMatch[1];
+            }
+
+            const idParam = parsed.searchParams.get('id') || '';
+            if (/^[a-zA-Z0-9_-]{10,}$/.test(idParam)) {
+                return idParam;
+            }
+
+            return '';
+        } catch {
+            return '';
+        }
+    };
+
+    const fileId = extractFileId(guide.viewUrl || guide.embedUrl);
+    if (!fileId) {
+        return '';
+    }
+
+    let resourceKey = '';
+    try {
+        const parsed = new URL(guide.viewUrl);
+        resourceKey = parsed.searchParams.get('resourcekey') || '';
+    } catch {
+        resourceKey = '';
+    }
+
+    const encodedId = encodeURIComponent(fileId);
+    if (resourceKey) {
+        return `/api/hub/guides/preview/${encodedId}?resourcekey=${encodeURIComponent(resourceKey)}`;
+    }
+
+    return `/api/hub/guides/preview/${encodedId}`;
+}
+
 const hubFetcher = async (url: string) => {
     const response = await fetch(url, { cache: 'no-store' });
     const json = await response.json().catch(() => ({}));
@@ -86,6 +131,12 @@ export default function HubPage() {
         ? selectedGuideId
         : fallbackGuideId;
     const selectedGuide = guides.find((guide) => guide.id === resolvedSelectedGuideId) || null;
+    const selectedGuideEmbedUrl = selectedGuide
+        ? (getDrivePreviewProxyUrl(selectedGuide) || selectedGuide.embedUrl)
+        : '';
+    const shouldAttemptGuideEmbed = selectedGuide
+        ? (selectedGuide.source === 'drive' ? Boolean(selectedGuideEmbedUrl) : selectedGuide.canEmbed)
+        : false;
 
     const goToGuides = () => {
         if (typeof window === 'undefined') {
@@ -353,10 +404,10 @@ export default function HubPage() {
                                     </div>
 
                                     <div className="rounded-xl overflow-hidden border border-soft bg-white">
-                                        {selectedGuide.canEmbed ? (
+                                        {shouldAttemptGuideEmbed ? (
                                             <iframe
                                                 title={`${selectedGuide.title} PDF Preview`}
-                                                src={selectedGuide.embedUrl}
+                                                src={selectedGuideEmbedUrl}
                                                 className="w-full h-[38rem] bg-white"
                                                 loading="lazy"
                                                 referrerPolicy="strict-origin-when-cross-origin"
