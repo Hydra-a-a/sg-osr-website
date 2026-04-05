@@ -9,8 +9,8 @@ import { TransparencyGuideSchema, type TransparencyGuide } from '@/schemas/trans
 const DEFAULT_INFO_SPREADSHEET_ID = '1LSkRWGzqWAuTodMDIVlzYTMWr8AhFMywcUd3PoziXaw';
 const BASE_CANDIDATE_RANGES = [
     process.env.STUDENT_HUB_GUIDES_RANGE?.trim(),
-    'Student Hub Control!A2:F',
-    'Transparency Hub!A2:F',
+    'Student Hub Control!A2:Z',
+    'Transparency Hub!A2:Z',
 ].filter((value): value is string => Boolean(value));
 const CANDIDATE_SPREADSHEET_IDS = Array.from(new Set([
     process.env.STUDENT_HUB_GUIDES_SPREADSHEET_ID?.trim(),
@@ -29,6 +29,19 @@ type ResolvedPdfLink = {
     downloadUrl: string;
     canEmbed: boolean;
     fileName?: string;
+};
+
+type ResolvePdfResult = {
+    resolved: ResolvedPdfLink | null;
+    reason: 'ok' | 'empty-url' | 'invalid-url' | 'non-https' | 'drive-metadata-missing-or-non-pdf' | 'direct-link-non-pdf';
+};
+type ResolvePdfFailureReason = Exclude<ResolvePdfResult['reason'], 'ok'>;
+
+type HubGuideReadAttempt = {
+    spreadsheetIdSuffix: string;
+    range: string;
+    status: 'ok' | 'error';
+    rowCount?: number;
 };
 
 function extractDriveResourceKey(viewUrl?: string | null): string {
@@ -75,29 +88,57 @@ function createGuideId(title: string, url: string, index: number): string {
 function rangeFromSheetTitle(title: string): string {
     // Quote sheet names so spaces and punctuation remain valid in A1 notation.
     const escaped = title.replace(/'/g, "''");
-    return `'${escaped}'!A2:F`;
+    return `'${escaped}'!A2:Z`;
 }
 
 function findFirstUrl(cells: string[]): string {
     for (const cell of cells) {
-        if (/^https:\/\//i.test(cell.trim())) {
-            return cell.trim();
+        const normalized = normalizeUrlCandidate(cell);
+        if (normalized) {
+            return normalized;
         }
     }
 
     return '';
 }
 
-async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | null> {
+function normalizeUrlCandidate(value: string): string {
+    const raw = sanitizeText(value || '').trim();
+    if (!raw) {
+        return '';
+    }
+
+    const directMatch = raw.match(/https?:\/\/[^\s)]+/i);
+    if (directMatch?.[0]) {
+        return directMatch[0].replace(/^http:\/\//i, 'https://');
+    }
+
+    if (/^(drive|docs)\.google\.com\//i.test(raw)) {
+        return `https://${raw}`;
+    }
+
+    if (/^www\./i.test(raw)) {
+        return `https://${raw}`;
+    }
+
+    // Accept standalone Drive file IDs pasted without URL wrappers.
+    if (/^[a-zA-Z0-9_-]{20,}$/.test(raw)) {
+        return `https://drive.google.com/file/d/${raw}/view`;
+    }
+
+    return '';
+}
+
+async function resolvePdfLinkWithReason(candidateUrl: string): Promise<ResolvePdfResult> {
     const normalizedCandidate = sanitizeText(candidateUrl);
     if (!normalizedCandidate) {
-        return null;
+        return { resolved: null, reason: 'empty-url' };
     }
 
     try {
         const parsed = new URL(normalizedCandidate);
         if (parsed.protocol !== 'https:') {
-            return null;
+            return { resolved: null, reason: 'non-https' };
         }
 
         const driveFileId = extractGoogleDriveFileId(parsed.toString());
@@ -105,7 +146,7 @@ async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | n
             const candidateResourceKey = extractDriveResourceKey(parsed.toString());
             const metadata = await getDriveFileMetadataById(driveFileId, candidateResourceKey || undefined);
             if (!metadata || metadata.mimeType !== 'application/pdf') {
-                return null;
+                return { resolved: null, reason: 'drive-metadata-missing-or-non-pdf' };
             }
 
             const viewUrl = metadata.webViewLink || `https://drive.google.com/file/d/${driveFileId}/view`;
@@ -117,29 +158,35 @@ async function resolvePdfLink(candidateUrl: string): Promise<ResolvedPdfLink | n
             const downloadUrl = metadata.webContentLink || `https://drive.google.com/uc?export=download&id=${driveFileId}`;
 
             return {
-                source: 'drive',
-                embedUrl,
-                viewUrl,
-                downloadUrl,
-                canEmbed: true,
-                fileName: sanitizeText(metadata.name || ''),
+                resolved: {
+                    source: 'drive',
+                    embedUrl,
+                    viewUrl,
+                    downloadUrl,
+                    canEmbed: true,
+                    fileName: sanitizeText(metadata.name || ''),
+                },
+                reason: 'ok',
             };
         }
 
         if (!parsed.pathname.toLowerCase().endsWith('.pdf')) {
-            return null;
+            return { resolved: null, reason: 'direct-link-non-pdf' };
         }
 
         const safeUrl = parsed.toString();
         return {
-            source: 'direct',
-            embedUrl: safeUrl,
-            viewUrl: safeUrl,
-            downloadUrl: safeUrl,
-            canEmbed: true,
+            resolved: {
+                source: 'direct',
+                embedUrl: safeUrl,
+                viewUrl: safeUrl,
+                downloadUrl: safeUrl,
+                canEmbed: true,
+            },
+            reason: 'ok',
         };
     } catch {
-        return null;
+        return { resolved: null, reason: 'invalid-url' };
     }
 }
 
@@ -152,19 +199,31 @@ async function getCandidateRangesForSpreadsheet(spreadsheetId: string): Promise<
     return Array.from(new Set([...BASE_CANDIDATE_RANGES, ...discoveredRanges]));
 }
 
-async function loadHubGuideRows(): Promise<any[][]> {
+async function loadHubGuideRows(): Promise<{ rows: any[][]; attempts: HubGuideReadAttempt[] }> {
     let hadReadError = false;
+    const attempts: HubGuideReadAttempt[] = [];
 
     for (const spreadsheetId of CANDIDATE_SPREADSHEET_IDS) {
         const ranges = await getCandidateRangesForSpreadsheet(spreadsheetId);
         for (const range of ranges) {
             try {
                 const rows = await getSheetDataWithHyperlinks(spreadsheetId, range);
+                attempts.push({
+                    spreadsheetIdSuffix: spreadsheetId.slice(-6),
+                    range,
+                    status: 'ok',
+                    rowCount: rows.length,
+                });
                 if (rows.length > 0) {
-                    return rows;
+                    return { rows, attempts };
                 }
             } catch (error) {
                 hadReadError = true;
+                attempts.push({
+                    spreadsheetIdSuffix: spreadsheetId.slice(-6),
+                    range,
+                    status: 'error',
+                });
                 console.warn(`[Hub Guides API] Failed to read ${range} from spreadsheet ${spreadsheetId}:`, redactErrorForLog(error));
             }
         }
@@ -174,10 +233,13 @@ async function loadHubGuideRows(): Promise<any[][]> {
         throw new ApiError(502, 'HUB_GUIDES_SOURCE_UNAVAILABLE', 'Unable to read Student Hub guides from Google Sheets right now.');
     }
 
-    return [];
+    return { rows: [], attempts };
 }
 
 export async function GET(request: Request) {
+    const requestUrl = new URL(request.url);
+    const debugMode = process.env.NODE_ENV !== 'production' && requestUrl.searchParams.get('debug') === '1';
+
     const ip = getClientIp(request);
     const limit = await checkRateLimit(`hub_guides_${ip}`, 40, 60_000);
 
@@ -186,29 +248,63 @@ export async function GET(request: Request) {
     }
 
     try {
-        const rawRows = await loadHubGuideRows();
+        const { rows: rawRows, attempts } = await loadHubGuideRows();
+        const diagnostics = {
+            rawRowCount: rawRows.length,
+            emptyRows: 0,
+            hiddenRows: 0,
+            missingUrlRows: 0,
+            unresolvedPdfRows: 0,
+            acceptedRows: 0,
+            sampleRows: [] as string[][],
+            unresolvedReasons: {
+                'empty-url': 0,
+                'invalid-url': 0,
+                'non-https': 0,
+                'drive-metadata-missing-or-non-pdf': 0,
+                'direct-link-non-pdf': 0,
+            } as Record<ResolvePdfFailureReason, number>,
+        };
 
         const guides = await Promise.all(rawRows.map(async (rawRow, index) => {
             const cells = rawRow.map((cell) => sanitizeText(String(cell || '')));
             if (cells.every((cell) => !cell)) {
+                diagnostics.emptyRows += 1;
                 return null;
+            }
+
+            if (diagnostics.sampleRows.length < 5) {
+                diagnostics.sampleRows.push(cells.slice(0, 12));
             }
 
             const titleCell = cells[0] || '';
             const descriptionCell = cells[1] || '';
-            const explicitUrl = cells[2] || '';
+            const explicitUrl = normalizeUrlCandidate(cells[2] || '');
             const categoryCell = cells[3] || 'Student Handbook & Guides';
             const visibilityCell = cells[4] || '';
             const sortOrderCell = cells[5] || '';
 
             if (!parseVisibility(visibilityCell)) {
+                diagnostics.hiddenRows += 1;
                 return null;
             }
 
-            const resolved = await resolvePdfLink(explicitUrl || findFirstUrl(cells));
-            if (!resolved) {
+            const urlCandidate = explicitUrl || findFirstUrl(cells);
+            if (!urlCandidate) {
+                diagnostics.missingUrlRows += 1;
                 return null;
             }
+
+            const resolveResult = await resolvePdfLinkWithReason(urlCandidate);
+            if (!resolveResult.resolved) {
+                diagnostics.unresolvedPdfRows += 1;
+                const failureReason: ResolvePdfFailureReason = resolveResult.reason === 'ok'
+                    ? 'invalid-url'
+                    : resolveResult.reason;
+                diagnostics.unresolvedReasons[failureReason] += 1;
+                return null;
+            }
+            const resolved = resolveResult.resolved;
 
             const title = titleCell || resolved.fileName || `Guide ${index + 1}`;
             const candidateGuide: TransparencyGuide = {
@@ -232,12 +328,23 @@ export async function GET(request: Request) {
                 return null;
             }
 
+            diagnostics.acceptedRows += 1;
             return validation.data;
         }));
 
         const data = guides
             .filter((guide): guide is TransparencyGuide => Boolean(guide))
             .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
+
+        if (debugMode) {
+            return NextResponse.json({
+                data,
+                debug: {
+                    attempts,
+                    diagnostics,
+                },
+            });
+        }
 
         return NextResponse.json({ data });
     } catch (error) {

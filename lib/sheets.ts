@@ -48,6 +48,45 @@ export async function getSheetData(spreadsheetId: string, range: string) {
 export async function getSheetDataWithHyperlinks(spreadsheetId: string, range: string) {
     const sheets = getSheetsClient();
 
+    const parseSheetTitleFromRange = (a1Range: string): string => {
+        const normalizedRange = (a1Range || '').trim();
+        if (!normalizedRange) {
+            return '';
+        }
+
+        if (normalizedRange.startsWith("'")) {
+            const quotedEnd = normalizedRange.indexOf("'!");
+            if (quotedEnd > 1) {
+                return normalizedRange.slice(1, quotedEnd).replace(/''/g, "'");
+            }
+        }
+
+        const bangIndex = normalizedRange.indexOf('!');
+        if (bangIndex > 0) {
+            return normalizedRange.slice(0, bangIndex);
+        }
+
+        return '';
+    };
+
+    const extractUrlFromCellRuns = (cell: any): string => {
+        const textRunUrl = (cell?.textFormatRuns || [])
+            .map((run: any) => run?.format?.link?.uri || '')
+            .find((value: string) => /^https?:\/\//i.test(value));
+        if (textRunUrl) {
+            return textRunUrl;
+        }
+
+        const chipRunUrl = (cell?.chipRuns || [])
+            .map((run: any) => run?.chip?.richLinkProperties?.uri || '')
+            .find((value: string) => /^https?:\/\//i.test(value));
+        if (chipRunUrl) {
+            return chipRunUrl;
+        }
+
+        return '';
+    };
+
     try {
         const response = await sheets.spreadsheets.get(
             {
@@ -60,12 +99,22 @@ export async function getSheetDataWithHyperlinks(spreadsheetId: string, range: s
             }
         );
 
-        const rowData = response.data.sheets?.[0]?.data?.[0]?.rowData || [];
+        const requestedSheetTitle = parseSheetTitleFromRange(range);
+        const requestedSheet = requestedSheetTitle
+            ? response.data.sheets?.find((sheet) => sheet.properties?.title === requestedSheetTitle)
+            : undefined;
+
+        const rowData = requestedSheet?.data?.[0]?.rowData || response.data.sheets?.[0]?.data?.[0]?.rowData || [];
         return rowData.map((row) =>
             (row.values || []).map((cell) => {
                 const hyperlink = cell.hyperlink;
                 if (hyperlink) {
                     return hyperlink;
+                }
+
+                const runUrl = extractUrlFromCellRuns(cell);
+                if (runUrl) {
+                    return runUrl;
                 }
 
                 const formula = cell.userEnteredValue?.formulaValue || '';

@@ -12,8 +12,8 @@ function assert(condition, message) {
 }
 
 const apiSource = read(path.join('app', 'api', 'hub', 'guides', 'route.ts'));
-assert(apiSource.includes("'Student Hub Control!A2:F'"), 'Hub guides API should support Student Hub Control sheet range.');
-assert(apiSource.includes("'Transparency Hub!A2:F'"), 'Hub guides API should support Transparency Hub sheet range.');
+assert(apiSource.includes("'Student Hub Control!A2:Z'"), 'Hub guides API should support Student Hub Control sheet range.');
+assert(apiSource.includes("'Transparency Hub!A2:Z'"), 'Hub guides API should support Transparency Hub sheet range.');
 assert(apiSource.includes('getSpreadsheetSheetTitles'), 'Hub guides API should discover related sheet tab names dynamically.');
 assert(apiSource.includes('STUDENT_HUB_GUIDES_SPREADSHEET_ID'), 'Hub guides API should allow dedicated Student Hub spreadsheet override.');
 assert(apiSource.includes('getSheetDataWithHyperlinks'), 'Hub guides API should read hyperlink-aware sheet data.');

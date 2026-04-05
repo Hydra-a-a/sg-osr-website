@@ -7,8 +7,8 @@ export const TransparencyGuideSchema = z.object({
     description: z.string().max(500).default(''),
     category: z.string().max(100).default('Student Handbook & Guides'),
     source: z.enum(['drive', 'direct']),
-    embedUrl: z.string().url().max(2048).refine(isSafeNavigationHref, {
-        message: 'Embed URL must be a safe HTTPS URL',
+    embedUrl: z.string().max(2048).refine(isSafeNavigationHref, {
+        message: 'Embed URL must be a safe HTTPS URL or same-origin relative path',
     }),
     viewUrl: z.string().url().max(2048).refine(isSafeNavigationHref, {
         message: 'View URL must be a safe HTTPS URL',
