@@ -1,6 +1,7 @@
 import NextAuth from 'next-auth';
 import { authConfig } from '@/lib/auth.config';
 import { NextResponse } from 'next/server';
+import { deriveEffectivePortalRole, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
 
 const { auth } = NextAuth(authConfig);
 
@@ -156,7 +157,8 @@ export default auth((req) => {
 
     // Leader-only enforcement
     const isLeaderRoute = leaderOnlyRoutes.some((r) => pathname.startsWith(r));
-    if (isLeaderRoute && session.user.role !== 'leader') {
+    const effectiveRole = deriveEffectivePortalRole(session?.user?.role, req.cookies.get(PORTAL_MODE_COOKIE)?.value);
+    if (isLeaderRoute && effectiveRole !== 'leader') {
         return applySecurityHeaders(NextResponse.redirect(new URL('/?error=unauthorized', nextUrl)), nonce, cspHeader, '/');
     }
 

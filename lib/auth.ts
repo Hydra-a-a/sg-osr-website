@@ -10,8 +10,10 @@ interface LeaderRecord {
     email: string;
     name: string;
     council: string;
-    /** 1-based sheet row number (row 1 = header, data starts at row 2) */
+    /** 1-based sheet row number. */
     rowIndex: number;
+    /** Column letter to update for access timestamp (e.g. D). */
+    lastAccessColumnLetter: string;
 }
 
 /**
@@ -71,7 +73,7 @@ async function refreshGoogleAccessToken(token: JWT): Promise<JWT> {
 
 function getAuthSheetConfig(): { spreadsheetId: string; range: string } | null {
     const spreadsheetId = process.env.GOOGLE_SHEETS_AUTH_ID;
-    const range = process.env.GOOGLE_SHEETS_AUTH_TAB ?? 'SL Access!A2:E';
+    const range = process.env.GOOGLE_SHEETS_AUTH_TAB ?? 'SL Access!A1:K';
 
     if (!spreadsheetId) {
         console.error('[Auth] Missing GOOGLE_SHEETS_AUTH_ID; leader mapping disabled.');
@@ -79,6 +81,73 @@ function getAuthSheetConfig(): { spreadsheetId: string; range: string } | null {
     }
 
     return { spreadsheetId, range };
+}
+
+function normalizeHeader(value: unknown): string {
+    return String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
+function parseRangeStartRow(range: string): number {
+    const match = range.match(/![A-Za-z]+(\d+)/);
+    const startRow = Number(match?.[1] || '1');
+    return Number.isFinite(startRow) && startRow > 0 ? startRow : 1;
+}
+
+function columnIndexToLetter(index: number): string {
+    let n = index + 1;
+    let letters = '';
+
+    while (n > 0) {
+        const mod = (n - 1) % 26;
+        letters = String.fromCharCode(65 + mod) + letters;
+        n = Math.floor((n - mod) / 26);
+    }
+
+    return letters || 'D';
+}
+
+function parseEnabledValue(value: unknown): boolean {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) return true;
+    if (['true', '1', 'yes', 'y', 'active', 'enabled'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'n', 'inactive', 'disabled', 'revoked', 'blocked'].includes(normalized)) return false;
+    return true;
+}
+
+function parseLeaderRoleValue(value: unknown): boolean {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) return true;
+    return ['leader', 'student_leader', 'student leader', 'sl'].includes(normalized);
+}
+
+function detectHeaderMap(rows: string[][]): Map<string, number> | null {
+    if (!rows.length) return null;
+    const firstRow = rows[0] || [];
+    const map = new Map<string, number>();
+
+    firstRow.forEach((cell, index) => {
+        const key = normalizeHeader(cell);
+        if (key) {
+            map.set(key, index);
+        }
+    });
+
+    const hasEmailHeader = map.has('email') || map.has('rtu_email') || map.has('school_email') || map.has('account_email');
+    return hasEmailHeader ? map : null;
+}
+
+function firstExistingIndex(headerMap: Map<string, number>, keys: string[], fallback: number): number {
+    for (const key of keys) {
+        const index = headerMap.get(key);
+        if (typeof index === 'number') {
+            return index;
+        }
+    }
+    return fallback;
 }
 
 async function getAuthorizedLeaders(): Promise<Map<string, LeaderRecord>> {
@@ -93,18 +162,55 @@ async function getAuthorizedLeaders(): Promise<Map<string, LeaderRecord>> {
             return new Map();
         }
 
-        const rows = await getSheetData(config.spreadsheetId, config.range);
+        const rawRows = await getSheetData(config.spreadsheetId, config.range);
+        const rows = rawRows.map((row) => row.map((cell) => String(cell ?? '').trim()));
         const leaders = new Map<string, LeaderRecord>();
+        const startRow = parseRangeStartRow(config.range);
+
+        const headerMap = detectHeaderMap(rows);
+        const emailIndex = headerMap
+            ? firstExistingIndex(headerMap, ['email', 'rtu_email', 'school_email', 'account_email'], 0)
+            : 0;
+        const nameIndex = headerMap
+            ? firstExistingIndex(headerMap, ['name', 'full_name', 'display_name'], 1)
+            : 1;
+        const councilIndex = headerMap
+            ? firstExistingIndex(headerMap, ['council', 'unit', 'department'], 2)
+            : 2;
+        const lastAccessIndex = headerMap
+            ? firstExistingIndex(headerMap, ['last_access_date', 'last_access', 'last_login_at', 'last_login_date'], 3)
+            : 3;
+        const enabledIndex = headerMap
+            ? firstExistingIndex(headerMap, ['access_enabled', 'enabled', 'active', 'status'], -1)
+            : -1;
+        const roleIndex = headerMap
+            ? firstExistingIndex(headerMap, ['role', 'access_role', 'account_role'], -1)
+            : -1;
+
+        const firstDataIndex = headerMap ? 1 : 0;
+        const lastAccessColumnLetter = columnIndexToLetter(lastAccessIndex);
 
         if (rows && rows.length > 0) {
             rows.forEach((row, i) => {
-                const email = (row[0] || '').toString().trim().toLowerCase();
+                if (i < firstDataIndex) return;
+
+                const email = (row[emailIndex] || '').toString().trim().toLowerCase();
                 if (!email) return;
+
+                if (enabledIndex >= 0 && !parseEnabledValue(row[enabledIndex])) {
+                    return;
+                }
+
+                if (roleIndex >= 0 && !parseLeaderRoleValue(row[roleIndex])) {
+                    return;
+                }
+
                 leaders.set(email, {
                     email,
-                    name: (row[1] || '').toString().trim(),
-                    council: (row[2] || '').toString().trim(),
-                    rowIndex: i + 2, // +2: row 1 is the header
+                    name: (row[nameIndex] || '').toString().trim(),
+                    council: (row[councilIndex] || '').toString().trim(),
+                    rowIndex: startRow + i,
+                    lastAccessColumnLetter,
                 });
             });
         }
@@ -174,7 +280,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         try {
                             await updateSheetCell(
                                 config.spreadsheetId,
-                                `SL Access!D${leaderData.rowIndex}`,
+                                `SL Access!${leaderData.lastAccessColumnLetter}${leaderData.rowIndex}`,
                                 [[new Date().toLocaleString()]]
                             );
                         } catch (err) {

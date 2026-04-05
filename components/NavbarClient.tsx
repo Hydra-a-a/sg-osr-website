@@ -6,9 +6,16 @@ import { useState, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, LogOut, User, Shield } from 'lucide-react';
+import { Menu, X, LogOut, User, Shield, AlertTriangle } from 'lucide-react';
 import AlertBanner from './AlertBanner';
 import { SiteConfig } from '@/lib/slideConfig';
+import {
+    deriveEffectivePortalRole,
+    LEADER_ATTEMPT_COOKIE,
+    normalizePortalRole,
+    PORTAL_MODE_COOKIE,
+    shouldShowLeaderAccessDeniedNotice,
+} from '@/lib/portal-mode';
 
 const baseNavLinks = [
     { href: '/', label: 'Home' },
@@ -23,9 +30,23 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
+    const [dismissedLeaderNotice, setDismissedLeaderNotice] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
     const pathname = usePathname();
     const { data: session, status } = useSession();
+
+    const getCookieValue = (name: string): string => {
+        if (typeof document === 'undefined') {
+            return '';
+        }
+
+        const cookie = document.cookie
+            .split(';')
+            .map((part) => part.trim())
+            .find((part) => part.startsWith(`${name}=`));
+
+        return cookie ? decodeURIComponent(cookie.slice(name.length + 1)) : '';
+    };
 
     // navbar gets see-through when you scroll down
     useEffect(() => {
@@ -71,10 +92,57 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
         navLinks.push({ href: '/elections', label: 'Elections 🗳️' });
     }
 
-    const isLeader = session?.user?.role === 'leader';
+    const portalMode = getCookieValue(PORTAL_MODE_COOKIE);
+    const leaderAttempt = getCookieValue(LEADER_ATTEMPT_COOKIE);
+    const isLeaderAccount = normalizePortalRole(session?.user?.role) === 'leader';
+    const shouldShowLeaderDeniedNotice = status === 'authenticated'
+        && Boolean(session?.user)
+        && !dismissedLeaderNotice
+        && shouldShowLeaderAccessDeniedNotice(session?.user?.role, leaderAttempt);
+    const isLeader = deriveEffectivePortalRole(session?.user?.role, portalMode) === 'leader';
+
+    const switchPortalMode = (mode: 'student' | 'leader') => {
+        const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = `${PORTAL_MODE_COOKIE}=${mode}; Path=/; Max-Age=1209600; SameSite=Lax${secure}`;
+        setProfileOpen(false);
+        setMobileOpen(false);
+        window.location.reload();
+    };
+
+    const clearPortalCookies = (resetPortalMode: boolean) => {
+        const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = `${LEADER_ATTEMPT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+        if (resetPortalMode) {
+            document.cookie = `${PORTAL_MODE_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+        }
+    };
+
+    const handleSignOut = () => {
+        clearPortalCookies(true);
+        signOut({ callbackUrl: '/' });
+    };
 
     return (
         <header className="sticky top-0 z-50">
+            {shouldShowLeaderDeniedNotice && (
+                <div className="bg-amber-50 border-b border-amber-200 text-amber-900">
+                    <div className="container-main flex items-start gap-2 py-2 text-sm">
+                        <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                        <p className="flex-1">Your account is signed in, but it does not have Student Leader Access. You are now in Student Access mode.</p>
+                        <button
+                            type="button"
+                            className="text-amber-800 hover:text-amber-950 font-semibold"
+                            onClick={() => {
+                                clearPortalCookies(false);
+                                setDismissedLeaderNotice(true);
+                            }}
+                            aria-label="Dismiss access notice"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
             {config.alertBanner && <AlertBanner message={config.alertBanner} />}
             <nav className={`glass-nav relative transition-[background,box-shadow] duration-300 ${scrolled ? 'glass-nav-scrolled' : ''}`}>
                 <div className="container-main flex items-center justify-between h-16 md:h-[4.5rem]">
@@ -149,9 +217,32 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                                     </span>
                                                 )}
                                             </div>
+                                            {isLeaderAccount && (
+                                                <div className="px-4 py-3 border-b border-gray-100">
+                                                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Access Mode</p>
+                                                    <div className="mt-2 flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => switchPortalMode('student')}
+                                                            disabled={!isLeader}
+                                                            className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-700 disabled:opacity-60 disabled:cursor-default"
+                                                        >
+                                                            Student
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => switchPortalMode('leader')}
+                                                            disabled={isLeader}
+                                                            className="flex-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-800 disabled:opacity-60 disabled:cursor-default"
+                                                        >
+                                                            Student Leader
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                             <div className="p-2">
                                                 <button
-                                                    onClick={() => signOut({ callbackUrl: '/' })}
+                                                    onClick={handleSignOut}
                                                     className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                 >
                                                     <LogOut size={16} />
@@ -234,8 +325,28 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                                     )}
                                                 </div>
                                             </div>
+                                            {isLeaderAccount && (
+                                                <div className="grid grid-cols-2 gap-2 mb-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => switchPortalMode('student')}
+                                                        disabled={!isLeader}
+                                                        className="rounded-lg border border-gray-200 px-2 py-2 text-xs font-medium text-gray-700 disabled:opacity-60 disabled:cursor-default"
+                                                    >
+                                                        Student Mode
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => switchPortalMode('leader')}
+                                                        disabled={isLeader}
+                                                        className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-xs font-medium text-amber-800 disabled:opacity-60 disabled:cursor-default"
+                                                    >
+                                                        Leader Mode
+                                                    </button>
+                                                </div>
+                                            )}
                                             <button
-                                                onClick={() => { signOut({ callbackUrl: '/' }); setMobileOpen(false); }}
+                                                onClick={() => { setMobileOpen(false); handleSignOut(); }}
                                                 className="w-full flex items-center justify-center gap-2 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
                                             >
                                                 <LogOut size={16} />

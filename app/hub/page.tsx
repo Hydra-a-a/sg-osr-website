@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { MapPin, Bus, BookOpen, Lock, Calendar, ZoomIn, ZoomOut, RotateCcw, X, Search } from 'lucide-react';
+import { MapPin, Bus, BookOpen, Lock, Calendar, ZoomIn, ZoomOut, RotateCcw, X, Search, ExternalLink, Download, FileText } from 'lucide-react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
+import useSWR from 'swr';
 
 const hubItems = [
     {
@@ -12,18 +13,21 @@ const hubItems = [
         desc: 'Interactive maps for Mandaluyong and Pasig campuses, including building directories and room locators.',
         icon: MapPin,
         accent: 'blue' as const,
+        comingSoon: true,
     },
     {
         title: 'Commuter Guides',
         desc: 'Route guides, jeepney/bus schedules, and transportation tips for students commuting to RTU.',
         icon: Bus,
         accent: 'gold' as const,
+        comingSoon: true,
     },
     {
         title: 'Student Handbooks & Guides',
         desc: 'Academic calendars, enrollment guides, org registration procedures, and other essential student resources.',
         icon: BookOpen,
         accent: 'blue' as const,
+        comingSoon: false,
     },
 ];
 
@@ -32,12 +36,64 @@ const accentStyles = {
     gold: { bg: 'rgba(212, 168, 67, 0.1)', color: 'var(--rtu-gold-dark)' },
 };
 
+type HubGuide = {
+    id: string;
+    title: string;
+    description: string;
+    category: string;
+    source: 'drive' | 'direct';
+    embedUrl: string;
+    viewUrl: string;
+    downloadUrl: string;
+    mimeType: 'application/pdf';
+    sortOrder: number;
+    updatedAt: string;
+};
+
+const hubFetcher = async (url: string) => {
+    const response = await fetch(url, { cache: 'no-store' });
+    const json = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        const fallbackMessage = 'Unable to load hub guides at the moment.';
+        const message = typeof json?.error?.message === 'string'
+            ? json.error.message
+            : typeof json?.error === 'string'
+                ? json.error
+                : fallbackMessage;
+        throw new Error(message);
+    }
+
+    return json as { data?: HubGuide[] };
+};
+
 export default function HubPage() {
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [zoom, setZoom] = useState(1);
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [dragging, setDragging] = useState(false);
+    const [selectedGuideId, setSelectedGuideId] = useState('');
     const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+    const { data: guidesResponse, error: guidesError, isLoading: guidesLoading } = useSWR('/api/hub/guides', hubFetcher, {
+        revalidateOnFocus: false,
+    });
+
+    const guides = guidesResponse?.data || [];
+    const preferredGuide = guides.find((guide) => guide.title.toLowerCase().includes('student government code'));
+    const fallbackGuideId = preferredGuide?.id || guides[0]?.id || '';
+    const resolvedSelectedGuideId = guides.some((guide) => guide.id === selectedGuideId)
+        ? selectedGuideId
+        : fallbackGuideId;
+    const selectedGuide = guides.find((guide) => guide.id === resolvedSelectedGuideId) || null;
+
+    const goToGuides = () => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const section = document.getElementById('student-guides');
+        section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
 
     const openLightbox = () => {
         setLightboxOpen(true);
@@ -175,14 +231,28 @@ export default function HubPage() {
                         {hubItems.map((item) => {
                             const style = accentStyles[item.accent];
                             return (
-                                <div key={item.title} className="feature-card card p-6 md:p-8 flex flex-col items-center text-center relative overflow-hidden">
+                                <div
+                                    key={item.title}
+                                    className={`feature-card card p-6 md:p-8 flex flex-col items-center text-center relative overflow-hidden ${item.comingSoon ? '' : 'cursor-pointer'}`}
+                                    onClick={item.comingSoon ? undefined : goToGuides}
+                                    onKeyDown={item.comingSoon ? undefined : (event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            goToGuides();
+                                        }
+                                    }}
+                                    role={item.comingSoon ? undefined : 'button'}
+                                    tabIndex={item.comingSoon ? undefined : 0}
+                                >
                                     {/* Coming Soon Overlay */}
-                                    <div className="coming-soon-overlay">
-                                        <Lock size={28} className="text-subtle mb-2" />
-                                        <span className="coming-soon-label">
-                                            Coming Soon
-                                        </span>
-                                    </div>
+                                    {item.comingSoon ? (
+                                        <div className="coming-soon-overlay">
+                                            <Lock size={28} className="text-subtle mb-2" />
+                                            <span className="coming-soon-label">
+                                                Coming Soon
+                                            </span>
+                                        </div>
+                                    ) : null}
 
                                     <div
                                         className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5"
@@ -198,6 +268,107 @@ export default function HubPage() {
                             );
                         })}
                     </div>
+                </div>
+            </section>
+
+            <section id="student-guides" className="section bg-surface-base scroll-mt-24">
+                <div className="container-main">
+                    <div className="text-center mb-10">
+                        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: 'rgba(0, 43, 127, 0.1)', color: 'var(--rtu-blue)' }}>
+                            <FileText size={28} />
+                        </div>
+                        <h2 className="text-3xl font-bold mb-2 section-heading text-brand">
+                            Student Handbooks &amp; Guides
+                        </h2>
+                        <p className="text-subtle max-w-2xl mx-auto">
+                            This section is for files relevant to get to know the Campus, Student Government, and other important resources.
+                        </p>
+                    </div>
+
+                    {guidesLoading ? (
+                        <div className="card p-8 text-center text-subtle">Loading Student Government Code and guide documents...</div>
+                    ) : guidesError ? (
+                        <div className="card p-8 border border-red-200 bg-red-50 text-red-700 text-center">
+                            {guidesError instanceof Error ? guidesError.message : 'Unable to load student guides at this time.'}
+                        </div>
+                    ) : guides.length === 0 ? (
+                        <div className="card p-8 text-center text-subtle">
+                            No PDF guides are published yet. Add or unhide rows in the Transparency Hub sheet to make guides appear here.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+                            <div className="card p-4 sm:p-5 max-h-[34rem] overflow-auto">
+                                <h3 className="font-bold text-brand mb-3">Available Guides</h3>
+                                <div className="space-y-2">
+                                    {guides.map((guide) => {
+                                        const isSelected = guide.id === resolvedSelectedGuideId;
+                                        return (
+                                            <button
+                                                key={guide.id}
+                                                type="button"
+                                                onClick={() => setSelectedGuideId(guide.id)}
+                                                className={`w-full text-left rounded-xl border px-3 py-3 transition-colors ${isSelected
+                                                    ? 'bg-blue-50'
+                                                    : 'border-soft hover:bg-surface-soft'}`}
+                                                style={isSelected ? { borderColor: 'var(--rtu-blue)' } : undefined}
+                                            >
+                                                <p className="text-sm font-semibold text-strong">{guide.title}</p>
+                                                {guide.description && (
+                                                    <p className="mt-1 text-xs text-subtle leading-relaxed">{guide.description}</p>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {selectedGuide && (
+                                <div className="card p-4 sm:p-6">
+                                    <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                                        <div>
+                                            <h3 className="text-xl font-bold text-brand">{selectedGuide.title}</h3>
+                                            {selectedGuide.description && (
+                                                <p className="text-sm text-subtle mt-1">{selectedGuide.description}</p>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <a
+                                                href={selectedGuide.viewUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="btn-secondary text-sm inline-flex items-center gap-1.5"
+                                            >
+                                                <ExternalLink size={14} /> Open
+                                            </a>
+                                            <a
+                                                href={selectedGuide.downloadUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="btn-primary text-sm inline-flex items-center gap-1.5"
+                                            >
+                                                <Download size={14} /> Download PDF
+                                            </a>
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-xl overflow-hidden border border-soft bg-white">
+                                        <iframe
+                                            title={`${selectedGuide.title} PDF Preview`}
+                                            src={selectedGuide.embedUrl}
+                                            className="w-full h-[38rem] bg-white"
+                                            loading="lazy"
+                                            referrerPolicy="strict-origin-when-cross-origin"
+                                            sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+                                        />
+                                    </div>
+
+                                    <p className="micro-note text-subtle mt-3">
+                                        PDF-only enforcement is active. Non-PDF links are ignored automatically.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </section>
 

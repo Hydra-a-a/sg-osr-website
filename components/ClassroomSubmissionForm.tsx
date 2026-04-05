@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { CheckCircle, AlertCircle, ExternalLink, GraduationCap, ClipboardCheck, Loader2 } from 'lucide-react';
+import { deriveEffectivePortalRole, normalizePortalRole, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
 
 interface ClassroomCourse {
     id: string;
@@ -43,6 +44,7 @@ const apiFetcher = async (url: string) => {
 
 export default function ClassroomSubmissionForm() {
     const { data: session, status } = useSession();
+    const [portalMode, setPortalMode] = useState('');
     const [selectedCourseId, setSelectedCourseId] = useState('');
     const [selectedCourseWorkId, setSelectedCourseWorkId] = useState('');
     const [reportLink, setReportLink] = useState('');
@@ -52,8 +54,22 @@ export default function ClassroomSubmissionForm() {
     const [classroomResult, setClassroomResult] = useState<{ success: boolean; message: string } | null>(null);
     const [recentClassroomSubmission, setRecentClassroomSubmission] = useState<RecentClassroomSubmission | null>(null);
 
+    useEffect(() => {
+        if (typeof document === 'undefined') {
+            return;
+        }
+
+        const cookie = document.cookie
+            .split(';')
+            .map((part) => part.trim())
+            .find((part) => part.startsWith(`${PORTAL_MODE_COOKIE}=`));
+
+        setPortalMode(cookie ? decodeURIComponent(cookie.slice(PORTAL_MODE_COOKIE.length + 1)) : '');
+    }, [status]);
+
     const isAuthenticated = status === 'authenticated' && Boolean(session?.user?.email);
-    const isLeader = session?.user?.role === 'leader';
+    const isLeader = deriveEffectivePortalRole(session?.user?.role, portalMode) === 'leader';
+    const isLeaderAccountInStudentMode = normalizePortalRole(session?.user?.role) === 'leader' && !isLeader;
 
     const { data: coursesResponse, error: coursesError, isLoading: coursesLoading } = useSWR(
         isAuthenticated && isLeader ? '/api/classroom/courses' : null,
@@ -167,7 +183,7 @@ export default function ClassroomSubmissionForm() {
             {!isAuthenticated ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                     <p className="text-sm text-amber-900">
-                        Log in with your <strong>@rtu.edu.ph</strong> account to access Classroom submission tools.
+                        People with <strong>Student Leader Access</strong> can log in with their <strong>@rtu.edu.ph</strong> account to access Classroom submission tools.
                     </p>
                     <Link
                         href={`/login?callbackUrl=${encodeURIComponent('/transparency')}`}
@@ -178,7 +194,9 @@ export default function ClassroomSubmissionForm() {
                 </div>
             ) : !isLeader ? (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-                    Classroom submission tools are available to authenticated student leaders.
+                    {isLeaderAccountInStudentMode
+                        ? 'You are signed in as a Student Leader account in Student Access mode. Switch to Student Leader mode from your profile menu, or sign in with Student Leader Access, to open Classroom tools.'
+                        : 'Classroom submission tools are available to authenticated student leaders.'}
                 </div>
             ) : (
                 <form onSubmit={handleClassroomSubmit} className="space-y-5">

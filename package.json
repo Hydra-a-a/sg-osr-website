@@ -12,7 +12,9 @@
     "test:csp-policy": "node tests/test-csp-policy.js",
     "test:redacted-logging": "node tests/test-redacted-logging.js",
     "test:ticket-security-hardening": "node tests/test-ticket-security-hardening.js",
-    "test:security": "npm run test:forms-auth-guard && npm run test:api-error-envelope && npm run test:csp-policy && npm run test:redacted-logging && npm run test:ticket-security-hardening"
+    "test:portal-mode-auth": "node tests/test-portal-mode-auth.js",
+    "test:hub-guides-pdf-gating": "node tests/test-hub-guides-pdf-gating.js",
+    "test:security": "npm run test:forms-auth-guard && npm run test:api-error-envelope && npm run test:csp-policy && npm run test:redacted-logging && npm run test:ticket-security-hardening && npm run test:portal-mode-auth && npm run test:hub-guides-pdf-gating"
   },
   "overrides": {
     "jsdom": {

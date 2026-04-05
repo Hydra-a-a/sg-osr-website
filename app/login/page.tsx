@@ -7,10 +7,28 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck, ChevronLeft, AlertTriangle } from 'lucide-react';
+import { LEADER_ATTEMPT_COOKIE, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
+
+function writePortalSelectionCookies(portal: 'student' | 'leader') {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${PORTAL_MODE_COOKIE}=${portal}; Path=/; Max-Age=1209600; SameSite=Lax${secure}`;
+
+    if (portal === 'leader') {
+        document.cookie = `${LEADER_ATTEMPT_COOKIE}=1; Path=/; Max-Age=1200; SameSite=Lax${secure}`;
+        return;
+    }
+
+    document.cookie = `${LEADER_ATTEMPT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+}
 
 function LoginContent() {
     const [isLoading, setIsLoading] = useState(false);
     const [activePortal, setActivePortal] = useState<'student' | 'leader' | null>(null);
+    const [isFacebookLite, setIsFacebookLite] = useState(false);
     const [localSimError, setLocalSimError] = useState<string | null>(null);
     const [devEmail, setDevEmail] = useState('student@rtu.edu.ph');
     const [devRole, setDevRole] = useState<'student' | 'leader'>('student');
@@ -28,6 +46,20 @@ function LoginContent() {
 
         const frame = window.requestAnimationFrame(() => {
             setIsLocalHost(['localhost', '127.0.0.1', '::1'].includes(window.location.hostname));
+        });
+
+        return () => window.cancelAnimationFrame(frame);
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const frame = window.requestAnimationFrame(() => {
+            const ua = (window.navigator.userAgent || '').toLowerCase();
+            const isLite = ua.includes('fblite') || ua.includes('fb_iab/fblite') || ua.includes('fb_lite');
+            setIsFacebookLite(isLite);
         });
 
         return () => window.cancelAnimationFrame(frame);
@@ -54,11 +86,13 @@ function LoginContent() {
         ? errorMessages[errorParam] || errorMessages.Default
         : null;
     const errorMessage = localSimError || authErrorMessage;
+    const showFacebookLiteHelp = isFacebookLite && (errorParam === 'OAuthSignin' || errorParam === 'OAuthCallback');
 
     const handleLogin = async (portal: 'student' | 'leader') => {
         setLocalSimError(null);
         setIsLoading(true);
         setActivePortal(portal);
+        writePortalSelectionCookies(portal);
         try {
             await signIn('google', { callbackUrl });
         } catch {
@@ -84,6 +118,7 @@ function LoginContent() {
         setLocalSimError(null);
         setIsLoading(true);
         setActivePortal(devRole);
+        writePortalSelectionCookies(devRole);
         try {
             await signIn('dev-sim', {
                 email: normalizedEmail,
@@ -155,6 +190,21 @@ function LoginContent() {
                                     >
                                         <AlertTriangle className="text-red-500 mt-0.5 shrink-0" size={18} />
                                         <p className="text-sm text-red-700">{errorMessage}</p>
+                                    </motion.div>
+                                )}
+
+                                {showFacebookLiteHelp && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg"
+                                    >
+                                        <p className="text-sm font-semibold text-amber-800">Facebook Lite sign-in fallback</p>
+                                        <ol className="mt-2 text-sm text-amber-700 list-decimal pl-5 space-y-1">
+                                            <li>Tap the 3-dot menu in Facebook Lite.</li>
+                                            <li>Choose Open in browser.</li>
+                                            <li>Use Chrome, Safari, Firefox, or Edge to continue Google sign-in.</li>
+                                        </ol>
                                     </motion.div>
                                 )}
 

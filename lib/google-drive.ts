@@ -4,7 +4,7 @@ import { google } from 'googleapis';
 import { getGoogleServiceAccountCredentials } from '@/lib/google-credentials';
 import { redactErrorForLog } from '@/lib/security';
 
-const DEFAULT_GRIEVANCE_ATTACHMENTS_FOLDER_ID = '1doPHXkNvG8pzi0nuxCYI-TgFaQcfUePX';
+const DEFAULT_GRIEVANCE_ATTACHMENTS_FOLDER_ID = '1MUiWHPcAgCHtU8sfIBDp-lGX43wluJTi';
 
 function getDriveClient() {
     const auth = new google.auth.GoogleAuth({
@@ -15,6 +15,65 @@ function getDriveClient() {
     });
 
     return google.drive({ version: 'v3', auth });
+}
+
+export function extractGoogleDriveFileId(url: string): string | null {
+    if (!url) {
+        return null;
+    }
+
+    try {
+        const parsed = new URL(url);
+        const hostname = parsed.hostname.toLowerCase();
+        const isGoogleDriveHost = hostname === 'drive.google.com' || hostname === 'www.drive.google.com';
+        const isGoogleDocsHost = hostname === 'docs.google.com' || hostname === 'www.docs.google.com';
+
+        if (!isGoogleDriveHost && !isGoogleDocsHost) {
+            return null;
+        }
+
+        const filePathMatch = parsed.pathname.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+        if (filePathMatch?.[1]) {
+            return filePathMatch[1];
+        }
+
+        const idParam = parsed.searchParams.get('id');
+        if (idParam && /^[a-zA-Z0-9_-]{10,}$/.test(idParam)) {
+            return idParam;
+        }
+
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+export async function getDriveFileMetadataById(fileId: string): Promise<{
+    id?: string | null;
+    name?: string | null;
+    mimeType?: string | null;
+    webViewLink?: string | null;
+    webContentLink?: string | null;
+} | null> {
+    const normalizedFileId = (fileId || '').trim();
+    if (!normalizedFileId) {
+        return null;
+    }
+
+    const drive = getDriveClient();
+
+    try {
+        const response = await drive.files.get({
+            fileId: normalizedFileId,
+            fields: 'id,name,mimeType,webViewLink,webContentLink',
+            supportsAllDrives: true,
+        });
+
+        return response.data || null;
+    } catch (error) {
+        console.error('[Drive Metadata] Failed to resolve file metadata:', redactErrorForLog(error));
+        return null;
+    }
 }
 
 function getAttachmentsFolderId(): string {
