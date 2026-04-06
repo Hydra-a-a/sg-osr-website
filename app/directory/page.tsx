@@ -161,6 +161,9 @@ const normalizeCategory = (category?: string): string => {
     if (c.includes('supreme student council')) {
         return 'ssc';
     }
+    if (c.includes('constitutional commission') || c.includes('constitutional commision')) {
+        return 'ssc';
+    }
     if (c.includes('central student council')) {
         return 'csc';
     }
