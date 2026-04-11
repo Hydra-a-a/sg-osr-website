@@ -326,6 +326,15 @@ async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRecord>> 
                     return; // Skip rows explicitly marked as student
                 }
 
+                const existingUser = users.get(email);
+                if (existingUser) {
+                    const currentPriority = existingUser.role === 'officer' ? 2 : 1;
+                    const newPriority = role === 'officer' ? 2 : 1;
+                    if (newPriority <= currentPriority) {
+                        return; // Retain the higher-privileged role
+                    }
+                }
+
                 users.set(email, {
                     email,
                     name: (row[nameIndex] || '').toString().trim(),

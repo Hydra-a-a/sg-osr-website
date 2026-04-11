@@ -29,7 +29,12 @@ export async function getSheetData(spreadsheetId: string, range: string) {
                 range,
             },
             {
-                timeout: 8000 // don't let vercel hang forever or we get billed
+                timeout: 8000, // don't let vercel hang forever or we get billed
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0',
+                },
             }
         );
 
@@ -96,6 +101,11 @@ export async function getSheetDataWithHyperlinks(spreadsheetId: string, range: s
             },
             {
                 timeout: 8000,
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0',
+                },
             }
         );
 
