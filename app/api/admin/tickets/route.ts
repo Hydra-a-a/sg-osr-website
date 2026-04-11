@@ -9,6 +9,7 @@ import { PORTAL_MODE_COOKIE, deriveEffectivePortalRole } from '@/lib/portal-mode
 import { TICKET_COLS } from '@/lib/tickets';
 import type { TicketStatus } from '@/lib/ticket-constants';
 import { emitGrievanceAdminUpdateNotifications, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
+import { triggerTicketQueueInBackground } from '@/lib/queue-trigger';
 
 const TICKET_RANGE = 'Tickets!A2:AF';
 const TICKET_STATUS_VALUES = ['Open', 'In Progress', 'Resolved', 'Closed', 'Appealed'] as const;
@@ -255,6 +256,9 @@ export async function PATCH(request: NextRequest) {
                 updatedAt: nowIso,
             });
         }
+
+        // Kick off queue processing immediately in the background (fire-and-forget).
+        triggerTicketQueueInBackground();
 
         return withNoStore(NextResponse.json({
             success: true,

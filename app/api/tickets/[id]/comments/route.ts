@@ -11,6 +11,7 @@ import { lookupTicketByIdForOwner, TICKET_COLS } from '@/lib/tickets';
 import { deriveEffectivePortalRole, hasLeaderPrivilege } from '@/lib/portal-mode';
 import { uploadTicketAttachmentToDrive } from '@/lib/google-drive';
 import { emitGrievanceCommentNotifications, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
+import { triggerTicketQueueInBackground } from '@/lib/queue-trigger';
 
 const COMMENTS_TAB = 'Ticket_Comments_Appeals';
 const COMMENTS_RANGE = `${COMMENTS_TAB}!A2:H`;
@@ -73,7 +74,7 @@ function getTicketSpreadsheetId(): string {
 
 function isTerminalAppealStatus(value: unknown): boolean {
     const normalized = String(value || '').trim().toLowerCase();
-    return normalized === 'closed' || normalized === 'rejected';
+    return normalized === 'closed' || normalized === 'rejected' || normalized === 'resolved';
 }
 
 function toPHTString(isoUtc: string): string {
@@ -371,6 +372,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 isAppeal: comment.isAppeal,
             });
         }
+
+        // Kick off queue processing immediately in the background (fire-and-forget).
+        triggerTicketQueueInBackground();
 
         return withNoStore(NextResponse.json({
             success: true,

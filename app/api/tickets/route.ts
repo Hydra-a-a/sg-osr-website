@@ -14,6 +14,7 @@ import {
     writeTicketToSheet,
 } from '@/lib/tickets';
 import { emitGrievanceSubmissionNotifications } from '@/lib/grievance-notifications';
+import { triggerTicketQueueInBackground } from '@/lib/queue-trigger';
 
 const TICKET_NOTIFICATION_QUEUE_SHEET_TAB = process.env.TICKET_NOTIFICATION_QUEUE_SHEET_TAB || 'Ticket_Notification_Queue';
 const TICKET_NOTIFICATION_QUEUE_RANGE = `${TICKET_NOTIFICATION_QUEUE_SHEET_TAB}!A2:N`;
@@ -433,6 +434,10 @@ export async function POST(request: Request) {
             optionalUpdateChannel: optionalUpdatesChannel,
             optionalUpdateDestinationStatus: 'Unverified',
         });
+
+        // Kick off queue processing immediately in the background (fire-and-forget).
+        // The GitHub Actions scheduler is the safety net if this fails.
+        triggerTicketQueueInBackground();
 
         // Still log the success
         logAuditAction('TICKET_SUBMITTED', {
