@@ -44,9 +44,11 @@ export async function getSheetData(spreadsheetId: string, range: string) {
             return [];
         }
         return rows;
-    } catch (error) {
-        console.error("Error fetching Google Sheets data:", redactErrorForLog(error));
-        throw new Error("Failed to fetch data from Google Sheets");
+    } catch (error: any) {
+        // Stop hiding the error behind a generic message so we can debug rate limits or bad ranges!
+        const errMsg = error?.response?.data?.error?.message || error?.message || 'Unknown Google API Error';
+        console.error("Error fetching Google Sheets data:", errMsg, redactErrorForLog(error));
+        throw new Error(`Google API Error: ${errMsg}`);
     }
 }
 

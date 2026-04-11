@@ -323,12 +323,9 @@ export async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRe
         cachedUsers = users;
         cacheTimestamp = now;
         return users;
-    } catch (error) {
-        console.error('[Auth] Failed to fetch authorized users:', redactErrorForLog(error));
-        // Fail closed: never grant elevated role when auth source is unavailable.
-        cachedUsers = null;
-        cacheTimestamp = 0;
-        return new Map();
+    } catch (error: any) {
+        console.error('[Auth] Failed to load Google Sheet:', error);
+        throw error;
     }
 }
 
