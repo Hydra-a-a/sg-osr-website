@@ -237,7 +237,7 @@ function firstExistingIndex(headerMap: Map<string, number>, keys: string[], fall
     return fallback;
 }
 
-async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRecord>> {
+export async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRecord>> {
     const now = Date.now();
     if (cachedUsers && now - cacheTimestamp < CACHE_TTL) {
         return cachedUsers;
