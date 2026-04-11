@@ -122,6 +122,24 @@ function parseEnabledValue(value: unknown): boolean {
     return true;
 }
 
+function inferUserRoleFromRow(row: string[]): PortalRole {
+    const normalized = row.join(' ').trim().toLowerCase();
+
+    if (!normalized) {
+        return 'leader';
+    }
+
+    if (normalized.includes('officer') || normalized.includes('admin')) {
+        return 'officer';
+    }
+
+    if (normalized.includes('leader')) {
+        return 'leader';
+    }
+
+    return 'leader';
+}
+
 /**
  * Parses the role column value from Google Sheets into a PortalRole.
  * - 'officer' / 'admin' / 'grievance_officer' → 'officer'
@@ -131,10 +149,22 @@ function parseEnabledValue(value: unknown): boolean {
 function parseUserRole(value: unknown): PortalRole {
     const normalized = String(value ?? '').trim().toLowerCase();
     if (!normalized) return 'leader'; // Backwards compat: no role column = leader
-    if (['officer', 'admin', 'grievance_officer', 'grievance officer'].includes(normalized)) {
+    if (
+        normalized.includes('officer')
+        || normalized.includes('admin')
+        || normalized.includes('grievance officer')
+        || normalized.includes('grievance_officer')
+    ) {
         return 'officer';
     }
-    if (['leader', 'student_leader', 'student leader', 'student leader access', 'leader access', 'sl'].includes(normalized)) {
+    if (
+        normalized.includes('leader')
+        || normalized.includes('student_leader')
+        || normalized.includes('student leader')
+        || normalized.includes('student leader access')
+        || normalized.includes('leader access')
+        || normalized === 'sl'
+    ) {
         return 'leader';
     }
     return 'student';
@@ -214,7 +244,7 @@ async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRecord>> 
             ? firstExistingIndex(headerMap, ['access_enabled', 'enabled', 'active', 'status'], -1)
             : -1;
         const roleIndex = headerMap
-            ? firstExistingIndex(headerMap, ['role', 'access_role', 'account_role'], -1)
+            ? firstExistingIndex(headerMap, ['role', 'access_role', 'account_role', 'access_level', 'access', 'permission', 'designation', 'position'], -1)
             : -1;
 
         const firstDataIndex = headerMap ? 1 : 0;
@@ -231,8 +261,9 @@ async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRecord>> 
                     return;
                 }
 
-                // Parse the granular role — students in the sheet are filtered out
-                const role = roleIndex >= 0 ? parseUserRole(row[roleIndex]) : 'leader';
+                // Parse the granular role — students in the sheet are filtered out.
+                // Fall back to row-level inference if the sheet uses a broader access label.
+                const role = roleIndex >= 0 ? parseUserRole(row[roleIndex]) : inferUserRoleFromRow(row);
                 if (role === 'student') {
                     return; // Skip rows explicitly marked as student
                 }
