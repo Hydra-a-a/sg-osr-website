@@ -122,6 +122,23 @@ function parseEnabledValue(value: unknown): boolean {
     return true;
 }
 
+function parseOfficerAccessFlag(value: unknown): boolean {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (!normalized) return false;
+
+    return [
+        '1',
+        'true',
+        'yes',
+        'y',
+        'enabled',
+        'allow',
+        'allowed',
+        'officer',
+        'admin',
+    ].includes(normalized);
+}
+
 function inferUserRoleFromRow(row: string[]): PortalRole {
     const normalized = row.join(' ').trim().toLowerCase();
 
@@ -270,6 +287,9 @@ async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRecord>> 
         const roleIndex = headerMap
             ? firstExistingIndex(headerMap, ['role', 'access_role', 'account_role', 'access_level', 'access', 'permission', 'designation', 'position'], -1)
             : -1;
+        const officerAccessIndex = headerMap
+            ? firstExistingIndex(headerMap, ['officer_access', 'is_officer', 'officer', 'admin_access', 'has_officer_access', 'officer_mode'], -1)
+            : -1;
 
         const firstDataIndex = headerMap ? 1 : 0;
         const lastAccessColumnLetter = columnIndexToLetter(lastAccessIndex);
@@ -285,9 +305,12 @@ async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRecord>> 
                     return;
                 }
 
+                const hasExplicitOfficerAccess = officerAccessIndex >= 0 && parseOfficerAccessFlag(row[officerAccessIndex]);
+
                 // Parse the granular role — students in the sheet are filtered out.
                 // Fall back to row-level inference if the sheet uses a broader access label.
-                const role = roleIndex >= 0 ? parseUserRole(row[roleIndex]) : inferUserRoleFromRow(row);
+                const inferredRole = roleIndex >= 0 ? parseUserRole(row[roleIndex]) : inferUserRoleFromRow(row);
+                const role = hasExplicitOfficerAccess ? 'officer' : inferredRole;
                 if (role === 'student') {
                     return; // Skip rows explicitly marked as student
                 }
