@@ -77,7 +77,12 @@ async function refreshGoogleAccessToken(token: JWT): Promise<JWT> {
 
 function getAuthSheetConfig(): { spreadsheetId: string; range: string } | null {
     const spreadsheetId = process.env.GOOGLE_SHEETS_AUTH_ID;
-    const range = process.env.GOOGLE_SHEETS_AUTH_TAB ?? 'SL Access!A1:Z';
+    const envTab = process.env.GOOGLE_SHEETS_AUTH_TAB || 'SL Access';
+    
+    // The user's env variable contains "!A2:E" which cuts off the "Role" column (Col F) and skips the headers (Row 1).
+    // We forcefully strip it to the tab name and enforce !A1:Z
+    const tabNameOnly = envTab.split('!')[0];
+    const range = `${tabNameOnly}!A1:Z`;
 
     if (!spreadsheetId) {
         console.error('[Auth] Missing GOOGLE_SHEETS_AUTH_ID; leader mapping disabled.');
