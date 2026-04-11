@@ -255,44 +255,18 @@ export async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRe
         const startRow = parseRangeStartRow(config.range);
 
         const headerMap = detectHeaderMap(rows);
-        const emailIndex = headerMap
-            ? firstExistingIndex(
-                headerMap,
-                [
-                    'email',
-                    'email_address',
-                    'rtu_email',
-                    'rtu_email_address',
-                    'school_email',
-                    'school_email_address',
-                    'account_email',
-                    'institutional_email',
-                    'institutional_email_address',
-                ],
-                0
-            )
-            : 0;
-        const nameIndex = headerMap
-            ? firstExistingIndex(headerMap, ['name', 'full_name', 'display_name'], 1)
-            : 1;
-        const councilIndex = headerMap
-            ? firstExistingIndex(headerMap, ['council', 'unit', 'department'], 2)
-            : 2;
-        const lastAccessIndex = headerMap
-            ? firstExistingIndex(headerMap, ['last_access_date', 'last_access', 'last_login_at', 'last_login_date'], 3)
-            : 3;
-        const enabledIndex = headerMap
-            ? firstExistingIndex(headerMap, ['access_enabled', 'enabled', 'active', 'status'], -1)
-            : -1;
-        const roleIndex = headerMap
-            ? firstExistingIndex(headerMap, ['role', 'access_role', 'account_role', 'access_level', 'access', 'permission', 'designation', 'position'], -1)
-            : -1;
-        const officerAccessIndex = headerMap
-            ? firstExistingIndex(headerMap, ['officer_access', 'is_officer', 'officer', 'admin_access', 'has_officer_access', 'officer_mode'], -1)
-            : -1;
-
-        const firstDataIndex = headerMap ? 1 : 0;
-        const lastAccessColumnLetter = columnIndexToLetter(lastAccessIndex);
+        
+        // Exact column map based on the screenshot: A=0 (Email), B=1 (Name), C=2 (Council), D=3 (LastLogin), E=4 (AccessEnabled), F=5 (Role), G=6 (ApprovedBy)
+        const emailIndex = headerMap ? firstExistingIndex(headerMap, ['email', 'email_address', 'rtu_email'], 0) : 0;
+        const nameIndex = headerMap ? firstExistingIndex(headerMap, ['name', 'full_name', 'user_name'], 1) : 1;
+        const councilIndex = headerMap ? firstExistingIndex(headerMap, ['council', 'unit', 'department', 'council_name'], 2) : 2;
+        const lastAccessIndex = headerMap ? firstExistingIndex(headerMap, ['last_login', 'last_access'], 3) : 3;
+        const enabledIndex = headerMap ? firstExistingIndex(headerMap, ['access_enabled', 'enabled'], 4) : 4; // Failsafe to col E
+        const roleIndex = headerMap ? firstExistingIndex(headerMap, ['role', 'access_level', 'position'], 5) : 5; // Failsafe to col F
+        const officerAccessIndex = headerMap ? firstExistingIndex(headerMap, ['officer_access', 'is_officer'], -1) : -1;
+        
+        const firstDataIndex = headerMap ? 1 : 1; // Always assume row 1 is header
+        const lastAccessColumnLetter = columnIndexToLetter(lastAccessIndex >= 0 ? lastAccessIndex : 3);
 
         if (rows && rows.length > 0) {
             rows.forEach((row, i) => {
