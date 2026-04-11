@@ -1,0 +1,73 @@
+name: Notification Email Scheduler
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notification-email-scheduler
+  cancel-in-progress: false
+
+jobs:
+  process-queues:
+    name: Process Ticket and Proposal Email Queues
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_URL: ${{ secrets.SCHEDULER_BASE_URL }}
+      CRON_BEARER_TOKEN: ${{ secrets.SCHEDULER_CRON_SECRET }}
+    steps:
+      - name: Validate scheduler secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${BASE_URL:-}" ]]; then
+            echo "Missing secret: SCHEDULER_BASE_URL"
+            exit 1
+          fi
+          if [[ -z "${CRON_BEARER_TOKEN:-}" ]]; then
+            echo "Missing secret: SCHEDULER_CRON_SECRET"
+            exit 1
+          fi
+
+      - name: Process ticket notification queue
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-all-errors --retry-delay 5 \
+            --request GET \
+            --url "${BASE_URL}/api/tickets/queue/process?limit=50" \
+            --header "Authorization: Bearer ${CRON_BEARER_TOKEN}" \
+            --header "x-ticket-sync-secret: ${CRON_BEARER_TOKEN}" \
+            --header "Accept: application/json"
+
+      - name: Process ticket sync updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 15
+          curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-all-errors --retry-delay 5 \
+            --request GET \
+            --url "${BASE_URL}/api/tickets/sync-updates" \
+            --header "Authorization: Bearer ${CRON_BEARER_TOKEN}" \
+            --header "x-ticket-sync-secret: ${CRON_BEARER_TOKEN}" \
+            --header "Accept: application/json"
+
+      - name: Process proposal notification queue
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 15
+          curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-all-errors --retry-delay 5 \
+            --request GET \
+            --url "${BASE_URL}/api/proposals/queue/process?limit=50" \
+            --header "Authorization: Bearer ${CRON_BEARER_TOKEN}" \
+            --header "x-proposal-sync-secret: ${CRON_BEARER_TOKEN}" \
+            --header "Accept: application/json"
