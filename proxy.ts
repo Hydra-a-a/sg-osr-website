@@ -37,7 +37,7 @@ function buildCspHeader(nonce: string): string {
       object-src 'none';
       base-uri 'self';
       form-action 'self' https://accounts.google.com;
-      frame-src 'self' https://*.youtube.com https://*.drive.google.com https://accounts.google.com;
+      frame-src 'self' https://*.youtube.com https://drive.google.com https://*.drive.google.com https://accounts.google.com;
       frame-ancestors 'self';
       connect-src 'self' https://*.google.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.ingest.sentry.io https://ingest.sentry.io;
       worker-src 'self' blob:;
@@ -62,7 +62,7 @@ function buildCspReportOnlyHeader(nonce: string): string {
       object-src 'none';
       base-uri 'self';
       form-action 'self' https://accounts.google.com;
-      frame-src 'self' https://*.youtube.com https://*.drive.google.com https://accounts.google.com;
+      frame-src 'self' https://*.youtube.com https://drive.google.com https://*.drive.google.com https://accounts.google.com;
       frame-ancestors 'self';
       connect-src 'self' https://*.google.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.ingest.sentry.io https://ingest.sentry.io;
       worker-src 'self' blob:;
