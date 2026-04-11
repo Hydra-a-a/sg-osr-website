@@ -196,7 +196,17 @@ function detectHeaderMap(rows: string[][]): Map<string, number> | null {
         }
     });
 
-    const hasEmailHeader = map.has('email') || map.has('rtu_email') || map.has('school_email') || map.has('account_email');
+    const hasEmailHeader = [
+        'email',
+        'email_address',
+        'rtu_email',
+        'rtu_email_address',
+        'school_email',
+        'school_email_address',
+        'account_email',
+        'institutional_email',
+        'institutional_email_address',
+    ].some((key) => map.has(key));
     return hasEmailHeader ? map : null;
 }
 
@@ -229,7 +239,21 @@ async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRecord>> 
 
         const headerMap = detectHeaderMap(rows);
         const emailIndex = headerMap
-            ? firstExistingIndex(headerMap, ['email', 'rtu_email', 'school_email', 'account_email'], 0)
+            ? firstExistingIndex(
+                headerMap,
+                [
+                    'email',
+                    'email_address',
+                    'rtu_email',
+                    'rtu_email_address',
+                    'school_email',
+                    'school_email_address',
+                    'account_email',
+                    'institutional_email',
+                    'institutional_email_address',
+                ],
+                0
+            )
             : 0;
         const nameIndex = headerMap
             ? firstExistingIndex(headerMap, ['name', 'full_name', 'display_name'], 1)
