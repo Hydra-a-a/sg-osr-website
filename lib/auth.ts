@@ -77,7 +77,7 @@ async function refreshGoogleAccessToken(token: JWT): Promise<JWT> {
 
 function getAuthSheetConfig(): { spreadsheetId: string; range: string } | null {
     const spreadsheetId = process.env.GOOGLE_SHEETS_AUTH_ID;
-    const range = process.env.GOOGLE_SHEETS_AUTH_TAB ?? 'SL Access!A1:K';
+    const range = process.env.GOOGLE_SHEETS_AUTH_TAB ?? 'SL Access!A1:Z';
 
     if (!spreadsheetId) {
         console.error('[Auth] Missing GOOGLE_SHEETS_AUTH_ID; leader mapping disabled.');
@@ -309,8 +309,19 @@ async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRecord>> 
 
                 // Parse the granular role — students in the sheet are filtered out.
                 // Fall back to row-level inference if the sheet uses a broader access label.
-                const inferredRole = roleIndex >= 0 ? parseUserRole(row[roleIndex]) : inferUserRoleFromRow(row);
-                const role = hasExplicitOfficerAccess ? 'officer' : inferredRole;
+                const rawRole = roleIndex >= 0 ? row[roleIndex] : null;
+                let parsedRole = rawRole ? parseUserRole(rawRole) : inferUserRoleFromRow(row);
+                
+                if (hasExplicitOfficerAccess) {
+                    parsedRole = 'officer';
+                }
+
+                // ADDED DEBUG LOG:
+                if (email === '2023-100433@rtu.edu.ph') {
+                    console.log(`[AUTH DEBUG] Email: ${email} -> rawRole: '${rawRole}', officerAccessFlag: ${hasExplicitOfficerAccess}, parsedRole: '${parsedRole}'`);
+                }
+
+                const role = parsedRole;
                 if (role === 'student') {
                     return; // Skip rows explicitly marked as student
                 }
