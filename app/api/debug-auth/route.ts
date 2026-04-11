@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthorizedUsers } from '@/lib/auth';
 import { getSheetData } from '@/lib/sheets';
-import { getAuthSheetConfig } from '@/lib/portal-mode';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -11,7 +10,8 @@ export async function GET() {
         const users = await getAuthorizedUsers();
         
         // Let's also do a raw fetch to debug the headers exactly
-        const config = getAuthSheetConfig();
+        const spreadsheetId = process.env.GOOGLE_SHEETS_AUTH_ID;
+        const config = spreadsheetId ? { spreadsheetId, range: `${process.env.GOOGLE_SHEETS_AUTH_TAB || 'SL Access'}!A1:Z1000` } : null;
         const rawRows = config ? await getSheetData(config.spreadsheetId, config.range) : [];
         const rows = rawRows.map((row) => row.map((cell) => String(cell ?? '').trim()));
         const firstRow = rows[0] || [];
