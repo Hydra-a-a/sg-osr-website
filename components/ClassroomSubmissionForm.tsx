@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { CheckCircle, AlertCircle, ExternalLink, GraduationCap, ClipboardCheck, Loader2 } from 'lucide-react';
-import { deriveEffectivePortalRole, normalizePortalRole, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
+import { deriveEffectivePortalRole, hasLeaderPrivilege, normalizePortalRole, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
 
 interface ClassroomCourse {
     id: string;
@@ -68,8 +68,9 @@ export default function ClassroomSubmissionForm() {
     }, [status]);
 
     const isAuthenticated = status === 'authenticated' && Boolean(session?.user?.email);
-    const isLeader = deriveEffectivePortalRole(session?.user?.role, portalMode) === 'leader';
-    const isLeaderAccountInStudentMode = normalizePortalRole(session?.user?.role) === 'leader' && !isLeader;
+    const effectiveRole = deriveEffectivePortalRole(session?.user?.role, portalMode);
+    const isLeader = hasLeaderPrivilege(effectiveRole);
+    const isLeaderAccountInStudentMode = hasLeaderPrivilege(session?.user?.role) && !isLeader;
 
     const { data: coursesResponse, error: coursesError, isLoading: coursesLoading } = useSWR(
         isAuthenticated && isLeader ? '/api/classroom/courses' : null,
@@ -350,8 +351,7 @@ export default function ClassroomSubmissionForm() {
                             !reportLink.trim() ||
                             courseworkLoading
                         }
-                        className="btn-primary w-full gap-2 text-base"
-                        style={{ opacity: classroomSubmitting ? 0.6 : 1 }}
+                        className={`btn-primary w-full gap-2 text-base ${classroomSubmitting ? 'is-submitting' : ''}`}
                     >
                         {classroomSubmitting ? <Loader2 size={18} className="animate-spin" /> : <ClipboardCheck size={18} />}
                         {classroomSubmitting ? 'Submitting to Classroom...' : 'Submit to Google Classroom'}

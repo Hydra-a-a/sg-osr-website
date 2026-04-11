@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/proposals/queue/process",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/tickets/queue/process",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/tickets/sync-updates",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

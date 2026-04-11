@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import useSWR from 'swr';
 import Image from 'next/image';
 import { Newspaper, Globe, ThumbsUp, MessageSquare, Share2 } from 'lucide-react';
@@ -22,19 +22,12 @@ function timeAgo(dateStr: string): string {
     return then.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
 }
 
-// pick a color based on the name so it doesn't look boring
-function sourceColor(source: string): string {
-    const colors = [
-        '#1877F2', // Facebook blue
-        '#1B3A6B', // RTU blue
-        '#2A5298', // RTU blue light
-        '#B8922E', // Gold dark
-        '#3b7d4f', // Green
-        '#8B5CF6', // Violet
-    ];
+// pick a finite avatar variant so it stays interesting without runtime styles
+function sourceVariant(source: string): string {
+    const variants = ['facebook', 'brand', 'azure', 'gold', 'green', 'violet'];
     let hash = 0;
     for (const ch of source) hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
-    return colors[Math.abs(hash) % colors.length];
+    return variants[Math.abs(hash) % variants.length];
 }
 
 // stop facebook essays from ruining the layout
@@ -96,25 +89,25 @@ export default function NewsPage() {
                                 <div key={i} className="fb-card">
                                     {/* Skeleton header */}
                                     <div className="fb-card-header">
-                                        <div className="skeleton" style={{ width: '2.5rem', height: '2.5rem', borderRadius: '50%' }} />
+                                        <div className="skeleton skeleton-avatar" />
                                         <div className="flex-1">
-                                            <div className="skeleton" style={{ height: '0.75rem', width: '9rem', marginBottom: '0.375rem' }} />
-                                            <div className="skeleton" style={{ height: '0.6rem', width: '5rem' }} />
+                                            <div className="skeleton skeleton-title-line" />
+                                            <div className="skeleton skeleton-meta-line" />
                                         </div>
                                     </div>
                                     {/* Skeleton body */}
-                                    <div style={{ padding: '0 1rem 0.5rem' }}>
-                                        <div className="skeleton" style={{ height: '0.7rem', width: '100%', marginBottom: '0.375rem' }} />
-                                        <div className="skeleton" style={{ height: '0.7rem', width: '85%', marginBottom: '0.375rem' }} />
-                                        <div className="skeleton" style={{ height: '0.7rem', width: '60%' }} />
+                                    <div className="news-skeleton-body">
+                                        <div className="skeleton skeleton-body-line skeleton-body-line-wide" />
+                                        <div className="skeleton skeleton-body-line skeleton-body-line-medium" />
+                                        <div className="skeleton skeleton-body-line skeleton-body-line-short" />
                                     </div>
                                     {/* Skeleton image */}
-                                    <div className="skeleton" style={{ aspectRatio: '16/9', borderRadius: 0 }} />
+                                    <div className="skeleton skeleton-media" />
                                     {/* Skeleton actions */}
-                                    <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem' }}>
-                                        <div className="skeleton" style={{ flex: 1, height: '1.5rem' }} />
-                                        <div className="skeleton" style={{ flex: 1, height: '1.5rem' }} />
-                                        <div className="skeleton" style={{ flex: 1, height: '1.5rem' }} />
+                                    <div className="news-skeleton-actions">
+                                        <div className="skeleton skeleton-action-chip" />
+                                        <div className="skeleton skeleton-action-chip" />
+                                        <div className="skeleton skeleton-action-chip" />
                                     </div>
                                 </div>
                             ))}
@@ -129,12 +122,11 @@ export default function NewsPage() {
                                     {/* ── Header ── */}
                                     <div className="fb-card-header">
                                         <div
-                                            className="fb-avatar"
-                                            style={{ background: sourceColor(post.source) }}
+                                            className={`fb-avatar fb-avatar--${sourceVariant(post.source)}`}
                                         >
                                             {post.source.charAt(0).toUpperCase()}
                                         </div>
-                                        <div style={{ minWidth: 0 }}>
+                                        <div className="fb-header-copy">
                                             <div className="fb-card-name">{post.source}</div>
                                             <div className="fb-card-meta">
                                                 <span>{timeAgo(post.publishedAt)}</span>
@@ -155,7 +147,7 @@ export default function NewsPage() {
                                                 alt=""
                                                 width={800}
                                                 height={450}
-                                                style={{ width: '100%', height: 'auto' }}
+                                                className="fb-media-image"
                                                 unoptimized
                                             />
                                         </div>

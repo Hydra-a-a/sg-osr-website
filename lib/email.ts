@@ -11,11 +11,17 @@ export const transporter = nodemailer.createTransport({
 
 export async function sendEmail({
     to,
+    cc,
+    replyTo,
+    from,
     subject,
     html,
     text
 }: {
     to: string;
+    cc?: string | string[];
+    replyTo?: string;
+    from?: string;
     subject: string;
     html?: string;
     text?: string;
@@ -27,8 +33,10 @@ export async function sendEmail({
 
     try {
         const info = await transporter.sendMail({
-            from: `"RTU Student Government" <${process.env.EMAIL_USER}>`,
+            from: from || process.env.EMAIL_NOTIFICATIONS_FROM || `"RTU Student Government" <${process.env.EMAIL_USER}>`,
             to,
+            cc,
+            replyTo,
             subject,
             text,
             html,

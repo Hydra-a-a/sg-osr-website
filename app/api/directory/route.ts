@@ -3,7 +3,8 @@ import { getSheetData, getSheetDataWithHyperlinks, getSpreadsheetSheetTitles } f
 import { parseSheetData } from '@/lib/sheets-parser';
 import { OfficerSchema, OfficeSchema } from '@/schemas/directory';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { getClientIp, redactErrorForLog } from '@/lib/security';
+import { getClientIp, isSafeNavigationHref, redactErrorForLog } from '@/lib/security';
+import { extractGoogleDriveFileId, extractGoogleDriveResourceKey } from '@/lib/google-drive';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
 
 // cache for an hour. don't hit google sheets every time or they ban us.
@@ -81,6 +82,41 @@ function cleanFacebookUrl(value: unknown): string | undefined {
     }
 
     return undefined;
+}
+
+function cleanOrganizationLogoUrl(value: unknown): string | undefined {
+    const raw = normalizeText(value)
+        .replace(/[<>]/g, '')
+        .replace(/^[,;\s]+|[,;\s]+$/g, '');
+
+    if (!raw) {
+        return undefined;
+    }
+
+    const hyperlinkMatch = raw.match(/^=\s*HYPERLINK\(\s*"([^"]+)"\s*,/i);
+    const normalized = hyperlinkMatch?.[1] ? hyperlinkMatch[1].trim() : raw;
+
+    if (/^[a-zA-Z0-9_-]{10,}$/.test(normalized)) {
+        return `/api/directory/logos/${normalized}`;
+    }
+
+    const driveId = extractGoogleDriveFileId(normalized);
+    if (driveId) {
+        const params = new URLSearchParams();
+        const resourceKey = extractGoogleDriveResourceKey(normalized);
+        if (resourceKey) {
+            params.set('resourcekey', resourceKey);
+        }
+
+        const queryString = params.toString();
+        return queryString ? `/api/directory/logos/${driveId}?${queryString}` : `/api/directory/logos/${driveId}`;
+    }
+
+    if (!isSafeNavigationHref(normalized) || !/^https:\/\//i.test(normalized)) {
+        return undefined;
+    }
+
+    return normalized;
 }
 
 function isRowEmpty(row: unknown[]): boolean {
@@ -191,6 +227,10 @@ function isOrganizationSectionRow(name: string, cells: string[]): boolean {
         'academic organizations',
         'non-academic organization',
         'non-academic organizations',
+        'independent media organization',
+        'independent media organizations',
+        'office of student regent',
+        'office of the student regent',
         'central student council',
         'central student councils',
         'college / institute student council',
@@ -203,7 +243,11 @@ function isOrganizationSectionRow(name: string, cells: string[]): boolean {
     }
 
     const contentCells = cells.filter((cell) => normalizeSafeText(cell));
-    return contentCells.length === 1 && (normalizedName.includes('organization') || normalizedName.includes('student council'));
+    return contentCells.length === 1 && (
+        normalizedName.includes('organization') ||
+        normalizedName.includes('student council') ||
+        normalizedName.includes('student regent')
+    );
 }
 
 function dedupeByKey<T>(items: T[], getKey: (item: T) => string): T[] {
@@ -228,6 +272,10 @@ function normalizeSheetTitle(value: string): string {
 
 function buildResolvedRanges(candidates: readonly string[], availableTitles: readonly string[]): string[] {
     const resolved: string[] = [];
+    const normalizedAvailableTitles = new Set(
+        (availableTitles || []).map((title) => normalizeSheetTitle(title)).filter(Boolean)
+    );
+    const hasAvailableTitles = normalizedAvailableTitles.size > 0;
 
     for (const candidate of candidates) {
         const bangIndex = candidate.indexOf('!');
@@ -239,6 +287,7 @@ function buildResolvedRanges(candidates: readonly string[], availableTitles: rea
         const configuredTitle = candidate.slice(0, bangIndex).trim();
         const cellRange = candidate.slice(bangIndex + 1);
         const normalizedConfiguredTitle = normalizeSheetTitle(configuredTitle);
+        const titleExists = normalizedAvailableTitles.has(normalizedConfiguredTitle);
 
         const matchedTitle = availableTitles.find(
             (title) => normalizeSheetTitle(title) === normalizedConfiguredTitle
@@ -248,7 +297,9 @@ function buildResolvedRanges(candidates: readonly string[], availableTitles: rea
             resolved.push(`${matchedTitle}!${cellRange}`);
         }
 
-        resolved.push(candidate);
+        if (!hasAvailableTitles || titleExists) {
+            resolved.push(candidate);
+        }
     }
 
     return dedupeByKey(resolved, (range) => range);
@@ -274,6 +325,7 @@ function parseWorkbookOrganizations(rows: string[][], options: {
     emailIndex: number;
     facebookIndex?: number;
     categoryIndex?: number;
+    logoIndex?: number;
     sourceLabel: string;
     fallbackBranch?: string;
 }) {
@@ -286,6 +338,7 @@ function parseWorkbookOrganizations(rows: string[][], options: {
         email?: string;
         facebookUrl?: string;
         linkedinUrl?: string;
+        logoUrl?: string;
     }> = [];
 
     let currentBranch = normalizeSafeText(options.fallbackBranch || options.sourceLabel);
@@ -294,6 +347,7 @@ function parseWorkbookOrganizations(rows: string[][], options: {
     let emailIndex = options.emailIndex;
     let facebookIndex = options.facebookIndex;
     let categoryIndex = options.categoryIndex;
+    let logoIndex = options.logoIndex;
 
     const valueAt = (cells: string[], index: number): string => {
         if (index < 0) {
@@ -308,16 +362,12 @@ function parseWorkbookOrganizations(rows: string[][], options: {
         }
 
         const cells = row.map((cell) => normalizeText(cell));
-
-        if (isOrganizationHeaderRow(cells)) {
-            continue;
-        }
-
         const lowerCells = cells.map((cell) => cell.toLowerCase());
         const detectedNameIndex = lowerCells.findIndex((cell) => cell.includes('organization name') || cell === 'organization');
         const detectedEmailIndex = lowerCells.findIndex((cell) => cell.includes('contact email') || cell === 'email' || cell === 'emails');
         const detectedFacebookIndex = lowerCells.findIndex((cell) => cell.includes('facebook'));
         const detectedCategoryIndex = lowerCells.findIndex((cell) => cell.includes('organization category') || cell.includes('category'));
+        const detectedLogoIndex = lowerCells.findIndex((cell) => cell.includes('organizational logo') || cell.includes('logo'));
         const detectedAcronymIndex = lowerCells.findIndex((cell) => cell.includes('acronym') || cell.includes('initialism') || cell.includes('initials'));
 
         if (detectedNameIndex >= 0 && detectedEmailIndex >= 0) {
@@ -325,7 +375,12 @@ function parseWorkbookOrganizations(rows: string[][], options: {
             emailIndex = detectedEmailIndex;
             facebookIndex = detectedFacebookIndex >= 0 ? detectedFacebookIndex : facebookIndex;
             categoryIndex = detectedCategoryIndex >= 0 ? detectedCategoryIndex : categoryIndex;
+            logoIndex = detectedLogoIndex >= 0 ? detectedLogoIndex : logoIndex;
             acronymIndex = detectedAcronymIndex >= 0 ? detectedAcronymIndex : -1;
+            continue;
+        }
+
+        if (isOrganizationHeaderRow(cells)) {
             continue;
         }
 
@@ -333,6 +388,7 @@ function parseWorkbookOrganizations(rows: string[][], options: {
         const rawAcronym = valueAt(cells, acronymIndex);
         const rawEmail = valueAt(cells, emailIndex);
         const rawFacebook = valueAt(cells, facebookIndex ?? -1);
+        const rawLogo = valueAt(cells, logoIndex ?? -1);
         const inferredCategoryFromName = inferCategoryFromOrganizationName(rawName);
         const explicitCategory = categoryIndex !== undefined ? normalizeExplicitOrganizationCategory(valueAt(cells, categoryIndex)) : undefined;
         const extractedCategory =
@@ -346,6 +402,7 @@ function parseWorkbookOrganizations(rows: string[][], options: {
         const acronym = normalizeSafeText(rawAcronym);
         const email = cleanEmail(rawEmail);
         const facebookUrl = cleanFacebookUrl(rawFacebook);
+        const logoUrl = cleanOrganizationLogoUrl(rawLogo);
 
         if (!name) {
             continue;
@@ -365,6 +422,7 @@ function parseWorkbookOrganizations(rows: string[][], options: {
             email,
             facebookUrl,
             linkedinUrl: undefined,
+            logoUrl,
         };
 
         const validated = OfficerSchema.safeParse(candidate);
@@ -384,17 +442,19 @@ function parseWorkbookOffices(rows: string[][]) {
         headDirector: string;
         email?: string;
         branch: string;
+        logoUrl?: string;
         priority?: number;
     }> = [];
 
     let currentBranch = 'University Office';
     let officeNameIndex = 0;
     let acronymIndex = 1;
-    let emailIndex = 2;
-    let officialIndex = 3;
-    let titleIndex = 4;
-    let locationIndex = 5;
-    let branchIndex = -1;
+    let branchIndex = 2;
+    let logoIndex = 3;
+    let emailIndex = 4;
+    let officialIndex = 5;
+    let titleIndex = 6;
+    let locationIndex = 7;
 
     const valueAt = (cells: string[], index: number): string => {
         if (index < 0) {
@@ -409,10 +469,6 @@ function parseWorkbookOffices(rows: string[][]) {
         }
 
         const cells = row.map((cell) => normalizeText(cell));
-        if (isOfficeHeaderRow(cells)) {
-            continue;
-        }
-
         const lowerCells = cells.map((cell) => cell.toLowerCase());
         const detectedOfficeNameIndex = lowerCells.findIndex((cell) =>
             cell.includes('office name') || cell.includes('organization name') || cell === 'name'
@@ -420,18 +476,24 @@ function parseWorkbookOffices(rows: string[][]) {
         const detectedAcronymIndex = lowerCells.findIndex((cell) => cell.includes('acronym') || cell.includes('initials'));
         const detectedEmailIndex = lowerCells.findIndex((cell) => cell.includes('contact email') || cell === 'email' || cell === 'emails');
         const detectedBranchIndex = lowerCells.findIndex((cell) => cell.includes('category') || cell.includes('branch'));
+        const detectedLogoIndex = lowerCells.findIndex((cell) => cell.includes('office logo') || cell.includes('organizational logo') || cell.includes('logo'));
         const detectedOfficialIndex = lowerCells.findIndex((cell) => cell.includes('official') || cell.includes('head') || cell.includes('director'));
         const detectedTitleIndex = lowerCells.findIndex((cell) => cell.includes('title') || cell.includes('position'));
         const detectedLocationIndex = lowerCells.findIndex((cell) => cell.includes('location'));
 
         if (detectedOfficeNameIndex >= 0 && (detectedEmailIndex >= 0 || detectedBranchIndex >= 0)) {
             officeNameIndex = detectedOfficeNameIndex;
-            acronymIndex = detectedAcronymIndex >= 0 ? detectedAcronymIndex : -1;
-            emailIndex = detectedEmailIndex >= 0 ? detectedEmailIndex : -1;
-            branchIndex = detectedBranchIndex >= 0 ? detectedBranchIndex : -1;
-            officialIndex = detectedOfficialIndex >= 0 ? detectedOfficialIndex : -1;
-            titleIndex = detectedTitleIndex >= 0 ? detectedTitleIndex : -1;
-            locationIndex = detectedLocationIndex >= 0 ? detectedLocationIndex : -1;
+            acronymIndex = detectedAcronymIndex >= 0 ? detectedAcronymIndex : acronymIndex;
+            emailIndex = detectedEmailIndex >= 0 ? detectedEmailIndex : emailIndex;
+            branchIndex = detectedBranchIndex >= 0 ? detectedBranchIndex : branchIndex;
+            logoIndex = detectedLogoIndex >= 0 ? detectedLogoIndex : logoIndex;
+            officialIndex = detectedOfficialIndex >= 0 ? detectedOfficialIndex : officialIndex;
+            titleIndex = detectedTitleIndex >= 0 ? detectedTitleIndex : titleIndex;
+            locationIndex = detectedLocationIndex >= 0 ? detectedLocationIndex : locationIndex;
+            continue;
+        }
+
+        if (isOfficeHeaderRow(cells)) {
             continue;
         }
 
@@ -444,14 +506,15 @@ function parseWorkbookOffices(rows: string[][]) {
         const official = normalizeSafeText(valueAt(cells, officialIndex >= 0 ? officialIndex : base + 3));
         const title = normalizeSafeText(valueAt(cells, titleIndex >= 0 ? titleIndex : base + 4));
         const location = normalizeSafeText(valueAt(cells, locationIndex >= 0 ? locationIndex : base + 5));
-        const explicitBranch = normalizeSafeText(valueAt(cells, branchIndex));
+        const explicitBranch = normalizeSafeText(valueAt(cells, branchIndex >= 0 ? branchIndex : base + 2));
+        const logoUrl = cleanOrganizationLogoUrl(valueAt(cells, logoIndex));
 
         if (!officeName) {
             continue;
         }
 
         // Category rows have only a section label and no office details.
-        if (!acronym && !email && !official && !title && !location && !explicitBranch) {
+        if (!acronym && !email && !official && !title && !location && !explicitBranch && !logoUrl) {
             currentBranch = officeName;
             continue;
         }
@@ -462,6 +525,7 @@ function parseWorkbookOffices(rows: string[][]) {
             headDirector: [official, title].filter(Boolean).join(' - '),
             email,
             branch: explicitBranch || currentBranch,
+            logoUrl,
             priority: undefined,
         };
 
@@ -488,22 +552,22 @@ export async function GET(request: Request) {
 
     try {
         const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_DIRECTORY_ID || process.env.GOOGLE_SHEETS_INFO_ID;
-        const LEGACY_OFFICERS_RANGE_CANDIDATES = ['Officers!A2:G', 'OFFICERS!A2:G'];
-        const LEGACY_OFFICES_RANGE_CANDIDATES = ['Offices!A2:F', 'OFFICES!A2:F'];
+        const LEGACY_OFFICERS_RANGE_CANDIDATES = ['Officers!A2:J', 'OFFICERS!A2:J'];
+        const LEGACY_OFFICES_RANGE_CANDIDATES = ['Offices!A2:G', 'OFFICES!A2:G'];
 
         const WORKBOOK_ORG_RANGES = [
-            { ranges: ['ORGANIZATIONS!A1:G', 'Organizations!A1:G'], nameIndex: 0, acronymIndex: -1, emailIndex: 1, facebookIndex: 3, categoryIndex: 2, sourceLabel: 'Organizations', fallbackBranch: 'Academic Organization' },
-            { ranges: ['INSTITUTES!A1:D', 'Institutes!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Institutes', fallbackBranch: 'College / Institute Organization' },
-            { ranges: ['Central Student Councils!A1:D', 'CENTRAL STUDENT COUNCILS!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Central Student Councils', fallbackBranch: 'Central Student Council' },
-            { ranges: ['Supreme Student Council!A1:D', 'SUPREME STUDENT COUNCIL!A1:D'], nameIndex: 0, acronymIndex: -1, emailIndex: 1, facebookIndex: 3, categoryIndex: 2, sourceLabel: 'Supreme Student Council', fallbackBranch: 'Supreme Student Council' },
-            { ranges: ['Non-Academic Organization!A1:D', 'NON-ACADEMIC ORGANIZATION!A1:D', 'Non-Academic Organizations!A1:D'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, sourceLabel: 'Non-Academic Organization', fallbackBranch: 'Non-Academic Organization' },
+            { ranges: ['ORGANIZATIONS!A1:H', 'Organizations!A1:H'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, logoIndex: 4, sourceLabel: 'Organizations', fallbackBranch: 'Academic Organization' },
+            { ranges: ['INSTITUTES!A1:H', 'Institutes!A1:H'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, logoIndex: 4, sourceLabel: 'Institutes', fallbackBranch: 'College / Institute Organization' },
+            { ranges: ['Central Student Councils!A1:H', 'CENTRAL STUDENT COUNCILS!A1:H'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, logoIndex: 4, sourceLabel: 'Central Student Councils', fallbackBranch: 'Central Student Council' },
+            { ranges: ['Supreme Student Council!A1:H', 'SUPREME STUDENT COUNCIL!A1:H'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, logoIndex: 4, sourceLabel: 'Supreme Student Council', fallbackBranch: 'Supreme Student Council' },
+            { ranges: ['Non-Academic Organization!A1:H', 'NON-ACADEMIC ORGANIZATION!A1:H', 'Non-Academic Organizations!A1:H'], nameIndex: 0, acronymIndex: 1, emailIndex: 2, facebookIndex: 3, logoIndex: 4, sourceLabel: 'Non-Academic Organization', fallbackBranch: 'Non-Academic Organization' },
         ] as const;
 
         const WORKBOOK_OFFICES_RANGE_CANDIDATES = [
-            'UNIVERSITY OFFICES!A1:G',
-            'University Offices!A1:G',
-            'OFFICES!A1:G',
-            'Offices!A1:G',
+            'UNIVERSITY OFFICES!A1:H',
+            'University Offices!A1:H',
+            'OFFICES!A1:H',
+            'Offices!A1:H',
         ];
 
         if (!SPREADSHEET_ID) {
@@ -565,6 +629,19 @@ export async function GET(request: Request) {
             return mergedRows;
         };
 
+        const fetchAllAvailableRangesWithLinksSafe = async (ranges: readonly string[]) => {
+            const mergedRows: string[][] = [];
+
+            for (const range of buildResolvedRanges(ranges, spreadsheetTitles)) {
+                const rows = await fetchRangeWithLinksSafe(range);
+                if (rows.length > 0) {
+                    mergedRows.push(...rows);
+                }
+            }
+
+            return mergedRows;
+        };
+
         const [
             legacyOfficerRows,
             ...workbookOrganizationRows
@@ -584,6 +661,7 @@ export async function GET(request: Request) {
                 { index: 7, key: 'category', transform: normalizeOrganizationCategory },
                 { index: 4, key: 'facebookUrl' },
                 { index: 5, key: 'linkedinUrl' },
+                { index: 8, key: 'logoUrl', transform: cleanOrganizationLogoUrl },
                 { index: 6, key: 'priority', transform: (v) => parseInt(v, 10) }
             ],
             onError: (err, rowNum) => {
@@ -624,7 +702,7 @@ export async function GET(request: Request) {
         try {
             [legacyOfficeRows, workbookOfficeRows] = await Promise.all([
                 fetchFirstAvailableRangeSafe(LEGACY_OFFICES_RANGE_CANDIDATES),
-                fetchAllAvailableRangesSafe(WORKBOOK_OFFICES_RANGE_CANDIDATES),
+                fetchAllAvailableRangesWithLinksSafe(WORKBOOK_OFFICES_RANGE_CANDIDATES),
             ]);
         } catch (officeFetchError) {
             officeSheetUnavailable = true;
@@ -641,6 +719,7 @@ export async function GET(request: Request) {
                 { index: 3, key: 'headDirector', defaultValue: '', transform: normalizeSafeText },
                 { index: 4, key: 'email', transform: cleanEmail },
                 { index: 5, key: 'branch', defaultValue: '', transform: normalizeSafeText },
+                { index: 6, key: 'logoUrl', transform: cleanOrganizationLogoUrl },
             ],
             onError: (err, rowNum) => {
                 console.warn(`[Directory:Offices] Row ${rowNum} skipped:`, err);
@@ -668,6 +747,7 @@ export async function GET(request: Request) {
                 priority: office.priority,
                 email: office.email,
                 location: office.location,
+                logoUrl: office.logoUrl,
                 entryType: 'office' as const,
             })),
         ];

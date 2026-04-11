@@ -6,10 +6,14 @@ import { getSheetData, updateSheetCell } from '@/lib/sheets';
 import { logAuditAction } from '@/lib/audit';
 import { redactErrorForLog } from '@/lib/security';
 
-interface LeaderRecord {
+import type { PortalRole } from '@/lib/portal-mode';
+
+interface AuthorizedUserRecord {
     email: string;
     name: string;
     council: string;
+    /** Granular role parsed from the Google Sheet. */
+    role: PortalRole;
     /** 1-based sheet row number. */
     rowIndex: number;
     /** Column letter to update for access timestamp (e.g. D). */
@@ -17,10 +21,10 @@ interface LeaderRecord {
 }
 
 /**
- * Fetch authorized Student Leader rows from the SL Access tab.
+ * Fetch authorized user rows from the SL Access tab.
  * Returns a Map keyed by lowercase email, cached for 5 minutes.
  */
-let cachedLeaders: Map<string, LeaderRecord> | null = null;
+let cachedUsers: Map<string, AuthorizedUserRecord> | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -118,10 +122,36 @@ function parseEnabledValue(value: unknown): boolean {
     return true;
 }
 
-function parseLeaderRoleValue(value: unknown): boolean {
+/**
+ * Parses the role column value from Google Sheets into a PortalRole.
+ * - 'officer' / 'admin' / 'grievance_officer' → 'officer'
+ * - 'leader' / 'student_leader' / 'sl' → 'leader'
+ * - anything else → 'student' (effectively denied elevated access)
+ */
+function parseUserRole(value: unknown): PortalRole {
     const normalized = String(value ?? '').trim().toLowerCase();
-    if (!normalized) return true;
-    return ['leader', 'student_leader', 'student leader', 'sl'].includes(normalized);
+    if (!normalized) return 'leader'; // Backwards compat: no role column = leader
+    if (['officer', 'admin', 'grievance_officer', 'grievance officer'].includes(normalized)) {
+        return 'officer';
+    }
+    if (['leader', 'student_leader', 'student leader', 'student leader access', 'leader access', 'sl'].includes(normalized)) {
+        return 'leader';
+    }
+    return 'student';
+}
+
+function normalizeSimulatedRole(value: unknown): PortalRole {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'officer') return 'officer';
+    if (normalized === 'leader') return 'leader';
+    return 'student';
+}
+
+function inferSimulatedRoleFromDisplayName(value: unknown): PortalRole {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized.includes('officer')) return 'officer';
+    if (normalized.includes('leader')) return 'leader';
+    return 'student';
 }
 
 function detectHeaderMap(rows: string[][]): Map<string, number> | null {
@@ -150,10 +180,10 @@ function firstExistingIndex(headerMap: Map<string, number>, keys: string[], fall
     return fallback;
 }
 
-async function getAuthorizedLeaders(): Promise<Map<string, LeaderRecord>> {
+async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRecord>> {
     const now = Date.now();
-    if (cachedLeaders && now - cacheTimestamp < CACHE_TTL) {
-        return cachedLeaders;
+    if (cachedUsers && now - cacheTimestamp < CACHE_TTL) {
+        return cachedUsers;
     }
 
     try {
@@ -164,7 +194,7 @@ async function getAuthorizedLeaders(): Promise<Map<string, LeaderRecord>> {
 
         const rawRows = await getSheetData(config.spreadsheetId, config.range);
         const rows = rawRows.map((row) => row.map((cell) => String(cell ?? '').trim()));
-        const leaders = new Map<string, LeaderRecord>();
+        const users = new Map<string, AuthorizedUserRecord>();
         const startRow = parseRangeStartRow(config.range);
 
         const headerMap = detectHeaderMap(rows);
@@ -201,27 +231,30 @@ async function getAuthorizedLeaders(): Promise<Map<string, LeaderRecord>> {
                     return;
                 }
 
-                if (roleIndex >= 0 && !parseLeaderRoleValue(row[roleIndex])) {
-                    return;
+                // Parse the granular role — students in the sheet are filtered out
+                const role = roleIndex >= 0 ? parseUserRole(row[roleIndex]) : 'leader';
+                if (role === 'student') {
+                    return; // Skip rows explicitly marked as student
                 }
 
-                leaders.set(email, {
+                users.set(email, {
                     email,
                     name: (row[nameIndex] || '').toString().trim(),
                     council: (row[councilIndex] || '').toString().trim(),
+                    role,
                     rowIndex: startRow + i,
                     lastAccessColumnLetter,
                 });
             });
         }
 
-        cachedLeaders = leaders;
+        cachedUsers = users;
         cacheTimestamp = now;
-        return leaders;
+        return users;
     } catch (error) {
-        console.error('[Auth] Failed to fetch authorized leaders:', redactErrorForLog(error));
-        // Fail closed: never grant leader role when auth source is unavailable.
-        cachedLeaders = null;
+        console.error('[Auth] Failed to fetch authorized users:', redactErrorForLog(error));
+        // Fail closed: never grant elevated role when auth source is unavailable.
+        cachedUsers = null;
         cacheTimestamp = 0;
         return new Map();
     }
@@ -236,6 +269,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
          * Re-validates leader role on each JWT callback to avoid stale privilege.
          */
         async jwt({ token, user, account }) {
+            const isLocalSimEnabled = process.env.NODE_ENV !== 'production'
+                && process.env.ENABLE_LOCAL_LOGIN_SIMULATION === 'true';
+            const isDevSimProvider = account?.provider === 'dev-sim'
+                || (isLocalSimEnabled && account?.provider === 'credentials');
+
+            // ── Google provider: store OAuth tokens ─────────────────────────────────
             if (account?.provider === 'google') {
                 if (account.access_token) {
                     token.accessToken = account.access_token;
@@ -248,12 +287,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 }
             }
 
-            if (account?.provider === 'dev-sim' && user?.email) {
+            // ── Dev-sim: persist role directly, skip Sheets lookup ───────────────────
+            if (isDevSimProvider && user?.email) {
                 token.email = user.email.toLowerCase().trim();
-                token.role = (user as { role?: string }).role === 'leader' ? 'leader' : 'student';
+                const roleFromUser = normalizeSimulatedRole((user as { role?: unknown }).role);
+                const roleFromName = inferSimulatedRoleFromDisplayName(user.name);
+                const roleFromToken = normalizeSimulatedRole(token.role);
+                token.role = roleFromUser !== 'student'
+                    ? roleFromUser
+                    : roleFromName !== 'student'
+                        ? roleFromName
+                        : roleFromToken;
+                token.isDevSim = true;
                 return token;
             }
 
+            if (token.isDevSim) {
+                // Subsequent requests for simulated sessions — preserve role as-is
+                token.role = normalizeSimulatedRole(token.role);
+                return token;
+            }
+
+            // ── Google: refresh access token if near expiry ──────────────────────────
             if (token.accessToken && token.accessTokenExpires && Date.now() > token.accessTokenExpires - 60_000) {
                 token = await refreshGoogleAccessToken(token);
             }
@@ -264,13 +319,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 return token;
             }
 
-            const leaders = await getAuthorizedLeaders();
-            const leaderData = leaders.get(email);
+            const authorizedUsers = await getAuthorizedUsers();
+            const userData = authorizedUsers.get(email);
 
             token.email = email;
 
-            if (leaderData) {
-                token.role = 'leader';
+            if (userData) {
+                token.role = userData.role; // 'leader' or 'officer'
 
                 // Only write access date during active sign-in flow.
                 if (user?.email) {
@@ -280,7 +335,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         try {
                             await updateSheetCell(
                                 config.spreadsheetId,
-                                `SL Access!${leaderData.lastAccessColumnLetter}${leaderData.rowIndex}`,
+                                `SL Access!${userData.lastAccessColumnLetter}${userData.rowIndex}`,
                                 [[new Date().toLocaleString()]]
                             );
                         } catch (err) {

@@ -1,10 +1,148 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import useSWR from 'swr';
+import { motion } from 'framer-motion';
 import { Share2, ExternalLink } from 'lucide-react';
+import { applyCouncilLogoOverrides, type DirectoryLogoSource } from '@/lib/council-logos';
+
+type DirectoryResponsePayload = {
+    leaders?: DirectoryLogoSource[];
+    error?: { message?: string } | string;
+};
+
+const ABOUT_DIRECTORY_SWR_OPTIONS = {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    dedupingInterval: 60000,
+    keepPreviousData: true,
+} as const;
+
+async function fetchDirectoryPayload(url: string): Promise<DirectoryResponsePayload> {
+    const response = await fetch(url);
+    const payload = await response.json().catch(() => ({} as DirectoryResponsePayload));
+
+    if (!response.ok) {
+        const fallbackMessage = 'Unable to load directory data right now.';
+        const message = typeof payload?.error === 'string'
+            ? payload.error
+            : payload?.error?.message || fallbackMessage;
+        throw new Error(message);
+    }
+
+    return payload;
+}
+
+function isRuntimeLogoSource(src: string): boolean {
+    const value = (src || '').trim();
+    return value.startsWith('/api/directory/logos/') || /^https?:\/\//i.test(value);
+}
+
+function normalizeForMatch(value: unknown): string {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function isConstitutionalCommissionEntry(source: DirectoryLogoSource): boolean {
+    const category = normalizeForMatch(source.category);
+    const branch = normalizeForMatch(source.branch);
+    const name = normalizeForMatch(source.name);
+    const position = normalizeForMatch(source.position);
+
+    const combined = `${category} ${branch} ${name} ${position}`;
+    const hasConstitutionalSignal = combined.includes('constitutional commission') || combined.includes('constitutional commissions');
+
+    if (!hasConstitutionalSignal) {
+        return false;
+    }
+
+    // Avoid including the main SSC council row itself.
+    if (name === 'supreme student council') {
+        return false;
+    }
+
+    return true;
+}
+
+function getCommissionAbbr(name: string): string {
+    const words = String(name || '')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+
+    if (words.length === 0) {
+        return 'CC';
+    }
+
+    const initials = words
+        .filter((word) => !['of', 'and', '&', 'the', 'for'].includes(word.toLowerCase()))
+        .slice(0, 4)
+        .map((word) => word[0]?.toUpperCase() || '')
+        .join('');
+
+    return initials || 'CC';
+}
+
+function inferCommissionAcronym(name: string): string {
+    const normalized = normalizeForMatch(name);
+
+    if (normalized.includes('appt') || normalized.includes('appointments')) {
+        return 'CA';
+    }
+    if (normalized.includes('budget')) {
+        return 'CBMA';
+    }
+    if (normalized.includes('disc')) {
+        return 'CD';
+    }
+    if (normalized.includes('envi')) {
+        return 'CENAC';
+    }
+    if (normalized.includes('proj') || normalized.includes('student activities') || normalized.includes('stud activities')) {
+        return 'CPSA';
+    }
+    if (normalized.includes('scho')) {
+        return 'CSP';
+    }
+    if (normalized.includes('comselec') || normalized.includes('election') || normalized.includes('student election')) {
+        return 'COMSELEC';
+    }
+
+    return getCommissionAbbr(name);
+}
+
+function inferCommissionDescription(name: string): string {
+    const normalized = normalizeForMatch(name);
+
+    if (normalized.includes('appt') || normalized.includes('appointments')) {
+        return 'Handles nomination screening and appointment review processes for constitutional and organizational roles under student governance.';
+    }
+    if (normalized.includes('budget')) {
+        return 'Oversees budget planning, financial utilization, and management accountability across student government initiatives.';
+    }
+    if (normalized.includes('disc')) {
+        return 'Supports standards, accountability, and procedural discipline in line with student government rules and due process.';
+    }
+    if (normalized.includes('envi')) {
+        return 'Advances environmental and community-oriented initiatives, including sustainability, campus awareness, and civic engagement actions.';
+    }
+    if (normalized.includes('proj') || normalized.includes('student activities') || normalized.includes('stud activities')) {
+        return 'Coordinates project implementation and student-activity programs to ensure execution quality, participation, and alignment with student priorities.';
+    }
+    if (normalized.includes('scho')) {
+        return 'Facilitates scholarship-related support and advocacy, including student access to aid opportunities and policy coordination.';
+    }
+    if (normalized.includes('comselec') || normalized.includes('election') || normalized.includes('student election')) {
+        return 'Administers student electoral processes and safeguards fair, transparent, and rules-based student government elections.';
+    }
+
+    return 'Constitutional commission under the Supreme Student Council supporting checks, governance, and student representation.';
+}
 
 /* ── Council Data ── */
 const councils = [
@@ -116,12 +254,58 @@ const fadeInUp = {
 };
 
 export default function AboutPage() {
+    const { data: directoryResponse } = useSWR('/api/directory', fetchDirectoryPayload, ABOUT_DIRECTORY_SWR_OPTIONS);
+    const directoryLeaders = useMemo(
+        () => (directoryResponse?.leaders || []) as DirectoryLogoSource[],
+        [directoryResponse?.leaders]
+    );
+    const resolvedCouncils = useMemo(
+        () => applyCouncilLogoOverrides(councils, directoryLeaders),
+        [directoryLeaders]
+    );
+    const constitutionalCommissions = useMemo(() => {
+        const deduped = new Map<string, DirectoryLogoSource>();
+
+        for (const entry of directoryLeaders) {
+            if (!isConstitutionalCommissionEntry(entry)) {
+                continue;
+            }
+
+            const key = normalizeForMatch(entry.name || entry.position || '');
+            if (!key || deduped.has(key)) {
+                continue;
+            }
+
+            deduped.set(key, entry);
+        }
+
+        const commissions = [] as Array<DirectoryLogoSource & { abbr: string; description: string }>;
+        for (const entry of deduped.values()) {
+            commissions.push({
+                ...entry,
+                abbr: inferCommissionAcronym(String(entry.name || '')),
+                description: inferCommissionDescription(String(entry.name || '')),
+            });
+        }
+
+        return commissions;
+    }, [directoryLeaders]);
     const [selectedCouncil, setSelectedCouncil] = useState(0);
-    const active = councils[selectedCouncil];
+    const [selectedCommission, setSelectedCommission] = useState(0);
+
+    const selectedCouncilIndex = resolvedCouncils.length > 0 ? selectedCouncil % resolvedCouncils.length : 0;
+    const active = resolvedCouncils[selectedCouncilIndex];
+    const selectedCommissionIndex = constitutionalCommissions.length > 0
+        ? selectedCommission % constitutionalCommissions.length
+        : 0;
+    const activeCommission = constitutionalCommissions[selectedCommissionIndex];
+
+    if (!active) {
+        return null;
+    }
 
     return (
         <>
-            {/* Hero Section */}
             <section className="bg-gradient-rtu relative overflow-hidden min-h-[60vh] flex items-center pt-20">
                 <div className="absolute inset-0 pointer-events-none z-0">
                     <div className="hero-dot-grid opacity-50" />
@@ -140,17 +324,15 @@ export default function AboutPage() {
                         </h1>
                         <p className="text-lg md:text-xl text-white/80 max-w-3xl mx-auto">
                             Meet the councils and institutes leading RTU student governance across all campuses and colleges.
-                            Each body represents the voices and interests of our Rizalian community.
+                            Each body represents the voices and interests of our Rizaliano community.
                         </p>
                     </motion.div>
                 </div>
             </section>
 
-            {/* Featured Council Section */}
             <section className="section bg-surface-base">
                 <div className="container-main">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-                        {/* Featured Council Card */}
                         <motion.div
                             key={active.id}
                             initial="hidden"
@@ -158,19 +340,16 @@ export default function AboutPage() {
                             transition={{ duration: 0.5 }}
                             variants={fadeInUp}
                             className="relative"
+                            data-council={active.id}
                         >
-                            <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-surface-soft">
-                                <motion.div
-                                    className="absolute inset-0 rounded-full blur-[60px] z-0"
-                                    animate={{ background: active.glow }}
-                                    transition={{ duration: 0.5 }}
-                                    style={{ opacity: 0.6 }}
-                                />
+                            <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-surface-soft skeleton">
+                                <div className="sg-council-glow-layer sg-council-glow-layer-soft pointer-events-none absolute inset-0 rounded-full blur-[60px] z-0" />
                                 <Image
                                     src={active.src}
                                     alt={active.name}
                                     fill
                                     sizes="(max-width: 1024px) 100vw, 50vw"
+                                    unoptimized={isRuntimeLogoSource(active.src)}
                                     className="object-contain relative z-10 p-8 md:p-12"
                                     priority
                                 />
@@ -186,15 +365,7 @@ export default function AboutPage() {
                             variants={fadeInUp}
                         >
                             <div className="mb-2">
-                                <span
-                                    className="inline-block text-sm font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-4"
-                                    style={{
-                                        background: `linear-gradient(135deg, ${active.gradientFrom}, ${active.gradientTo})`,
-                                        WebkitBackgroundClip: 'text',
-                                        WebkitTextFillColor: 'transparent',
-                                        backgroundClip: 'text',
-                                    }}
-                                >
+                                <span className="sg-council-text-gradient inline-block text-sm font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-4" data-council={active.id}>
                                     {active.abbr}
                                 </span>
                             </div>
@@ -241,7 +412,7 @@ export default function AboutPage() {
 
                     {/* Responsive Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
-                        {councils.map((council, idx) => (
+                        {resolvedCouncils.map((council, idx) => (
                             <motion.button
                                 key={council.id}
                                 onClick={() => setSelectedCouncil(idx)}
@@ -250,26 +421,20 @@ export default function AboutPage() {
                                 viewport={{ once: true, margin: '-40px' }}
                                 transition={{ duration: 0.4, delay: idx * 0.05 }}
                                 variants={fadeInUp}
-                                className={`relative group flex flex-col items-center justify-center p-4 md:p-6 rounded-xl transition-all duration-300 ${
-                                    selectedCouncil === idx
-                                        ? 'ring-2 md:ring-4 scale-105'
+                                className={`about-council-selector relative group flex flex-col items-center justify-center p-4 md:p-6 rounded-xl transition-all duration-300 ${
+                                    selectedCouncilIndex === idx
+                                        ? 'scale-105'
                                         : 'hover:scale-105'
                                 }`}
-                                style={{
-                                    background:
-                                        selectedCouncil === idx
-                                            ? `${council.gradientFrom}15`
-                                            : 'var(--surface-base)',
-                                    borderColor: council.gradientFrom,
-                                    borderWidth: selectedCouncil === idx ? '2px' : '1px',
-                                    border: `1px solid ${selectedCouncil === idx ? council.gradientFrom : 'var(--border-color)'}`,
-                                }}
+                                data-council={council.id}
+                                data-active={selectedCouncilIndex === idx}
                             >
                                 {/* Logo */}
-                                <div className="relative w-16 h-16 md:w-20 md:h-20 mb-3 flex-shrink-0">
+                                <div className="relative w-16 h-16 md:w-20 md:h-20 mb-3 flex-shrink-0 skeleton rounded-full">
                                     <motion.div
-                                        className="absolute inset-0 rounded-full blur-2xl z-0"
-                                        animate={selectedCouncil === idx ? { background: council.glow } : { background: 'rgba(0,0,0,0)' }}
+                                        className="about-council-selector-glow pointer-events-none absolute inset-0 rounded-full blur-2xl z-0"
+                                        data-council={council.id}
+                                        animate={{ opacity: selectedCouncilIndex === idx ? 1 : 0 }}
                                         transition={{ duration: 0.3 }}
                                     />
                                     <Image
@@ -277,6 +442,7 @@ export default function AboutPage() {
                                         alt={council.abbr}
                                         fill
                                         sizes="(max-width: 768px) 64px, 80px"
+                                        unoptimized={isRuntimeLogoSource(council.src)}
                                         className="object-contain relative z-10"
                                     />
                                 </div>
@@ -290,6 +456,135 @@ export default function AboutPage() {
                     </div>
                 </div>
             </section>
+
+            {constitutionalCommissions.length > 0 && (
+                <section className="section bg-surface-soft">
+                    <div className="container-main">
+                        <motion.div
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true, margin: '-60px' }}
+                            transition={{ duration: 0.5 }}
+                            variants={fadeInUp}
+                            className="text-center mb-12 md:mb-16"
+                        >
+                            <h2 className="text-3xl md:text-4xl font-bold mb-4">Constitutional Commissions</h2>
+                            <p className="text-lg text-body max-w-2xl mx-auto">
+                                Select a constitutional commission to view its scope and governance role under the Supreme Student Council.
+                            </p>
+                        </motion.div>
+
+                        <div className="flex flex-wrap justify-center gap-4 md:gap-6">
+                            {constitutionalCommissions.map((commission, idx) => {
+                                const label = commission.position && commission.position !== 'Organization'
+                                    ? commission.position
+                                    : 'Constitutional Commission';
+                                const logoSrc = (commission.logoUrl || '').trim();
+                                const abbr = String(commission.abbr || getCommissionAbbr(String(commission.name || 'CC')));
+
+                                return (
+                                    <motion.button
+                                        key={`${normalizeForMatch(commission.name)}-${idx}`}
+                                        onClick={() => setSelectedCommission(idx)}
+                                        initial="hidden"
+                                        whileInView="visible"
+                                        viewport={{ once: true, margin: '-40px' }}
+                                        transition={{ duration: 0.4, delay: idx * 0.04 }}
+                                        variants={fadeInUp}
+                                        className={`about-commission-selector relative group flex flex-col items-center justify-center p-4 md:p-6 rounded-xl transition-all duration-300 w-[calc(50%-0.5rem)] md:w-[calc(33.333%-1rem)] lg:w-[calc(20%-1rem)] max-w-[220px] ${
+                                            selectedCommissionIndex === idx
+                                                ? 'scale-105'
+                                                : 'hover:scale-105'
+                                        }`}
+                                        data-active={selectedCommissionIndex === idx}
+                                    >
+                                        <div className="relative w-16 h-16 md:w-20 md:h-20 mb-3 flex-shrink-0 skeleton rounded-full overflow-hidden bg-surface-soft border border-soft">
+                                            {logoSrc ? (
+                                                <Image
+                                                    src={logoSrc}
+                                                    alt={String(commission.name || 'Commission logo')}
+                                                    fill
+                                                    sizes="(max-width: 768px) 64px, 80px"
+                                                    unoptimized={isRuntimeLogoSource(logoSrc)}
+                                                    className="object-contain p-1"
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-sm font-bold text-subtle">
+                                                    {abbr}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <h3 className="text-sm md:text-base font-bold text-center leading-tight line-clamp-2 min-h-[2.5rem]">
+                                            {commission.name}
+                                        </h3>
+                                        <p className="text-[11px] md:text-xs text-subtle text-center mt-1 line-clamp-2 min-h-[2rem]">
+                                            {label}
+                                        </p>
+
+                                        {commission.branch && (
+                                            <p className="text-[11px] text-subtle text-center mt-2 line-clamp-2">
+                                                {commission.branch}
+                                            </p>
+                                        )}
+                                    </motion.button>
+                                );
+                            })}
+                        </div>
+
+                        {activeCommission && (
+                            <motion.div
+                                key={`commission-feature-${normalizeForMatch(activeCommission.name)}`}
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, margin: '-40px' }}
+                                transition={{ duration: 0.45 }}
+                                variants={fadeInUp}
+                                className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center mt-12"
+                            >
+                                <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-surface-base border border-soft skeleton">
+                                    {activeCommission.logoUrl ? (
+                                        <Image
+                                            src={activeCommission.logoUrl}
+                                            alt={String(activeCommission.name || 'Constitutional Commission')}
+                                            fill
+                                            sizes="(max-width: 1024px) 100vw, 50vw"
+                                            unoptimized={isRuntimeLogoSource(activeCommission.logoUrl)}
+                                            className="object-contain p-8 md:p-12"
+                                        />
+                                    ) : (
+                                        <div className="absolute inset-0 flex items-center justify-center text-5xl font-bold text-subtle">
+                                            {activeCommission.abbr}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <div className="mb-2">
+                                        <span className="inline-block text-sm font-bold uppercase tracking-widest text-rtu-blue mb-4">
+                                            {activeCommission.abbr}
+                                        </span>
+                                    </div>
+                                    <h3 className="text-3xl md:text-4xl font-bold mb-4">{activeCommission.name}</h3>
+                                    <p className="text-lg text-body leading-relaxed mb-4">{activeCommission.description}</p>
+                                    <p className="text-sm text-subtle mb-8">
+                                        {activeCommission.position && activeCommission.position !== 'Organization'
+                                            ? activeCommission.position
+                                            : 'Constitutional Commission'}
+                                    </p>
+
+                                    <Link
+                                        href="/directory"
+                                        className="btn-primary text-base no-underline text-center inline-flex items-center justify-center gap-2"
+                                    >
+                                        View Contact Information <ExternalLink size={18} />
+                                    </Link>
+                                </div>
+                            </motion.div>
+                        )}
+                    </div>
+                </section>
+            )}
 
             {/* Info Section */}
             <section className="section bg-surface-base">
@@ -327,10 +622,7 @@ export default function AboutPage() {
             </section>
 
             {/* CTA Section */}
-            <section
-                className="section py-12 md:py-16 relative overflow-hidden"
-                style={{ background: 'var(--rtu-blue)' }}
-            >
+            <section className="about-cta-section section py-12 md:py-16 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-10">
                     <ExternalLink size={200} color="white" />
                 </div>

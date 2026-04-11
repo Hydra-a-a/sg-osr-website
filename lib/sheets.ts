@@ -203,3 +203,34 @@ export async function getSpreadsheetSheetTitles(spreadsheetId: string): Promise<
         return [];
     }
 }
+
+export async function batchUpdateSheetData(
+    spreadsheetId: string,
+    data: Array<{ range: string; values: any[][] }>
+) {
+    const sheets = getSheetsClient();
+
+    if (!Array.isArray(data) || data.length === 0) {
+        return { totalUpdatedCells: 0 };
+    }
+
+    try {
+        const response = await sheets.spreadsheets.values.batchUpdate(
+            {
+                spreadsheetId,
+                requestBody: {
+                    valueInputOption: 'RAW',
+                    data,
+                },
+            },
+            {
+                timeout: 8000,
+            }
+        );
+
+        return response.data;
+    } catch (error) {
+        console.error('Error batch updating Google Sheets data:', redactErrorForLog(error));
+        throw new Error('Failed to batch update data in Google Sheets');
+    }
+}

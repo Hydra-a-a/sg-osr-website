@@ -1,9 +1,12 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/Navbar";
+import NavbarClient from "@/components/NavbarClient";
 import Footer from "@/components/Footer";
 import AuthProvider from "@/components/AuthProvider";
 import PageTransition from "@/components/PageTransition";
+import { CspNonceProvider } from "@/components/CspNonceProvider";
+import { getSiteConfig } from "@/lib/slideConfig";
+import { headers } from "next/headers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,7 +23,11 @@ export const metadata = {
   description: "The unified digital portal of the RTU Supreme Student Council and Office of the Student Regent. Access student services, officer directory, transparency reports, and campus resources.",
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const config = await getSiteConfig();
+  const requestHeaders = await headers();
+  const nonce = requestHeaders.get('x-nonce') || '';
+
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body
@@ -28,15 +35,17 @@ export default function RootLayout({ children }) {
         className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
       >
         <a href="#main-content" className="skip-link">Skip to main content</a>
-        <AuthProvider>
-          <Navbar />
-          <main id="main-content" className="flex-1" tabIndex={-1}>
-            <PageTransition>
-              {children}
-            </PageTransition>
-          </main>
-          <Footer />
-        </AuthProvider>
+        <CspNonceProvider nonce={nonce}>
+          <AuthProvider>
+            <NavbarClient config={config} />
+            <main id="main-content" className="flex-1" tabIndex={-1}>
+              <PageTransition>
+                {children}
+              </PageTransition>
+            </main>
+            <Footer />
+          </AuthProvider>
+        </CspNonceProvider>
       </body>
     </html>
   );

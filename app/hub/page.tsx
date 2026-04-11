@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { MapPin, Bus, BookOpen, Lock, Calendar, ZoomIn, ZoomOut, RotateCcw, X, Search, ExternalLink, Download, FileText } from 'lucide-react';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,7 +20,7 @@ const hubItems = [
         desc: 'Route guides, jeepney/bus schedules, and transportation tips for students commuting to RTU.',
         icon: Bus,
         accent: 'gold' as const,
-        comingSoon: true,
+        comingSoon: false,
     },
     {
         title: 'Student Handbooks & Guides',
@@ -31,10 +31,12 @@ const hubItems = [
     },
 ];
 
-const accentStyles = {
-    blue: { bg: 'rgba(0, 43, 127, 0.1)', color: 'var(--rtu-blue)' },
-    gold: { bg: 'rgba(212, 168, 67, 0.1)', color: 'var(--rtu-gold-dark)' },
-};
+const HUB_GUIDES_SWR_OPTIONS = {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    dedupingInterval: 120000,
+    keepPreviousData: true,
+} as const;
 
 type HubGuide = {
     id: string;
@@ -51,14 +53,19 @@ type HubGuide = {
     updatedAt: string;
 };
 
-function getDrivePreviewProxyUrl(guide: HubGuide): string {
+function getDriveGuideIdentifiers(guide: HubGuide): { fileId: string; resourceKey: string } {
     if (guide.source !== 'drive') {
-        return '';
+        return { fileId: '', resourceKey: '' };
     }
 
     const extractFileId = (urlValue: string): string => {
+        if (!urlValue) {
+            return '';
+        }
+
         try {
-            const parsed = new URL(urlValue);
+            const absoluteUrl = urlValue.startsWith('/') ? `https://rtu.local${urlValue}` : urlValue;
+            const parsed = new URL(absoluteUrl);
             const pathMatch = parsed.pathname.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
             if (pathMatch?.[1]) {
                 return pathMatch[1];
@@ -75,9 +82,9 @@ function getDrivePreviewProxyUrl(guide: HubGuide): string {
         }
     };
 
-    const fileId = extractFileId(guide.viewUrl || guide.embedUrl);
+    const fileId = extractFileId(guide.viewUrl) || extractFileId(guide.embedUrl);
     if (!fileId) {
-        return '';
+        return { fileId: '', resourceKey: '' };
     }
 
     let resourceKey = '';
@@ -85,7 +92,35 @@ function getDrivePreviewProxyUrl(guide: HubGuide): string {
         const parsed = new URL(guide.viewUrl);
         resourceKey = parsed.searchParams.get('resourcekey') || '';
     } catch {
-        resourceKey = '';
+        try {
+            const absoluteUrl = guide.embedUrl.startsWith('/') ? `https://rtu.local${guide.embedUrl}` : guide.embedUrl;
+            const parsedEmbed = new URL(absoluteUrl);
+            resourceKey = parsedEmbed.searchParams.get('resourcekey') || '';
+        } catch {
+            resourceKey = '';
+        }
+    }
+
+    return { fileId, resourceKey };
+}
+
+function getDriveInlineViewerUrl(guide: HubGuide): string {
+    const { fileId, resourceKey } = getDriveGuideIdentifiers(guide);
+    if (!fileId) {
+        return '';
+    }
+
+    if (resourceKey) {
+        return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview?resourcekey=${encodeURIComponent(resourceKey)}`;
+    }
+
+    return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview`;
+}
+
+function getDrivePreviewProxyUrl(guide: HubGuide): string {
+    const { fileId, resourceKey } = getDriveGuideIdentifiers(guide);
+    if (!fileId) {
+        return '';
     }
 
     const encodedId = encodeURIComponent(fileId);
@@ -94,6 +129,10 @@ function getDrivePreviewProxyUrl(guide: HubGuide): string {
     }
 
     return `/api/hub/guides/preview/${encodedId}`;
+}
+
+function shouldBypassPdfHashControls(urlValue: string): boolean {
+    return /^https:\/\/drive\.google\.com\/file\/d\/.+\/preview/i.test((urlValue || '').trim());
 }
 
 function buildGuidePreviewUrl(urlValue: string): string {
@@ -114,7 +153,7 @@ function buildGuidePreviewUrl(urlValue: string): string {
 }
 
 const hubFetcher = async (url: string) => {
-    const response = await fetch(url, { cache: 'no-store' });
+    const response = await fetch(url);
     const json = await response.json().catch(() => ({}));
 
     if (!response.ok) {
@@ -137,24 +176,45 @@ export default function HubPage() {
     const [dragging, setDragging] = useState(false);
     const [selectedGuideId, setSelectedGuideId] = useState('');
     const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
-    const { data: guidesResponse, error: guidesError, isLoading: guidesLoading } = useSWR('/api/hub/guides', hubFetcher, {
-        revalidateOnFocus: false,
-    });
+    const { data: guidesResponse, error: guidesError, isLoading: guidesLoading } = useSWR('/api/hub/guides', hubFetcher, HUB_GUIDES_SWR_OPTIONS);
 
-    const guides = guidesResponse?.data || [];
-    const preferredGuide = guides.find((guide) => guide.title.toLowerCase().includes('student government code'));
-    const fallbackGuideId = preferredGuide?.id || guides[0]?.id || '';
-    const resolvedSelectedGuideId = guides.some((guide) => guide.id === selectedGuideId)
-        ? selectedGuideId
-        : fallbackGuideId;
-    const selectedGuide = guides.find((guide) => guide.id === resolvedSelectedGuideId) || null;
-    const selectedGuideEmbedUrl = selectedGuide
-        ? (getDrivePreviewProxyUrl(selectedGuide) || selectedGuide.embedUrl)
-        : '';
-    const selectedGuidePreviewUrl = buildGuidePreviewUrl(selectedGuideEmbedUrl);
-    const shouldAttemptGuideEmbed = selectedGuide
-        ? (selectedGuide.source === 'drive' ? Boolean(selectedGuideEmbedUrl) : selectedGuide.canEmbed)
-        : false;
+    const guides = useMemo(() => guidesResponse?.data || [], [guidesResponse?.data]);
+    const {
+        resolvedSelectedGuideId,
+        selectedGuide,
+        selectedGuidePreviewUrl,
+        shouldAttemptGuideEmbed,
+    } = useMemo(() => {
+        const preferredGuide = guides.find((guide) => guide.title.toLowerCase().includes('student government code'));
+        const fallbackGuideId = preferredGuide?.id || guides[0]?.id || '';
+        const resolvedGuideId = guides.some((guide) => guide.id === selectedGuideId)
+            ? selectedGuideId
+            : fallbackGuideId;
+        const activeGuide = guides.find((guide) => guide.id === resolvedGuideId) || null;
+
+        const selectedGuideEmbedUrl = activeGuide
+            ? (
+                activeGuide.source === 'drive'
+                    ? (getDriveInlineViewerUrl(activeGuide) || getDrivePreviewProxyUrl(activeGuide) || activeGuide.embedUrl)
+                    : activeGuide.embedUrl
+            )
+            : '';
+
+        const previewUrl = shouldBypassPdfHashControls(selectedGuideEmbedUrl)
+            ? selectedGuideEmbedUrl
+            : buildGuidePreviewUrl(selectedGuideEmbedUrl);
+
+        const canAttemptEmbed = activeGuide
+            ? (activeGuide.source === 'drive' ? Boolean(selectedGuideEmbedUrl) : activeGuide.canEmbed)
+            : false;
+
+        return {
+            resolvedSelectedGuideId: resolvedGuideId,
+            selectedGuide: activeGuide,
+            selectedGuidePreviewUrl: previewUrl,
+            shouldAttemptGuideEmbed: canAttemptEmbed,
+        };
+    }, [guides, selectedGuideId]);
 
     const goToGuides = () => {
         if (typeof window === 'undefined') {
@@ -299,7 +359,6 @@ export default function HubPage() {
                 <div className="container-main">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-8">
                         {hubItems.map((item) => {
-                            const style = accentStyles[item.accent];
                             return (
                                 <div
                                     key={item.title}
@@ -325,8 +384,8 @@ export default function HubPage() {
                                     ) : null}
 
                                     <div
-                                        className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5"
-                                        style={{ background: style.bg, color: style.color }}
+                                        className="portal-accent-chip w-14 h-14 rounded-2xl flex items-center justify-center mb-5"
+                                        data-accent={item.accent}
                                     >
                                         <item.icon size={28} />
                                     </div>
@@ -344,7 +403,7 @@ export default function HubPage() {
             <section id="student-guides" className="section bg-surface-base scroll-mt-24">
                 <div className="container-main">
                     <div className="text-center mb-10">
-                        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: 'rgba(0, 43, 127, 0.1)', color: 'var(--rtu-blue)' }}>
+                        <div className="icon-chip-blue mx-auto mb-5">
                             <FileText size={28} />
                         </div>
                         <h2 className="text-3xl font-bold mb-2 section-heading text-brand">
@@ -378,9 +437,8 @@ export default function HubPage() {
                                                 type="button"
                                                 onClick={() => setSelectedGuideId(guide.id)}
                                                 className={`w-full text-left rounded-xl border px-3 py-3 transition-colors ${isSelected
-                                                    ? 'bg-blue-50'
+                                                    ? 'guide-list-button-selected'
                                                     : 'border-soft hover:bg-surface-soft'}`}
-                                                style={isSelected ? { borderColor: 'var(--rtu-blue)' } : undefined}
                                             >
                                                 <p className="text-sm font-semibold text-strong">{guide.title}</p>
                                                 {guide.description && (
@@ -394,12 +452,7 @@ export default function HubPage() {
 
                             {selectedGuide && (
                                 <div className="card overflow-hidden p-0">
-                                    <div
-                                        className="px-4 py-4 sm:px-6 border-b border-soft"
-                                        style={{
-                                            background: 'linear-gradient(90deg, rgba(0,43,127,0.05), rgba(212,168,67,0.08))',
-                                        }}
-                                    >
+                                    <div className="guide-preview-header px-4 py-4 sm:px-6 border-b border-soft">
                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                             <div>
                                                 <h3 className="text-xl font-bold text-brand">{selectedGuide.title}</h3>
@@ -412,12 +465,7 @@ export default function HubPage() {
                                                     href={selectedGuide.viewUrl}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors"
-                                                    style={{
-                                                        borderColor: 'var(--rtu-blue)',
-                                                        color: 'var(--rtu-blue)',
-                                                        backgroundColor: 'rgba(35, 72, 116, 0.06)',
-                                                    }}
+                                                    className="guide-link-secondary inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors"
                                                 >
                                                     <ExternalLink size={14} /> Open in New Tab
                                                 </a>
@@ -470,7 +518,7 @@ export default function HubPage() {
             <section className="section bg-surface-soft">
                 <div className="container-main">
                     <div className="text-center mb-10">
-                        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: 'rgba(212, 168, 67, 0.1)', color: 'var(--rtu-gold-dark)' }}>
+                        <div className="icon-chip-gold mx-auto mb-5">
                             <Calendar size={28} />
                         </div>
                         <h2 className="text-3xl font-bold mb-2 section-heading text-brand">
@@ -484,12 +532,11 @@ export default function HubPage() {
                     {/* Clickable Calendar Card */}
                     <button
                         onClick={openLightbox}
-                        className="card p-2 md:p-6 mx-auto max-w-5xl bg-white shadow-xl rounded-2xl overflow-hidden relative group cursor-pointer block w-full border-0"
-                        style={{ transition: 'box-shadow 0.3s' }}
+                        className="card p-2 md:p-6 mx-auto max-w-5xl bg-white shadow-xl rounded-2xl overflow-hidden relative group cursor-pointer block w-full border-0 transition-shadow"
                     >
                         {/* Hover overlay hint */}
-                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{ background: 'rgba(0,0,0,0.35)' }}>
-                            <div className="w-16 h-16 rounded-full flex items-center justify-center mb-3" style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)' }}>
+                        <div className="calendar-card-overlay absolute inset-0 z-10 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <div className="calendar-card-overlay-icon w-16 h-16 rounded-full flex items-center justify-center mb-3">
                                 <Search className="text-white" size={28} />
                             </div>
                             <span className="text-white font-semibold text-sm tracking-wide">Click to expand &amp; zoom</span>
@@ -528,35 +575,31 @@ export default function HubPage() {
                             <div className="absolute top-4 right-4 z-[10001] flex items-center gap-2">
                                 <button
                                     onClick={zoomIn}
-                                    className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
-                                    style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)' }}
+                                    className="glass-control-btn w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
                                     aria-label="Zoom in"
                                 >
                                     <ZoomIn className="text-white" size={18} />
                                 </button>
                                 <button
                                     onClick={zoomOut}
-                                    className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
-                                    style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)' }}
+                                    className="glass-control-btn w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
                                     aria-label="Zoom out"
                                 >
                                     <ZoomOut className="text-white" size={18} />
                                 </button>
                                 <button
                                     onClick={resetView}
-                                    className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
-                                    style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)' }}
+                                    className="glass-control-btn w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
                                     aria-label="Reset view"
                                 >
                                     <RotateCcw className="text-white" size={18} />
                                 </button>
-                                <div className="px-3 py-1 rounded-lg text-white/70 text-xs font-mono" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                                <div className="glass-control-meter px-3 py-1 rounded-lg text-white/70 text-xs font-mono">
                                     {Math.round(zoom * 100)}%
                                 </div>
                                 <button
                                     onClick={closeLightbox}
-                                    className="w-10 h-10 rounded-xl flex items-center justify-center ml-2 transition-colors"
-                                    style={{ background: 'rgba(220,38,38,0.6)', border: '1px solid rgba(220,38,38,0.8)' }}
+                                    className="glass-control-btn-danger w-10 h-10 rounded-xl flex items-center justify-center ml-2 transition-colors"
                                     aria-label="Close lightbox"
                                 >
                                     <X className="text-white" size={20} />
@@ -570,8 +613,7 @@ export default function HubPage() {
 
                             {/* Zoomable Image Container */}
                             <motion.div
-                                className="relative z-[10000] w-[90vw] h-[85vh] overflow-hidden rounded-2xl"
-                                style={{ background: 'rgba(30, 30, 30, 0.6)', cursor: dragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+                                className={`calendar-lightbox-surface relative z-[10000] w-[90vw] h-[85vh] overflow-hidden rounded-2xl ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
                                 initial={{ scale: 0.92, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 exit={{ scale: 0.92, opacity: 0 }}
@@ -582,12 +624,10 @@ export default function HubPage() {
                                 onPointerLeave={handlePointerUp}
                                 onWheel={handleWheel}
                             >
-                                <div
+                                <motion.div
                                     className="w-full h-full flex items-center justify-center select-none"
-                                    style={{
-                                        transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                                        transition: dragging ? 'none' : 'transform 0.15s ease-out',
-                                    }}
+                                    animate={{ x: pan.x, y: pan.y, scale: zoom }}
+                                    transition={dragging ? { duration: 0 } : { duration: 0.15, ease: 'easeOut' }}
                                 >
                                     <Image
                                         src="/images/ACADEMIC_CALENDAR_2026_2027.jpg"
@@ -598,7 +638,7 @@ export default function HubPage() {
                                         quality={95}
                                         draggable={false}
                                     />
-                                </div>
+                                </motion.div>
                             </motion.div>
                         </motion.div>
                     )}

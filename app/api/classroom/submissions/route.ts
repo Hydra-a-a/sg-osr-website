@@ -7,7 +7,7 @@ import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { ClassroomSubmissionSchema } from '@/schemas/classroom';
 import { logAuditAction } from '@/lib/audit';
 import { cookies } from 'next/headers';
-import { deriveEffectivePortalRole, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
+import { deriveEffectivePortalRole, hasLeaderPrivilege, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
 
 const DEDUPE_TTL_MS = 90_000;
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     const cookieStore = await cookies();
     const effectiveRole = deriveEffectivePortalRole(session.user.role, cookieStore.get(PORTAL_MODE_COOKIE)?.value);
 
-    if (effectiveRole !== 'leader') {
+    if (!hasLeaderPrivilege(effectiveRole)) {
         return NextResponse.json({ error: 'Student leader access required' }, { status: 403, headers: NO_STORE_HEADERS });
     }
 

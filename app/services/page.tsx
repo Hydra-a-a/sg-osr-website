@@ -1,562 +1,510 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useSyncExternalStore } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { FileText, Send, CheckCircle, AlertCircle, Search, ArrowRight, BookOpen, UploadCloud } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { NoncedStyle } from '@/components/CspNonceProvider';
+import BackLink from '@/components/BackLink';
 import {
-    CAMPUSES,
-    COLLEGE_INSTITUTES,
-    GRIEVANCE_CATEGORIES,
-    type Campus,
-    type CollegeInstitute,
-    type GrievanceCategory,
-} from '@/lib/ticket-constants';
-import { saveTicketToHistory } from '@/app/services/track/page';
+    FileText,
+    Search,
+    Lock,
+    Lightbulb,
+    ShieldCheck,
+    ArrowRight,
+    Star,
+    AlertCircle,
+} from 'lucide-react';
+import { deriveEffectivePortalRole } from '@/lib/portal-mode';
+import { PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
 
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-type AttachmentKind = 'image' | 'document';
 
-const ATTACHMENT_KIND_CONFIG: Record<AttachmentKind, {
-    label: string;
-    accept: string;
-    extensions: Set<string>;
-}> = {
-    image: {
-        label: 'Image (PNG/JPG)',
-        accept: '.png,.jpg,.jpeg,image/png,image/jpeg',
-        extensions: new Set(['.png', '.jpg', '.jpeg']),
-    },
-    document: {
-        label: 'Document (PDF/DOC/DOCX)',
-        accept: '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        extensions: new Set(['.pdf', '.doc', '.docx']),
-    },
-};
+function getPortalModeCookie(): string {
+    if (typeof document === 'undefined') return '';
+    return document.cookie
+        .split('; ')
+        .find(row => row.startsWith(`${PORTAL_MODE_COOKIE}=`))
+        ?.split('=')[1] ?? '';
+}
 
-const ALL_ALLOWED_EXTENSIONS_NOTE = 'Allowed file extensions: .png, .jpg, .jpeg, .pdf, .doc, .docx';
-
-function getFileExtension(fileName: string): string {
-    const lowered = fileName.toLowerCase();
-    return lowered.includes('.') ? lowered.slice(lowered.lastIndexOf('.')) : '';
+function subscribeNoop(): () => void {
+    return () => {};
 }
 
 export default function ServicesPage() {
     const { data: session, status } = useSession();
-    const formStartTimestampRef = useRef<number | null>(null);
-    const [isAnonymous, setIsAnonymous] = useState(false);
-    const [wantsCopy, setWantsCopy] = useState(false);
-    const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        studentId: '',
-        campus: CAMPUSES[0] as Campus,
-        college: COLLEGE_INSTITUTES[0] as CollegeInstitute,
-        subject: '',
-        category: GRIEVANCE_CATEGORIES[0] as GrievanceCategory,
-        complaintNarrative: '',
-        honeypot: ''
-    });
-    const [attachment, setAttachment] = useState<File | null>(null);
-    const [attachmentKind, setAttachmentKind] = useState<AttachmentKind>('document');
-    const [attachmentError, setAttachmentError] = useState<string | null>(null);
-    // fake input field. if a bot fills this in, we drop the request. got tired of spam emails.
-    const [submitting, setSubmitting] = useState(false);
-    const [result, setResult] = useState<{
-        success: boolean;
-        message: string;
-        ticketId?: string;
-        trackingAccessToken?: string;
-    } | null>(null);
+    const portalMode = useSyncExternalStore(subscribeNoop, getPortalModeCookie, () => '');
 
-    const isAuthenticated = status === 'authenticated' && Boolean(session?.user?.email);
-    const sessionEmail = session?.user?.email?.trim().toLowerCase() || '';
+    const userRole = session?.user?.role ?? 'student';
+    const effectiveRole = deriveEffectivePortalRole(userRole, portalMode);
 
-    useEffect(() => {
-        formStartTimestampRef.current = Date.now();
-    }, []);
+    const isPrivileged = effectiveRole === 'leader' || effectiveRole === 'officer';
+    const isLoading = status === 'loading';
 
-    const handleAttachmentChange = (file: File | null) => {
-        if (!file) {
-            setAttachment(null);
-            setAttachmentError(null);
-            return;
-        }
+    const modeLabel = effectiveRole === 'officer'
+        ? 'Officer Console'
+        : effectiveRole === 'leader'
+            ? 'Leadership Console'
+            : 'Student Console';
 
-        const fileName = file.name.toLowerCase();
-        const extension = getFileExtension(fileName);
-        const config = ATTACHMENT_KIND_CONFIG[attachmentKind];
+    const cards = [
+        {
+            id: 'grievance',
+            href: '/services/grievance',
+            icon: FileText,
+            label: 'Student Grievances',
+            description:
+                'Formally report academic, administrative, or disciplinary concerns to the Student Council. Your submission is handled with confidentiality and due process.',
+            badge: null,
+            tone: 'blue',
+            kicker: 'Case Intake',
+            visible: true,
+        },
+        {
+            id: 'proposals',
+            href: '/services/proposals',
+            icon: Lightbulb,
+            label: 'Project Proposals',
+            description:
+                'Submit project and program proposals for consideration by the Student Council. For Student Leaders and Officers only.',
+            badge: 'Leaders & Officers',
+            tone: 'amber',
+            kicker: 'Program Pipeline',
+            visible: isPrivileged,
+        },
+        {
+            id: 'admin',
+            href: '/services/admin',
+            icon: ShieldCheck,
+            label: 'Admin Hub',
+            description:
+                'Access the central dashboard to manage grievances, review project proposals, and oversee portal operations.',
+            badge: 'Officer Access',
+            tone: 'green',
+            kicker: 'Operations Deck',
+            visible: effectiveRole === 'officer',
+        },
+    ] as const;
 
-        if (!config.extensions.has(extension)) {
-            setAttachment(null);
-            setAttachmentError(`File does not match selected type. Please upload ${config.label} files only.`);
-            return;
-        }
-
-        if (file.size > MAX_ATTACHMENT_BYTES) {
-            setAttachment(null);
-            setAttachmentError('Attachment must be 10MB or smaller.');
-            return;
-        }
-
-        setAttachment(file);
-        setAttachmentError(null);
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!isAuthenticated) {
-            setResult({ success: false, message: 'Please sign in with your @rtu.edu.ph account to submit this form.' });
-            return;
-        }
-
-        setSubmitting(true);
-        setResult(null);
-
-        try {
-            if (attachmentError) {
-                setResult({ success: false, message: attachmentError });
-                setSubmitting(false);
-                return;
-            }
-
-            const formStartTimestamp = formStartTimestampRef.current ?? Date.now();
-
-            const payload = new FormData();
-            payload.set('studentId', formData.studentId.trim());
-            payload.set('campus', formData.campus);
-            payload.set('college', formData.college);
-            payload.set('category', formData.category);
-            payload.set('subject', formData.subject);
-            payload.set('complaintNarrative', formData.complaintNarrative);
-            payload.set('attachmentKind', attachmentKind);
-            payload.set('honeypot', formData.honeypot);
-            payload.set('isAnonymous', String(isAnonymous));
-            payload.set('timestamp', String(formStartTimestamp));
-
-            if (wantsCopy) {
-                payload.set('contactEmail', sessionEmail);
-            }
-
-            if (attachment) {
-                payload.set('attachment', attachment);
-            }
-
-            const res = await fetch('/api/tickets', {
-                method: 'POST',
-                body: payload,
-            });
-
-            const json = await res.json();
-
-            if (res.ok) {
-                const ticketId: string = json.ticketId;
-                const trackingAccessToken = typeof json.trackingAccessToken === 'string'
-                    ? json.trackingAccessToken
-                    : undefined;
-
-                setResult({
-                    success: true,
-                    message: json.message || 'Submitted successfully!',
-                    ticketId,
-                    trackingAccessToken,
-                });
-                // Persist so the Track page can show history even after navigation
-                saveTicketToHistory({
-                    id: ticketId,
-                    submittedAt: new Date().toISOString(),
-                    category: formData.category,
-                    subject: formData.subject,
-                }, trackingAccessToken);
-                setFormData({
-                    name: '',
-                    email: '',
-                    studentId: '',
-                    campus: CAMPUSES[0],
-                    college: COLLEGE_INSTITUTES[0],
-                    subject: '',
-                    category: GRIEVANCE_CATEGORIES[0],
-                    complaintNarrative: '',
-                    honeypot: '',
-                });
-                setAttachment(null);
-                setAttachmentKind('document');
-                setAttachmentError(null);
-                setIsAnonymous(false);
-                setWantsCopy(false);
-                formStartTimestampRef.current = Date.now();
-            } else {
-                const errorPayload = json.error;
-                const errorMsg = typeof errorPayload === 'object' && errorPayload !== null
-                    ? (errorPayload.message as string) || 'Submission failed'
-                    : typeof json.message === 'string'
-                        ? json.message
-                        : 'Submission failed';
-                setResult({ success: false, message: errorMsg });
-            }
-        } catch {
-            setResult({ success: false, message: 'Network error. Please try again.' });
-        }
-
-        setSubmitting(false);
-    };
+    const visibleCards = cards.filter(c => c.visible);
 
     return (
-        <>
-            {/* Header — instant, no motion */}
-            <section className="bg-gradient-rtu page-header">
-                <div className="container-main text-center">
-                    <FileText className="mx-auto mb-4 text-white/80" size={40} />
-                    <h1 className="page-header-title font-bold text-white mb-3">
-                        Student <span className="text-gradient-gold">Services</span>
-                    </h1>
-                    <p className="page-header-subtitle max-w-lg mx-auto">
-                        Submit student grievances securely, anonymously, to the University Student Government.
+        <div className={`services-shell relative overflow-hidden`}>
+            <div className="services-noise" aria-hidden="true" />
+
+            <section className="relative z-10 pt-20 pb-10 md:pt-28 md:pb-14">
+                <div className="container-main">
+                    <BackLink href="/" label="Back to Home" className="mb-8 text-slate-200 hover:text-white transition-colors" />
+                    <motion.div
+                        initial={{ opacity: 0, y: 24 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.55 }}
+                        className="grid gap-8 md:grid-cols-[1.1fr_0.9fr] items-end"
+                    >
+                        <div>
+                            <span className="services-eyebrow inline-flex items-center gap-2 px-4 py-1.5 rounded-full shadow-sm mb-4">
+                                <Star size={14} className="text-rtu-gold" /> RTU Student Government Services
+                            </span>
+                            <h1 className={`services-display mt-3`}>
+                                Dedicated to <span className="services-display-accent">Student Support</span>
+                            </h1>
+                            <p className="services-lead mt-5 max-w-2xl">
+                                Access official channels for grievances, project proposals, and transparent updates. 
+                                Designed to be simple, accessible, and highly secure.
+                            </p>
+                        </div>
+
+                        <div className="services-status-panel self-start md:self-end">
+                            <p className="services-status-label">Your Current Role</p>
+                            <p className={`services-status-mode`}>{modeLabel}</p>
+                            <p className="services-status-caption">
+                                Certain administrative actions require elevated access to be visible.
+                            </p>
+                        </div>
+                    </motion.div>
+                </div>
+            </section>
+
+            <section className="relative z-10 pb-16 md:pb-20">
+                <div className="container-main max-w-6xl">
+                    <div className="mb-8 flex justify-end">
+                        <div className="flex flex-wrap justify-end gap-3">
+                            {isPrivileged ? (
+                                <Link href="/services/proposals/track" className="services-track-link group inline-flex items-center gap-2 px-5 py-3 rounded-xl">
+                                    <Lightbulb size={16} />
+                                    <span>Track Submitted Proposals</span>
+                                    <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
+                                </Link>
+                            ) : null}
+                            <Link href="/services/track" className="services-track-link group inline-flex items-center gap-2 px-5 py-3 rounded-xl">
+                                <Search size={16} />
+                                <span>Open Tracking Console</span>
+                                <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
+                            </Link>
+                        </div>
+                    </div>
+
+                    {isLoading ? (
+                        <div className="services-card-grid gap-6">
+                            {[0, 1].map((item) => (
+                                <div key={item} className="services-card services-card-skeleton p-7 md:p-8">
+                                    <div className="h-4 w-28 bg-white/20 rounded mb-5" />
+                                    <div className="h-12 w-12 rounded-lg bg-white/20 mb-5" />
+                                    <div className="h-7 w-2/3 bg-white/20 rounded mb-3" />
+                                    <div className="h-4 w-full bg-white/15 rounded mb-2" />
+                                    <div className="h-4 w-5/6 bg-white/15 rounded" />
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="services-card-grid gap-6">
+                            {visibleCards.map((card, index) => {
+                                const Icon = card.icon;
+
+                                return (
+                                    <motion.div
+                                        key={card.id}
+                                        initial={{ opacity: 0, y: 28 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.45, delay: 0.08 * index }}
+                                    >
+                                        <Link href={card.href} className={`services-card services-card-${card.tone} group h-full block no-underline p-7 md:p-8`}>
+                                    <div className="flex items-start justify-between gap-4 mb-2">
+                                        <p className="services-card-kicker">{card.kicker}</p>
+                                    </div>
+                                    
+                                    <div className="services-icon-box mb-6 relative">
+                                        <div className="services-icon-tile">
+                                            <Icon size={24} />
+                                        </div>
+                                    </div>
+
+                                    <div className="services-badge-slot mb-4">
+                                        {card.badge && (
+                                            <span className="services-badge inline-flex items-center gap-1.5">
+                                                <ShieldCheck size={12} /> {card.badge}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <h2 className={`services-card-title`}>{card.label}</h2>
+                                    <p className="services-card-description mt-3">{card.description}</p>
+
+                                    <div className="services-card-cta mt-8 inline-flex items-center gap-2">
+                                        Access Module
+                                        <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-1" />
+                                    </div>
+                                        </Link>
+                                    </motion.div>
+                                );
+                            })}
+
+                            {!isPrivileged && status === 'authenticated' && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 28 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.45, delay: 0.18 }}
+                                    className="services-card services-card-locked p-7 md:p-8"
+                                >
+                                    <div className="flex items-start justify-between gap-4 mb-2">
+                                        <p className="services-card-kicker text-red-500/80">Restricted Module</p>
+                                    </div>
+
+                                    <div className="services-icon-box mb-6 relative">
+                                        <div className="services-icon-tile opacity-60">
+                                            <Lock size={24} />
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="services-badge-slot mb-4">
+                                        <span className="services-badge-locked inline-flex items-center gap-1.5">
+                                            <AlertCircle size={12} /> Leaders & Officers Only
+                                        </span>
+                                    </div>
+
+                                    <h2 className={`services-card-title text-gray-400`}>Project Proposals</h2>
+                                    <p className="services-card-description mt-3 text-gray-500">
+                                        Access required. Please log into an authorized account or switch your active mode to access this administrative portal.
+                                    </p>
+                                </motion.div>
+                            )}
+                        </div>
+                    )}
+
+                    <p className="services-footnote mt-10 text-center">
+                        Every submission path here is governed by the Student Government data security baseline, with role-aware visibility and auditable updates.
                     </p>
                 </div>
             </section>
 
-            <section className="section-tight">
-                <div className="container-main max-w-3xl">
-                    <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-                        <p className="text-sm text-subtle m-0">
-                            Use this form to report an issue or concern.
-                        </p>
-                        <Link href="/services/track" className="text-sm inline-flex items-center gap-2 font-semibold px-5 py-2.5 rounded-xl border-2 border-rtu-blue text-rtu-blue hover:bg-rtu-blue hover:text-white transition-all">
-                            <BookOpen size={16} /> Track Submitted Grievances
-                        </Link>
-                    </div>
-                    <motion.form
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.2 }}
-                        onSubmit={handleSubmit}
-                        className="card p-8"
-                    >
-                        <div className="space-y-5">
-                            {/* hidden bot trap */}
-                            <div style={{ position: 'absolute', opacity: 0, top: '-9999px', left: '-9999px' }} aria-hidden="true">
-                                <label htmlFor="user_website_url">Website URL (leave blank)</label>
-                                <input
-                                    type="text"
-                                    id="user_website_url"
-                                    name="user_website_url"
-                                    value={formData.honeypot}
-                                    onChange={e => setFormData({ ...formData, honeypot: e.target.value })}
-                                    tabIndex={-1}
-                                    autoComplete="off"
-                                />
-                            </div>
+                          <NoncedStyle css={`
+                .services-shell {
+                    background: linear-gradient(130deg, #1a3352 0%, #234874 48%, #3e6596 100%);
+                    background-image:
+                        radial-gradient(130% 120% at 8% 12%, rgba(232, 207, 146, 0.18) 0%, rgba(232, 207, 146, 0) 52%),
+                        radial-gradient(140% 120% at 92% 8%, rgba(87, 131, 186, 0.28) 0%, rgba(87, 131, 186, 0) 58%),
+                        linear-gradient(130deg, #1a3352 0%, #234874 48%, #3e6596 100%); 
+                    color: #e2e8f0;
+                    min-height: 100vh;
+                }
 
-                            <div className="rounded-xl border border-soft p-4 bg-surface-muted">
-                                <label className="flex items-center gap-3 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={isAnonymous}
-                                        onChange={(e) => {
-                                            const checked = e.target.checked;
-                                            setIsAnonymous(checked);
-                                            if (checked) {
-                                                setFormData(prev => ({ ...prev, name: '', email: '', studentId: '' }));
-                                            }
-                                        }}
-                                        disabled={!isAuthenticated || submitting}
-                                        className="h-4 w-4"
-                                    />
-                                    <span className="text-sm font-medium text-body">Remain anonymous</span>
-                                </label>
-                                <p className="mt-2 text-xs text-subtle">
-                                    When enabled, your grievance is sent without your name or email. Please ensure that all submissions are conducive to a respectful and constructive environment, even when anonymous.
-                                </p>
-                            </div>
+                .services-shell::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background: radial-gradient(circle at top, rgba(255,255,255,0.02) 0%, transparent 100%);
+                    pointer-events: none;
+                    z-index: 1;
+                }
 
-                            {!isAnonymous && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1.5 text-body">
-                                            Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            required
-                                            minLength={2}
-                                            maxLength={100}
-                                            value={formData.name}
-                                            onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                            disabled={!isAuthenticated || submitting}
-                                            className="field-input text-sm"
-                                            placeholder="Juan Dela Cruz"
-                                        />
-                                    </div>
+                .services-noise {
+                    position: absolute;
+                    inset: 0;
+                    background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+                    background-size: 32px 32px;
+                    opacity: 0.2;
+                    mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+                    pointer-events: none;
+                    z-index: 2;
+                }
 
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1.5 text-body">
-                                            Email
-                                        </label>
-                                        <input
-                                            type="email"
-                                            required
-                                            maxLength={254}
-                                            value={formData.email}
-                                            onChange={e => setFormData({ ...formData, email: e.target.value })}
-                                            disabled={!isAuthenticated || submitting}
-                                            className="field-input text-sm"
-                                            placeholder="2026-xxxxxx@rtu.edu.ph"
-                                        />
-                                    </div>
-                                </div>
-                            )}
+                .services-eyebrow {
+                    background: rgba(212, 168, 67, 0.1);
+                    border: 1px solid rgba(212, 168, 67, 0.2);
+                    color: #f7d996;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    backdrop-filter: blur(8px);
+                }
 
-                            {/* Optional: receive a copy */}
-                            <div className="pt-3 border-t border-soft mb-5">
-                                <label className="flex items-center gap-3 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={wantsCopy}
-                                        onChange={(e) => setWantsCopy(e.target.checked)}
-                                        disabled={submitting}
-                                        className="h-4 w-4"
-                                    />
-                                    <span className="text-sm font-medium text-body">Send me a copy <span className="text-subtle font-normal">(optional)</span></span>
-                                </label>
+                .services-display {
+                    font-size: clamp(2.2rem, 5vw, 4.2rem);
+                    line-height: 1.1;
+                    color: #ffffff;
+                    max-width: 20ch;
+                    text-wrap: pretty;
+                    font-weight: 700;
+                }
 
-                                {wantsCopy && (
-                                    <p className="text-xs text-subtle mt-1.5 pl-7">
-                                        We will send your confirmation and secure tracking link to <strong>{sessionEmail}</strong>.
-                                    </p>
-                                )}
-                            </div>
+                .services-display-accent {
+                    color: transparent;
+                    background: linear-gradient(135deg, #f7d996 0%, #d4a843 100%);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                }
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                {!isAnonymous && (
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1.5 text-body">
-                                            Student ID
-                                        </label>
-                                        <input
-                                            type="text"
-                                            required
-                                            minLength={3}
-                                            maxLength={40}
-                                            value={formData.studentId}
-                                            onChange={e => setFormData({ ...formData, studentId: e.target.value })}
-                                            disabled={!isAuthenticated || submitting}
-                                            className="field-input text-sm"
-                                            placeholder="2026-xxxxxx"
-                                        />
-                                    </div>
-                                )}
+                .services-lead {
+                    color: #94a3b8;
+                    font-size: clamp(1rem, 1.15vw + 0.5rem, 1.15rem);
+                    line-height: 1.6;
+                    max-width: 65ch;
+                }
 
-                                <div>
-                                    <label className="block text-sm font-medium mb-1.5 text-body">
-                                        Campus
-                                    </label>
-                                    <select
-                                        required
-                                        value={formData.campus}
-                                        onChange={e => setFormData({ ...formData, campus: e.target.value as Campus })}
-                                        disabled={!isAuthenticated || submitting}
-                                        className="field-input text-sm"
-                                    >
-                                        {CAMPUSES.map(campus => (
-                                            <option key={campus} value={campus}>{campus}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                .services-card {
+                    position: relative;
+                    border-radius: 1.5rem;
+                    background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), background 0.4s ease, border-color 0.4s ease;
+                    overflow: hidden;
+                }
 
-                                <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium mb-1.5 text-body">
-                                        College / Institute
-                                    </label>
-                                    <select
-                                        required
-                                        value={formData.college}
-                                        onChange={e => setFormData({ ...formData, college: e.target.value as CollegeInstitute })}
-                                        disabled={!isAuthenticated || submitting}
-                                        className="field-input text-sm"
-                                    >
-                                        {COLLEGE_INSTITUTES.map(college => (
-                                            <option key={college} value={college}>{college}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                .services-card-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                }
 
-                                <div>
-                                    <label className="block text-sm font-medium mb-1.5 text-body">
-                                        Category
-                                    </label>
-                                    <select
-                                        required
-                                        value={formData.category}
-                                        onChange={e => setFormData({ ...formData, category: e.target.value as GrievanceCategory })}
-                                        disabled={!isAuthenticated || submitting}
-                                        className="field-input text-sm"
-                                    >
-                                        {GRIEVANCE_CATEGORIES.map(cat => (
-                                            <option key={cat} value={cat}>{cat}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                .services-card::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background: radial-gradient(800px circle at var(--mouse-x) var(--mouse-y), rgba(255,255,255,0.06), transparent 40%);
+                    opacity: 0;
+                    pointer-events: none;
+                    transition: opacity 0.5s ease;
+                }
 
-                                <div>
-                                    <label className="block text-sm font-medium mb-1.5 text-body">
-                                        Subject <span className="text-subtle">(optional)</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        maxLength={200}
-                                        value={formData.subject}
-                                        onChange={e => setFormData({ ...formData, subject: e.target.value })}
-                                        disabled={!isAuthenticated || submitting}
-                                        className="field-input text-sm"
-                                        placeholder="Brief subject line"
-                                    />
-                                </div>
-                            </div>
+                .services-card:hover {
+                    transform: translateY(-2px);
+                    background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+                    border-color: rgba(255, 255, 255, 0.1);
+                    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+                }
 
-                            <div>
-                                <label className="block text-sm font-medium mb-1.5 text-body">
-                                    Complaint Narrative
-                                </label>
-                                <textarea
-                                    required
-                                    minLength={10}
-                                    maxLength={5000}
-                                    rows={5}
-                                    value={formData.complaintNarrative}
-                                    onChange={e => setFormData({ ...formData, complaintNarrative: e.target.value })}
-                                    disabled={!isAuthenticated || submitting}
-                                    className="field-input text-sm resize-none"
-                                    placeholder="Describe your grievance in detail..."
-                                />
-                            </div>
+                .services-card:hover::before {
+                    opacity: 1;
+                }
+                
+                .services-card-locked {
+                    background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.01), rgba(255, 255, 255, 0.01) 8px, rgba(0, 0, 0, 0.1) 8px, rgba(0, 0, 0, 0.1) 16px),
+                                linear-gradient(160deg, rgba(15, 25, 45, 0.8) 0%, rgba(8, 15, 25, 0.9) 100%);
+                    border-color: rgba(255, 255, 255, 0.03);
+                    opacity: 0.85;
+                }
 
-                            <div>
-                                <label className="block text-sm font-medium mb-1.5 text-body">
-                                    Attachment <span className="text-subtle">(optional)</span>
-                                </label>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1 text-subtle">Attachment type</label>
-                                        <select
-                                            value={attachmentKind}
-                                            onChange={(e) => {
-                                                const nextKind = e.target.value as AttachmentKind;
-                                                setAttachmentKind(nextKind);
-                                                if (attachment) {
-                                                    const ext = getFileExtension(attachment.name);
-                                                    if (!ATTACHMENT_KIND_CONFIG[nextKind].extensions.has(ext)) {
-                                                        setAttachment(null);
-                                                        setAttachmentError(`Selected file was removed. Please choose ${ATTACHMENT_KIND_CONFIG[nextKind].label} files only.`);
-                                                    } else {
-                                                        setAttachmentError(null);
-                                                    }
-                                                }
-                                            }}
-                                            disabled={!isAuthenticated || submitting}
-                                            className="field-input text-sm"
-                                        >
-                                            <option value="document">{ATTACHMENT_KIND_CONFIG.document.label}</option>
-                                            <option value="image">{ATTACHMENT_KIND_CONFIG.image.label}</option>
-                                        </select>
-                                    </div>
+                .services-card-kicker {
+                    margin: 0;
+                    color: rgba(255, 255, 255, 0.5);
+                    font-size: 0.72rem;
+                    font-weight: 500;
+                    letter-spacing: 0.02em;
+                }
 
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1 text-subtle">Choose file</label>
-                                        <input
-                                            id="grievance-attachment"
-                                            type="file"
-                                            accept={ATTACHMENT_KIND_CONFIG[attachmentKind].accept}
-                                            disabled={!isAuthenticated || submitting}
-                                            onChange={(e) => handleAttachmentChange(e.target.files?.[0] || null)}
-                                            className="sr-only"
-                                        />
-                                        <label
-                                            htmlFor="grievance-attachment"
-                                            className="field-input text-sm min-h-[44px] flex items-center justify-center gap-2 cursor-pointer border-dashed"
-                                        >
-                                            <UploadCloud size={16} />
-                                            <span>{attachment ? 'Replace selected file' : 'Click to add a file'}</span>
-                                        </label>
-                                    </div>
-                                </div>
-                                <p className="text-xs text-subtle mt-1.5">{ALL_ALLOWED_EXTENSIONS_NOTE}</p>
-                                <p className="text-xs text-subtle mt-1">Maximum file size: 10MB.</p>
-                                {attachmentError && (
-                                    <p className="text-xs text-red-700 mt-1">{attachmentError}</p>
-                                )}
-                                {attachment && !attachmentError && (
-                                    <p className="text-xs text-green-700 mt-1">Selected: {attachment.name}</p>
-                                )}
-                            </div>
-                        </div>
+                .services-icon-box {
+                    font-size: 2.2rem;
+                }
 
-                        {/* Result Banner — this animation is appropriate (user-triggered) */}
-                        <AnimatePresence>
-                            {result && (
-                                <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className={`mt-5 p-4 rounded-xl flex items-start gap-3 text-sm ${result.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                                        }`}
-                                >
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-bold">{result.success ? 'Success' : 'Error'}</span>
-                                        </div>
-                                        <p className="mb-2">{result.message}</p>
+                .services-icon-tile {
+                    width: 3.5rem;
+                    height: 3.5rem;
+                    display: grid;
+                    place-items: center;
+                    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 1rem;
+                    color: #ffffff;
+                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 4px 12px rgba(0,0,0,0.2);
+                }
 
-                                        {result.success && result.ticketId && (
-                                            <div className="mt-4 p-4 bg-white/60 dark:bg-black/20 rounded-lg border border-green-200">
-                                                <p className="eyebrow-label text-green-700 mb-1">Your Tracking ID</p>
-                                                <p className="text-2xl font-mono font-bold text-green-900 mb-3">{result.ticketId}</p>
+                .services-card-blue .services-icon-tile { color: #93c5fd; background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05)); border-color: rgba(59, 130, 246, 0.2); }
+                .services-card-amber .services-icon-tile { color: #fde047; background: linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(234, 179, 8, 0.05)); border-color: rgba(234, 179, 8, 0.2); }
+                .services-card-green .services-icon-tile { color: #86efac; background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.05)); border-color: rgba(34, 197, 94, 0.2); }
+                .services-card-gray .services-icon-tile { color: #cbd5e1; background: linear-gradient(135deg, rgba(100, 116, 139, 0.15), rgba(100, 116, 139, 0.05)); border-color: rgba(100, 116, 139, 0.2); }
+                
+                .services-card-locked .services-icon-tile {
+                    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
+                    color: #fca5a5;
+                    border-color: rgba(239, 68, 68, 0.2);
+                }
 
-                                                <Link
-                                                    href={result.trackingAccessToken
-                                                        ? `/services/track?id=${encodeURIComponent(result.ticketId)}&access=${encodeURIComponent(result.trackingAccessToken)}`
-                                                        : `/services/track?id=${encodeURIComponent(result.ticketId)}`}
-                                                    className="inline-flex items-center gap-2 text-sm font-medium text-green-700 hover:text-green-900 transition-colors"
-                                                >
-                                                    Track status <ArrowRight size={14} />
-                                                </Link>
-                                            </div>
-                                        )}
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                .services-badge {
+                    margin: 0;
+                    border-radius: 0.5rem;
+                    font-size: 0.65rem;
+                    font-weight: 600;
+                    letter-spacing: 0.03em;
+                    padding: 0.4rem 0.75rem;
+                    background: rgba(247, 217, 150, 0.12);
+                    color: #f7d996;
+                    border: 1px solid rgba(247, 217, 150, 0.3);
+                    backdrop-filter: blur(4px);
+                }
 
-                        {isAuthenticated ? (
-                            <button
-                                type="submit"
-                                disabled={submitting}
-                                className="btn-primary w-full mt-6 gap-2 text-base"
-                                style={{ opacity: submitting ? 0.6 : 1 }}
-                            >
-                                {submitting ? <span className="btn-spinner" /> : <Send size={18} />}
-                                {submitting ? 'Submitting...' : 'Submit Grievance'}
-                            </button>
-                        ) : (
-                            <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                                <p className="text-sm text-amber-900">
-                                    Log in with your <strong>@rtu.edu.ph</strong> account to submit this form.
-                                </p>
-                                <Link
-                                    href={`/login?callbackUrl=${encodeURIComponent('/services')}`}
-                                    className="btn-primary w-full mt-3 inline-flex items-center justify-center gap-2 text-base"
-                                >
-                                    Continue to Login
-                                </Link>
-                            </div>
-                        )}
-                    </motion.form>
+                .services-badge-slot {
+                    min-height: 1.7rem;
+                    display: flex;
+                    align-items: flex-start;
+                }
 
-                </div>
-            </section>
-        </>
+                .services-badge-locked {
+                    margin: 0;
+                    border-radius: 0.5rem;
+                    font-size: 0.65rem;
+                    font-weight: 600;
+                    letter-spacing: 0.03em;
+                    padding: 0.4rem 0.75rem;
+                    background: rgba(239, 68, 68, 0.12);
+                    color: #fca5a5;
+                    border: 1px solid rgba(239, 68, 68, 0.25);
+                    backdrop-filter: blur(4px);
+                }
+
+                .services-card-title {
+                    font-size: clamp(1.4rem, 2vw, 1.8rem);
+                    margin: 0;
+                    color: #ffffff;
+                    line-height: 1.15;
+                    font-weight: 500;
+                    letter-spacing: -0.01em;
+                }
+
+                .services-card-description {
+                    font-size: 0.95rem;
+                    color: #cbd5e1;
+                    line-height: 1.65;
+                }
+
+                .services-card-cta {
+                    color: #7dd3fc;
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    letter-spacing: 0.01em;
+                    transition: color 0.3s ease;
+                }
+
+                .services-card:hover .services-card-cta {
+                    color: #fca5a5;
+                }
+
+                .services-status-panel {
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                    background: linear-gradient(145deg, rgba(20, 35, 60, 0.4), rgba(10, 20, 36, 0.6));
+                    backdrop-filter: blur(12px);
+                    border-radius: 1rem;
+                    padding: 1.5rem 1.75rem;
+                    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+                }
+
+                .services-status-label {
+                    margin: 0;
+                    color: #7dd3fc;
+                    font-size: 0.72rem;
+                    letter-spacing: 0.05em;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                }
+
+                .services-status-mode {
+                    margin: 0.35rem 0 0;
+                    font-size: clamp(1.5rem, 2.5vw, 2rem);
+                    color: #f7d996;
+                    font-weight: 500;
+                    line-height: 1.1;
+                }
+
+                .services-status-caption {
+                    margin: 0.5rem 0 0;
+                    color: #64748b;
+                    font-size: 0.85rem;
+                    line-height: 1.5;
+                }
+
+                .services-track-link {
+                    color: #ffffff;
+                    font-weight: 600;
+                    font-size: 0.9rem;
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+                    backdrop-filter: blur(8px);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+                    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                }
+
+                .services-track-link:hover {
+                    box-shadow: 0 8px 24px rgba(247, 217, 150, 0.15);
+                    transform: translateY(-2px);
+                    border-color: rgba(247, 217, 150, 0.4);
+                    background: linear-gradient(145deg, rgba(247, 217, 150, 0.1), rgba(255, 255, 255, 0.02));
+                }
+            `} />
+        </div>
     );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

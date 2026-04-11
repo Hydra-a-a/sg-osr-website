@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
-import { lookupTicketById } from '@/lib/tickets';
+import { auth } from '@/lib/auth';
+import { lookupTicketByIdForOwner } from '@/lib/tickets';
 
 function withNoStore(response: NextResponse): NextResponse {
     response.headers.set('Cache-Control', 'no-store');
@@ -21,6 +22,8 @@ export async function GET(
     const ip = getClientIp(request);
     const url = new URL(request.url);
     const trackingToken = url.searchParams.get('access');
+    const session = await auth();
+    const ownerEmail = session?.user?.email || '';
     const { id: rawId } = await params;
 
     // Rate limit: 20 lookups per minute per IP to prevent enumeration attacks
@@ -40,7 +43,10 @@ export async function GET(
     }
 
     try {
-        const ticket = await lookupTicketById(rawId, trackingToken);
+        const ticket = await lookupTicketByIdForOwner(rawId, {
+            trackingToken,
+            ownerEmail,
+        });
 
         if (!ticket) {
             return withNoStore(

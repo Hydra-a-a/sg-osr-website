@@ -1,8 +1,25 @@
 import { z } from 'zod';
 
-// Strict sanitization regex: letters, numbers, spaces, common punctuation, Filipino characters
 const safeTextRegex = /^[a-zA-Z0-9\s.,'\-ñÑ()&/]+$/;
 const safeOptionalTextRegex = /^$|^[a-zA-Z0-9\s.,'\-ñÑ()&/]+$/;
+
+function isSafeLogoUrl(value: string): boolean {
+    const trimmed = (value || '').trim();
+    if (!trimmed) {
+        return false;
+    }
+
+    if (trimmed.startsWith('/')) {
+        return !trimmed.startsWith('//');
+    }
+
+    try {
+        const parsed = new URL(trimmed);
+        return parsed.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
 
 export const OfficerSchema = z.object({
     id: z.string().trim().max(50).optional(),
@@ -52,6 +69,14 @@ export const OfficerSchema = z.object({
         .max(300)
         .optional(),
 
+    logoUrl: z.string()
+        .trim()
+        .max(500, 'Logo URL is too long')
+        .refine((value) => isSafeLogoUrl(value), {
+            message: 'Invalid logo URL',
+        })
+        .optional(),
+
     priority: z.number().int().min(0).max(999).optional(),
 });
 
@@ -92,6 +117,14 @@ export const OfficeSchema = z.object({
         .regex(safeOptionalTextRegex, 'Branch contains invalid characters')
         .optional()
         .default(''),
+
+    logoUrl: z.string()
+        .trim()
+        .max(500, 'Logo URL is too long')
+        .refine((value) => isSafeLogoUrl(value), {
+            message: 'Invalid logo URL',
+        })
+        .optional(),
 
     priority: z.number().int().min(0).max(999).optional(),
 });

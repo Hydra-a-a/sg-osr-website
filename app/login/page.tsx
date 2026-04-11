@@ -31,7 +31,7 @@ function LoginContent() {
     const [isFacebookLite, setIsFacebookLite] = useState(false);
     const [localSimError, setLocalSimError] = useState<string | null>(null);
     const [devEmail, setDevEmail] = useState('student@rtu.edu.ph');
-    const [devRole, setDevRole] = useState<'student' | 'leader'>('student');
+    const [devRole, setDevRole] = useState<'student' | 'leader' | 'officer'>('student');
     const [devToken, setDevToken] = useState('');
     const [isLocalHost, setIsLocalHost] = useState(false);
     const searchParams = useSearchParams();
@@ -117,8 +117,10 @@ function LoginContent() {
 
         setLocalSimError(null);
         setIsLoading(true);
-        setActivePortal(devRole);
-        writePortalSelectionCookies(devRole);
+        // For officer sim, use 'leader' as the portal cookie default (gating is handled server-side)
+        const portalCookieMode = devRole === 'officer' ? 'leader' : devRole;
+        setActivePortal(portalCookieMode);
+        writePortalSelectionCookies(portalCookieMode);
         try {
             await signIn('dev-sim', {
                 email: normalizedEmail,
@@ -265,11 +267,15 @@ function LoginContent() {
                                             />
                                             <select
                                                 value={devRole}
-                                                onChange={(e) => setDevRole(e.target.value === 'leader' ? 'leader' : 'student')}
+                                                onChange={(e) => {
+                                                    const v = e.target.value;
+                                                    setDevRole(v === 'officer' ? 'officer' : v === 'leader' ? 'leader' : 'student');
+                                                }}
                                                 className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
                                             >
                                                 <option value="student">Student</option>
                                                 <option value="leader">Student Leader</option>
+                                                <option value="officer">Officer (Admin)</option>
                                             </select>
                                             <input
                                                 type="password"

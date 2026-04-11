@@ -141,17 +141,23 @@ if (isLocalDevLoginEnabled()) {
                     return null;
                 }
 
-                const roleValue = requestedRole === 'leader' ? 'leader' : 'student';
+                const roleValue = requestedRole === 'officer' ? 'officer' : requestedRole === 'leader' ? 'leader' : 'student';
 
                 logAuditAction('AUTH_SIGN_IN', {
                     domain: ALLOWED_DOMAIN,
                     provider: 'dev-sim',
                 });
 
+                const roleLabels: Record<string, string> = {
+                    officer: 'Local Officer (Simulated)',
+                    leader: 'Local Leader (Simulated)',
+                    student: 'Local Student (Simulated)',
+                };
+
                 return {
                     id: rawEmail,
                     email: rawEmail,
-                    name: roleValue === 'leader' ? 'Local Leader (Simulated)' : 'Local Student (Simulated)',
+                    name: roleLabels[roleValue] || 'Local Student (Simulated)',
                     role: roleValue,
                 };
             },

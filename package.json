@@ -7,14 +7,21 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:inline-style-scan": "node scripts/scan-inline-styles.js",
     "test:forms-auth-guard": "node tests/test-forms-auth-guard.js",
     "test:api-error-envelope": "node tests/test-api-error-envelope.js",
     "test:csp-policy": "node tests/test-csp-policy.js",
     "test:redacted-logging": "node tests/test-redacted-logging.js",
     "test:ticket-security-hardening": "node tests/test-ticket-security-hardening.js",
+    "test:ticket-owner-access": "node tests/test-ticket-owner-access.js",
+    "test:ticket-comments-appeals": "node tests/test-ticket-comments-appeals.js",
+    "test:ticket-update-notification-sync": "node tests/test-ticket-update-notification-sync.js",
+    "test:proposal-feedback-tracking": "node tests/test-proposal-feedback-tracking.js",
+    "test:unified-notification-system": "node tests/test-unified-notification-system.js",
     "test:portal-mode-auth": "node tests/test-portal-mode-auth.js",
     "test:hub-guides-pdf-gating": "node tests/test-hub-guides-pdf-gating.js",
-    "test:security": "npm run test:forms-auth-guard && npm run test:api-error-envelope && npm run test:csp-policy && npm run test:redacted-logging && npm run test:ticket-security-hardening && npm run test:portal-mode-auth && npm run test:hub-guides-pdf-gating"
+    "test:directory-logo-pipeline": "node tests/test-directory-logo-pipeline.js",
+    "test:security": "npm run test:inline-style-scan && npm run test:forms-auth-guard && npm run test:api-error-envelope && npm run test:csp-policy && npm run test:redacted-logging && npm run test:ticket-security-hardening && npm run test:ticket-owner-access && npm run test:ticket-comments-appeals && npm run test:ticket-update-notification-sync && npm run test:portal-mode-auth && npm run test:hub-guides-pdf-gating && npm run test:directory-logo-pipeline"
   },
   "overrides": {
     "jsdom": {

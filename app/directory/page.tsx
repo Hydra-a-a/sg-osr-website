@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import useSWR from 'swr';
+import Image from 'next/image';
 import { Search, Facebook, Linkedin, Users, Grid, List as ListIcon, Mail, MapPin, Building2 } from 'lucide-react';
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import { isSafeNavigationHref } from '@/lib/security';
@@ -130,6 +131,7 @@ interface Officer {
     email?: string;
     facebookUrl?: string;
     linkedinUrl?: string;
+    logoUrl?: string;
     priority?: number;
 }
 
@@ -140,6 +142,7 @@ interface Office {
     headDirector?: string;
     email?: string;
     branch?: string;
+    logoUrl?: string;
     priority?: number;
 }
 
@@ -164,6 +167,12 @@ const normalizeCategory = (category?: string): string => {
     if (c.includes('constitutional commission') || c.includes('constitutional commision')) {
         return 'ssc';
     }
+    if (c.includes('office of student regent') || c.includes('office of the student regent')) {
+        return 'ssc';
+    }
+    if (c.includes('independent media organization')) {
+        return 'ssc';
+    }
     if (c.includes('central student council')) {
         return 'csc';
     }
@@ -178,6 +187,9 @@ const inferCouncilModeFromText = (officer: Officer): CouncilMode | '' => {
     const haystack = `${officer.branch || ''} ${officer.position || ''} ${officer.name || ''}`.toLowerCase();
 
     if (branchMatchKeywords.SSC.some((k) => haystack.includes(k))) {
+        return 'ssc';
+    }
+    if (branchMatchKeywords.OSR.some((k) => haystack.includes(k))) {
         return 'ssc';
     }
     if (branchMatchKeywords.MCCSC.some((k) => haystack.includes(k)) || branchMatchKeywords.PCCSC.some((k) => haystack.includes(k))) {
@@ -315,10 +327,38 @@ const getSafeExternalHref = (href?: string): string | undefined => {
     return href;
 };
 
+type DirectoryResponsePayload = {
+    leaders?: Officer[];
+    offices?: Office[];
+    error?: { message?: string } | string;
+};
+
+const DIRECTORY_SWR_OPTIONS = {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    dedupingInterval: 60000,
+    keepPreviousData: true,
+} as const;
+
+async function fetchDirectoryPayload(url: string): Promise<DirectoryResponsePayload> {
+    const response = await fetch(url);
+    const payload = await response.json().catch(() => ({} as DirectoryResponsePayload));
+
+    if (!response.ok) {
+        const fallbackMessage = 'Failed to load directory data';
+        const message = typeof payload?.error === 'string'
+            ? payload.error
+            : payload?.error?.message || fallbackMessage;
+        throw new Error(message);
+    }
+
+    return payload;
+}
+
 export default function DirectoryPage() {
-    const { data: response, error, isLoading } = useSWR('/api/directory', (url: string) => fetch(url).then(res => res.json()));
-    const officers: Officer[] = response?.leaders || [];
-    const offices: Office[] = response?.offices || [];
+    const { data: response, error, isLoading } = useSWR('/api/directory', fetchDirectoryPayload, DIRECTORY_SWR_OPTIONS);
+    const officers = useMemo(() => (response?.leaders || []) as Officer[], [response?.leaders]);
+    const offices = useMemo(() => (response?.offices || []) as Office[], [response?.offices]);
     const prefersReducedMotion = useReducedMotion();
 
     const [search, setSearch] = useState('');
@@ -426,103 +466,152 @@ export default function DirectoryPage() {
         setSortMode('relevance');
     };
 
-    const filteredOfficers = officers
-        .map((o, idx) => ({
-            officer: o,
-            idx,
-            score: getOfficerSearchScore(search, o),
-        }))
-        .filter(({ officer, score }) =>
-            score > 0 && matchesSearch(search, [officer.name, officer.email, officer.position, officer.branch, officer.category])
-        )
-        .sort((a, b) => {
-            if (b.score !== a.score) {
-                return b.score - a.score;
-            }
-            return a.idx - b.idx;
-        })
-        .map(({ officer }) => officer);
+    const filteredOfficers = useMemo(() => {
+        return officers
+            .map((o, idx) => ({
+                officer: o,
+                idx,
+                score: getOfficerSearchScore(search, o),
+            }))
+            .filter(({ officer, score }) =>
+                score > 0 && matchesSearch(search, [officer.name, officer.email, officer.position, officer.branch, officer.category])
+            )
+            .sort((a, b) => {
+                if (b.score !== a.score) {
+                    return b.score - a.score;
+                }
+                return a.idx - b.idx;
+            })
+            .map(({ officer }) => officer);
+    }, [officers, search]);
 
-    const filteredAcademicOrganizations = filteredOfficers.filter((o) => belongsToMode(o, 'academic'));
-    const filteredNonAcademicOrganizations = filteredOfficers.filter((o) => belongsToMode(o, 'nonAcademic'));
-    const baseAcademicOrganizations = officers.filter((o) => belongsToMode(o, 'academic'));
-    const baseNonAcademicOrganizations = officers.filter((o) => belongsToMode(o, 'nonAcademic'));
+    const filteredAcademicOrganizations = useMemo(
+        () => filteredOfficers.filter((o) => belongsToMode(o, 'academic')),
+        [filteredOfficers]
+    );
+    const filteredNonAcademicOrganizations = useMemo(
+        () => filteredOfficers.filter((o) => belongsToMode(o, 'nonAcademic')),
+        [filteredOfficers]
+    );
+    const baseAcademicOrganizations = useMemo(
+        () => officers.filter((o) => belongsToMode(o, 'academic')),
+        [officers]
+    );
+    const baseNonAcademicOrganizations = useMemo(
+        () => officers.filter((o) => belongsToMode(o, 'nonAcademic')),
+        [officers]
+    );
 
-    const filteredCouncilLeaders = filteredOfficers.filter((officer) => {
+    const filteredCouncilLeaders = useMemo(() => {
         if (!isCouncilMode(mode)) {
-            return false;
+            return [] as Officer[];
         }
 
-        return belongsToMode(officer, mode);
-    });
+        return filteredOfficers.filter((officer) => belongsToMode(officer, mode));
+    }, [filteredOfficers, mode]);
 
-    const baseCouncilLeaders = officers.filter((officer) => {
+    const baseCouncilLeaders = useMemo(() => {
         if (!isCouncilMode(mode)) {
-            return false;
+            return [] as Officer[];
         }
 
-        return belongsToMode(officer, mode);
-    });
+        return officers.filter((officer) => belongsToMode(officer, mode));
+    }, [officers, mode]);
 
-    const filteredOffices = offices
-        .map((o, idx) => ({
-            office: o,
-            idx,
-            score: getOfficeSearchScore(search, o),
-        }))
-        .filter(({ office, score }) =>
-            score > 0 && matchesSearch(search, [office.officeName, office.location, office.headDirector, office.email, office.branch])
-        )
-        .sort((a, b) => {
-            if (b.score !== a.score) {
-                return b.score - a.score;
-            }
-            return a.idx - b.idx;
-        })
-        .map(({ office }) => office);
+    const filteredOffices = useMemo(() => {
+        return offices
+            .map((o, idx) => ({
+                office: o,
+                idx,
+                score: getOfficeSearchScore(search, o),
+            }))
+            .filter(({ office, score }) =>
+                score > 0 && matchesSearch(search, [office.officeName, office.location, office.headDirector, office.email, office.branch])
+            )
+            .sort((a, b) => {
+                if (b.score !== a.score) {
+                    return b.score - a.score;
+                }
+                return a.idx - b.idx;
+            })
+            .map(({ office }) => office);
+    }, [offices, search]);
 
-    const sectionDataCount =
-        mode === 'academic'
-            ? filteredAcademicOrganizations.length
-            : mode === 'nonAcademic'
-                ? filteredNonAcademicOrganizations.length
-                : mode === 'offices'
-                    ? filteredOffices.length
-                    : filteredCouncilLeaders.length;
+    const sectionDataCount = useMemo(() => {
+        if (mode === 'academic') {
+            return filteredAcademicOrganizations.length;
+        }
+        if (mode === 'nonAcademic') {
+            return filteredNonAcademicOrganizations.length;
+        }
+        if (mode === 'offices') {
+            return filteredOffices.length;
+        }
+        return filteredCouncilLeaders.length;
+    }, [filteredAcademicOrganizations.length, filteredNonAcademicOrganizations.length, filteredOffices.length, filteredCouncilLeaders.length, mode]);
 
-    const displayedOfficers = mode === 'academic'
-        ? filteredAcademicOrganizations
-        : mode === 'nonAcademic'
-            ? filteredNonAcademicOrganizations
-            : filteredCouncilLeaders;
+    const displayedOfficers = useMemo(() => {
+        if (mode === 'academic') {
+            return filteredAcademicOrganizations;
+        }
+        if (mode === 'nonAcademic') {
+            return filteredNonAcademicOrganizations;
+        }
+        return filteredCouncilLeaders;
+    }, [filteredAcademicOrganizations, filteredCouncilLeaders, filteredNonAcademicOrganizations, mode]);
 
-    const sortedDisplayedOfficers = sortMode === 'nameAsc'
-        ? [...displayedOfficers].sort((a, b) => a.name.localeCompare(b.name, 'en-US', { sensitivity: 'base' }))
-        : displayedOfficers;
+    const sortedDisplayedOfficers = useMemo(() => {
+        if (sortMode !== 'nameAsc') {
+            return displayedOfficers;
+        }
 
-    const sortedFilteredOffices = sortMode === 'nameAsc'
-        ? [...filteredOffices].sort((a, b) => a.officeName.localeCompare(b.officeName, 'en-US', { sensitivity: 'base' }))
-        : filteredOffices;
+        return [...displayedOfficers].sort((a, b) => a.name.localeCompare(b.name, 'en-US', { sensitivity: 'base' }));
+    }, [displayedOfficers, sortMode]);
 
-    const suggestionSourceValues = mode === 'offices'
-        ? offices.flatMap((office) => [office.officeName, office.headDirector, office.branch].filter(Boolean) as string[])
-        : mode === 'academic'
-            ? baseAcademicOrganizations.flatMap((officer) => [officer.name, officer.position, officer.branch, officer.category].filter(Boolean) as string[])
-            : mode === 'nonAcademic'
-                ? baseNonAcademicOrganizations.flatMap((officer) => [officer.name, officer.position, officer.branch, officer.category].filter(Boolean) as string[])
-                : baseCouncilLeaders.flatMap((officer) => [officer.name, officer.position, officer.branch, officer.category].filter(Boolean) as string[]);
+    const sortedFilteredOffices = useMemo(() => {
+        if (sortMode !== 'nameAsc') {
+            return filteredOffices;
+        }
 
-    const suggestionChips = buildSuggestionChips(suggestionSourceValues, modeFallbackSuggestionChips[mode]);
+        return [...filteredOffices].sort((a, b) => a.officeName.localeCompare(b.officeName, 'en-US', { sensitivity: 'base' }));
+    }, [filteredOffices, sortMode]);
 
-    const officerBadge = mode === 'academic'
-        ? 'Academic Organization'
-        : mode === 'nonAcademic'
-            ? 'Non-Academic Organization'
-            : mode === 'ssc'
-                ? 'Supreme Student Council'
-                : mode === 'csc'
-                    ? 'Central Student Council'
-                    : 'College / Institute Student Council';
+    const suggestionSourceValues = useMemo(() => {
+        if (mode === 'offices') {
+            return offices.flatMap((office) => [office.officeName, office.headDirector, office.branch].filter(Boolean) as string[]);
+        }
+
+        if (mode === 'academic') {
+            return baseAcademicOrganizations.flatMap((officer) => [officer.name, officer.position, officer.branch, officer.category].filter(Boolean) as string[]);
+        }
+
+        if (mode === 'nonAcademic') {
+            return baseNonAcademicOrganizations.flatMap((officer) => [officer.name, officer.position, officer.branch, officer.category].filter(Boolean) as string[]);
+        }
+
+        return baseCouncilLeaders.flatMap((officer) => [officer.name, officer.position, officer.branch, officer.category].filter(Boolean) as string[]);
+    }, [baseAcademicOrganizations, baseCouncilLeaders, baseNonAcademicOrganizations, mode, offices]);
+
+    const suggestionChips = useMemo(
+        () => buildSuggestionChips(suggestionSourceValues, modeFallbackSuggestionChips[mode]),
+        [mode, suggestionSourceValues]
+    );
+
+    const officerBadge = useMemo(() => {
+        if (mode === 'academic') {
+            return 'Academic Organization';
+        }
+        if (mode === 'nonAcademic') {
+            return 'Non-Academic Organization';
+        }
+        if (mode === 'ssc') {
+            return 'Supreme Student Council';
+        }
+        if (mode === 'csc') {
+            return 'Central Student Council';
+        }
+        return 'College / Institute Student Council';
+    }, [mode]);
 
     return (
         <>
@@ -564,21 +653,15 @@ export default function DirectoryPage() {
                                     onClick={() => {
                                         setMode(modeButton.key);
                                     }}
-                                    className="relative px-5 py-2.5 rounded-full text-sm font-semibold cursor-pointer border-2 transition-colors"
+                                    className={`relative px-5 py-2.5 rounded-full text-sm font-semibold cursor-pointer border-2 transition-colors ${isActive ? 'directory-mode-pill-active' : 'directory-mode-pill-inactive'}`}
                                     aria-pressed={isActive}
                                     title={modeButton.label}
-                                    style={{
-                                        color: isActive ? 'white' : 'var(--text-secondary)',
-                                        borderColor: isActive ? 'transparent' : 'var(--glass-border)',
-                                        background: isActive ? 'transparent' : 'var(--bg-card)',
-                                    }}
                                 >
                                     {isActive && (
                                         <motion.span
                                             aria-hidden
                                             layoutId="active-directory-mode"
-                                            className="absolute inset-0 rounded-full"
-                                            style={{ background: 'var(--rtu-gold-dark)' }}
+                                            className="directory-mode-pill-bg absolute inset-0 rounded-full"
                                             transition={prefersReducedMotion
                                                 ? { duration: 0 }
                                                 : { type: 'spring', stiffness: 420, damping: 34, mass: 0.55 }}
@@ -728,10 +811,22 @@ export default function DirectoryPage() {
                                 >
                                 {/* Avatar */}
                                 <div
-                                    className={`${viewMode === 'list' ? 'w-12 h-12 mb-0 shrink-0' : 'w-16 h-16 mb-4'} rounded-full flex items-center justify-center text-white font-bold text-xl`}
-                                    style={{ background: 'linear-gradient(135deg, var(--rtu-blue), var(--rtu-blue-light))' }}
+                                    className={`directory-avatar-gradient ${viewMode === 'list' ? 'w-12 h-12 mb-0 shrink-0' : 'w-16 h-16 mb-4'} rounded-full flex items-center justify-center text-white font-bold text-xl`}
                                 >
-                                    {officer.name.charAt(0)}
+                                    {getSafeExternalHref(officer.logoUrl) ? (
+                                        <div className="relative w-full h-full rounded-full overflow-hidden bg-white skeleton">
+                                            <Image
+                                                src={getSafeExternalHref(officer.logoUrl) as string}
+                                                alt={`${officer.name} logo`}
+                                                fill
+                                                sizes={viewMode === 'list' ? '48px' : '64px'}
+                                                unoptimized
+                                                className="object-contain p-1"
+                                            />
+                                        </div>
+                                    ) : (
+                                        officer.name.charAt(0)
+                                    )}
                                 </div>
 
                                 <div className={`${viewMode === 'list' ? 'flex-1 min-w-0' : 'min-w-0'} space-y-1.5`}>
@@ -803,10 +898,22 @@ export default function DirectoryPage() {
                                     className={`card p-6 flex ${viewMode === 'list' ? 'flex-row items-start sm:items-center gap-4 sm:gap-6' : 'flex-col'} content-visibility-auto`}
                                 >
                                 <div
-                                    className={`${viewMode === 'list' ? 'w-12 h-12 mb-0 shrink-0' : 'w-16 h-16 mb-4'} rounded-full flex items-center justify-center text-white`}
-                                    style={{ background: 'linear-gradient(135deg, var(--rtu-blue), var(--rtu-blue-light))' }}
+                                    className={`directory-avatar-gradient ${viewMode === 'list' ? 'w-12 h-12 mb-0 shrink-0' : 'w-16 h-16 mb-4'} rounded-full flex items-center justify-center text-white`}
                                 >
-                                    <Building2 size={22} />
+                                    {getSafeExternalHref(office.logoUrl) ? (
+                                        <div className="relative w-full h-full rounded-full overflow-hidden bg-white skeleton">
+                                            <Image
+                                                src={getSafeExternalHref(office.logoUrl) as string}
+                                                alt={`${office.officeName} logo`}
+                                                fill
+                                                sizes={viewMode === 'list' ? '48px' : '64px'}
+                                                unoptimized
+                                                className="object-contain p-1"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <Building2 size={22} />
+                                    )}
                                 </div>
 
                                 <div className={`${viewMode === 'list' ? 'flex-1 min-w-0' : 'min-w-0'} space-y-1.5`}>
@@ -818,7 +925,7 @@ export default function DirectoryPage() {
                                     </h3>
 
                                     {office.headDirector && (
-                                        <p className="text-sm break-words" style={{ color: 'var(--accent-primary)' }}>
+                                        <p className="directory-office-head text-sm break-words">
                                             Head/Director: {office.headDirector}
                                         </p>
                                     )}

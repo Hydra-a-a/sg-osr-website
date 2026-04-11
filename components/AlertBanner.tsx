@@ -20,8 +20,7 @@ export default function AlertBanner({ message }: AlertBannerProps) {
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="bg-rtu-gold text-rtu-blue py-2 px-4 relative z-[101] flex items-center justify-center gap-3 overflow-hidden"
-                    style={{ background: 'var(--rtu-gold)', color: 'var(--rtu-blue-dark)' }}
+                    className="alert-banner py-2 px-4 relative z-[101] flex items-center justify-center gap-3 overflow-hidden"
                 >
                     <Megaphone size={16} className="flex-shrink-0 animate-bounce" />
                     <p className="text-sm font-bold text-center pr-8">

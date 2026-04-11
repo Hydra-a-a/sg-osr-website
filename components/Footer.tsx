@@ -7,75 +7,78 @@ import { useSession } from 'next-auth/react';
 export default function Footer() {
     const { data: session } = useSession();
     const isLoggedIn = !!session?.user;
-    const quickLinks = [
+
+    const exploreLinks = [
         { href: '/', label: 'Home' },
-        { href: '/osr', label: 'Office of the Student Regent' },
-        { href: '/directory', label: 'Officer Directory' },
-        { href: '/services', label: 'Services & Forms' },
-        { href: '/news', label: 'News & Updates' },
+        { href: '/student-government', label: 'Student Government' },
+        { href: '/student-government/osr', label: 'Office of the Student Regent' },
+        { href: '/directory', label: 'Directory' },
+    ];
+
+    const actionLinks = [
+        { href: '/services', label: 'Services' },
+        { href: '/services/grievance', label: 'Grievances' },
+        { href: '/services/proposals', label: 'Project Proposals' },
+        ...(isLoggedIn ? [{ href: '/services/proposals/track', label: 'Proposal Tracker' }] : []),
+        { href: '/transparency', label: 'Transparency' },
         ...(!isLoggedIn ? [{ href: '/login', label: 'Portal Sign In' }] : []),
     ];
 
     return (
-        <footer className="bg-gradient-rtu-footer text-white mt-auto">
-            <div className="container-main pt-20 pb-10 md:pt-24 md:pb-12">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-12">
-                    {/* Brand */}
-                    <div>
-                        <div className="flex items-center gap-3 mb-5 md:mb-6">
-                            <Image
-                                src="/images/OSR_LOGO.jpg"
-                                alt="RTU Student Government Logo"
-                                width={36}
-                                height={36}
-                                className="rounded-full"
-                            />
-                            <span className="font-bold text-lg">RTU Student Government Portal</span>
+        <footer className="portal-footer-shell mt-auto">
+            <div className="container-main portal-footer-grid relative z-10 pt-10 pb-8 md:pt-12 md:pb-9">
+                <div className="grid gap-8 md:grid-cols-[1.1fr_0.95fr_0.95fr] md:gap-10">
+                    <div className="max-w-md">
+                        <div className="mb-4 flex items-center gap-3">
+                            <div className="relative h-11 w-11 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                                <Image
+                                    src="/images/OSR_LOGO.jpg"
+                                    alt="RTU Student Government Portal"
+                                    fill
+                                    sizes="44px"
+                                    className="object-cover"
+                                />
+                            </div>
+                            <div>
+                                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-slate-400">RTU</p>
+                                <span className="text-lg font-semibold text-white">Student Government Portal</span>
+                            </div>
                         </div>
-                        <p className="text-white/60 text-sm leading-relaxed">
-                            The unified digital platform of the Supreme Student Council and the Office of the Student Regent — championing student rights, transparency, and welfare across all campuses.
+                        <p className="text-sm leading-6 text-slate-300">
+                            A unified portal for grievances, project proposals, transparency, directory access, and the evolving
+                            student-government information architecture.
                         </p>
                     </div>
 
-                    {/* Quick Links */}
                     <div>
-                        <h4 className="eyebrow-label mb-4 text-accent">
-                            Quick Links
-                        </h4>
+                        <h4 className="eyebrow-label mb-4 text-[var(--rtu-gold-light)]">Explore</h4>
                         <div className="flex flex-col gap-2">
-                            {quickLinks.map(link => (
-                                <Link
-                                    key={link.href}
-                                    href={link.href}
-                                    className="text-white/60 text-sm no-underline hover:text-white transition-colors"
-                                >
+                            {exploreLinks.map((link) => (
+                                <Link key={link.href} href={link.href} className="portal-footer-link no-underline">
                                     {link.label}
                                 </Link>
                             ))}
                         </div>
                     </div>
 
-                    {/* Contact */}
                     <div>
-                        <h4 className="eyebrow-label mb-4 text-accent">
-                            Contact
-                        </h4>
-                        <p className="text-white/60 text-sm leading-relaxed">
-                            Rizal Technological University<br />
-                            Cities of Mandaluyong and Pasig<br />
-                            Metro Manila, Philippines
-                        </p>
+                        <h4 className="eyebrow-label mb-4 text-[var(--rtu-gold-light)]">Actions</h4>
+                        <div className="flex flex-col gap-2">
+                            {actionLinks.map((link) => (
+                                <Link key={link.href} href={link.href} className="portal-footer-link no-underline">
+                                    {link.label}
+                                </Link>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
-                {/* Bottom bar */}
-                <div className="footer-divider mt-12 mb-6" />
-                <div className="text-center">
-                    <p className="text-white/40 text-xs">
-                        © {new Date().getFullYear()} RTU Student Government Portal. All rights reserved.
-                    </p>
+                <div className="portal-footer-divider mt-7 mb-3" />
+                <div className="flex flex-col gap-1.5 text-center text-xs leading-5 text-slate-400 md:flex-row md:items-center md:justify-between md:text-left">
+                    <p>Copyright {new Date().getFullYear()} RTU Student Government Portal. All rights reserved.</p>
+                    <p>Rizal Technological University, Mandaluyong and Pasig, Metro Manila, Philippines</p>
                 </div>
             </div>
-        </footer >
+        </footer>
     );
 }

@@ -27,6 +27,52 @@ interface RegentAlertTemplateProps extends ConfirmationTemplateProps {
     submitterEmail: string; // original email for regent visibility
 }
 
+interface TicketUpdateTemplateProps {
+  ticketId: string;
+  name: string;
+  status: string;
+  resolutionNotes: string;
+  category: string;
+  subject: string;
+  trackingUrl: string;
+  updatedAt: string;
+}
+
+interface ProposalStatusUpdateTemplateProps {
+  proposalId: string;
+  name: string;
+  title: string;
+  status: string;
+  reviewNotes: string;
+  trackingUrl: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+interface ProposalCommentTemplateProps {
+  proposalId: string;
+  name: string;
+  title: string;
+  authorName: string;
+  authorRole: string;
+  message: string;
+  attachmentUrl: string;
+  trackingUrl: string;
+  createdAt: string;
+}
+
+interface NewProposalSubmissionAlertTemplateProps {
+  proposalId: string;
+  submitterName: string;
+  submitterEmail: string;
+  title: string;
+  category: string;
+  projectType: string;
+  description: string;
+  documentUrl: string;
+  trackingUrl: string;
+}
+
 function isTrustedAttachmentUrl(rawUrl: string): boolean {
   const candidate = rawUrl.trim();
   if (!candidate) return false;
@@ -307,4 +353,229 @@ export function buildRegentAlertEmail(props: RegentAlertTemplateProps, sheetUrl:
     `;
 
     return emailShell(`[New Ticket ${props.ticketId}] ${props.category} Grievance`, body);
+}
+
+export function buildTicketUpdateEmail(props: TicketUpdateTemplateProps): string {
+    const updatedAt = new Date(props.updatedAt).toLocaleString('en-PH', {
+        timeZone: 'Asia/Manila',
+        dateStyle: 'long',
+        timeStyle: 'short',
+    });
+
+    const safeTicketId = escapeHtml(props.ticketId);
+    const safeName = escapeHtml(props.name || 'Student');
+    const safeStatus = escapeHtml(props.status);
+    const safeCategory = escapeHtml(props.category || 'General');
+    const safeSubject = escapeHtml(props.subject || '(No subject)');
+    const safeTrackingUrl = escapeHtml(props.trackingUrl);
+    const resolution = props.resolutionNotes.trim();
+    const safeResolution = resolution
+        ? sanitizeRichText(resolution)
+        : 'No resolution notes were added in this update.';
+
+    const body = `
+      <h2 style="margin:0 0 6px;font-size:20px;color:${RTU_RED};">Ticket Status Updated</h2>
+      <p style="margin:0 0 24px;font-size:15px;color:#444;">Hi <strong>${safeName}</strong>, there is a new update on your grievance ticket.</p>
+
+      <div style="background:#fdf5e6;border:2px dashed ${RTU_GOLD};border-radius:8px;padding:20px;text-align:center;margin-bottom:24px;">
+        <p style="margin:0;font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;">Ticket ID</p>
+        <p style="margin:6px 0 0;font-size:28px;font-weight:700;color:${RTU_RED};letter-spacing:3px;">${safeTicketId}</p>
+      </div>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e8e8e8;border-radius:6px;border-collapse:collapse;margin-bottom:24px;">
+        <tbody>
+          ${infoRow('Status', `<span style="background:#e0f2fe;color:#075985;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">${safeStatus}</span>`, { allowHtml: true })}
+          <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+          ${infoRow('Category', safeCategory)}
+          <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+          ${infoRow('Subject', safeSubject)}
+          <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+          ${infoRow('Updated', updatedAt)}
+        </tbody>
+      </table>
+
+      <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.5px;">Resolution Notes</p>
+      <blockquote style="margin:0 0 24px;padding:14px 16px;background:#f8f8f8;border-left:4px solid ${RTU_RED};border-radius:0 6px 6px 0;font-size:14px;color:#333;line-height:1.6;">${safeResolution}</blockquote>
+
+      <div style="text-align:center;margin-bottom:24px;">
+        <a href="${safeTrackingUrl}" style="display:inline-block;background:${RTU_RED};color:#ffffff;padding:13px 32px;border-radius:6px;text-decoration:none;font-weight:700;font-size:15px;">Open Ticket Tracker →</a>
+      </div>
+
+      <p style="margin:0;font-size:13px;color:#666;line-height:1.6;">If you filed anonymously without an email, this notification cannot be sent. Keep your ticket link/ID to check updates in the tracker page.</p>
+    `;
+
+    return emailShell(`[${props.ticketId}] Ticket status updated`, body);
+}
+
+export function buildProposalStatusUpdateEmail(props: ProposalStatusUpdateTemplateProps): string {
+  const updatedAt = new Date(props.updatedAt).toLocaleString('en-PH', {
+    timeZone: 'Asia/Manila',
+    dateStyle: 'long',
+    timeStyle: 'short',
+  });
+
+  const safeProposalId = escapeHtml(props.proposalId);
+  const safeName = escapeHtml(props.name || 'Leader');
+  const safeTitle = escapeHtml(props.title || 'Untitled Proposal');
+  const safeStatus = escapeHtml(props.status || 'Pending Review');
+  const safeTrackingUrl = escapeHtml(props.trackingUrl);
+  const safeUpdatedBy = escapeHtml(props.updatedBy || 'OSR Review Desk');
+  const safeReviewNotes = props.reviewNotes.trim()
+    ? sanitizeRichText(props.reviewNotes)
+    : 'No additional reviewer notes were included in this update.';
+
+  const body = `
+    <h2 style="margin:0 0 6px;font-size:20px;color:${RTU_RED};">Proposal Status Updated</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#444;">Hi <strong>${safeName}</strong>, your proposal review status has changed.</p>
+
+    <div style="background:#fdf5e6;border:2px dashed ${RTU_GOLD};border-radius:8px;padding:20px;text-align:center;margin-bottom:24px;">
+      <p style="margin:0;font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;">Proposal ID</p>
+      <p style="margin:6px 0 0;font-size:28px;font-weight:700;color:${RTU_RED};letter-spacing:2px;">${safeProposalId}</p>
+    </div>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e8e8e8;border-radius:6px;border-collapse:collapse;margin-bottom:24px;">
+      <tbody>
+        ${infoRow('Project Title', safeTitle)}
+        <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+        ${infoRow('Status', `<span style="background:#e0f2fe;color:#075985;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">${safeStatus}</span>`, { allowHtml: true })}
+        <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+        ${infoRow('Updated', updatedAt)}
+        <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+        ${infoRow('Updated By', safeUpdatedBy)}
+      </tbody>
+    </table>
+
+    <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.5px;">Review Notes</p>
+    <blockquote style="margin:0 0 24px;padding:14px 16px;background:#f8f8f8;border-left:4px solid ${RTU_RED};border-radius:0 6px 6px 0;font-size:14px;color:#333;line-height:1.6;">${safeReviewNotes}</blockquote>
+
+    <div style="text-align:center;margin-bottom:24px;">
+      <a href="${safeTrackingUrl}" style="display:inline-block;background:${RTU_RED};color:#ffffff;padding:13px 32px;border-radius:6px;text-decoration:none;font-weight:700;font-size:15px;">Open Proposal Tracker â†’</a>
+    </div>
+
+    <p style="margin:0;font-size:13px;color:#666;line-height:1.6;">Use the proposal tracker to review the full timeline, read official feedback, and continue the discussion thread with the reviewing office.</p>
+  `;
+
+  return emailShell(`[${props.proposalId}] Proposal status updated`, body);
+}
+
+export function buildProposalCommentEmail(props: ProposalCommentTemplateProps): string {
+  const createdAt = new Date(props.createdAt).toLocaleString('en-PH', {
+    timeZone: 'Asia/Manila',
+    dateStyle: 'long',
+    timeStyle: 'short',
+  });
+
+  const safeProposalId = escapeHtml(props.proposalId);
+  const safeName = escapeHtml(props.name || 'Leader');
+  const safeTitle = escapeHtml(props.title || 'Untitled Proposal');
+  const safeAuthorName = escapeHtml(props.authorName || 'OSR Review Desk');
+  const safeAuthorRole = escapeHtml(props.authorRole || 'OFFICER');
+  const safeTrackingUrl = escapeHtml(props.trackingUrl);
+  const safeMessage = props.message.trim()
+    ? sanitizeRichText(props.message)
+    : 'A new proposal discussion entry was added.';
+  const safeAttachmentUrl = isTrustedAttachmentUrl(props.attachmentUrl || '')
+    ? escapeHtml(props.attachmentUrl)
+    : '';
+
+  const body = `
+    <h2 style="margin:0 0 6px;font-size:20px;color:${RTU_RED};">New Proposal Feedback</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#444;">Hi <strong>${safeName}</strong>, there is a new message in your proposal discussion thread.</p>
+
+    <div style="background:#fdf5e6;border:2px dashed ${RTU_GOLD};border-radius:8px;padding:20px;text-align:center;margin-bottom:24px;">
+      <p style="margin:0;font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;">Proposal ID</p>
+      <p style="margin:6px 0 0;font-size:28px;font-weight:700;color:${RTU_RED};letter-spacing:2px;">${safeProposalId}</p>
+    </div>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e8e8e8;border-radius:6px;border-collapse:collapse;margin-bottom:24px;">
+      <tbody>
+        ${infoRow('Project Title', safeTitle)}
+        <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+        ${infoRow('Author', safeAuthorName)}
+        <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+        ${infoRow('Role', `<span style="background:${safeAuthorRole === 'OFFICER' ? '#dcfce7;color:#166534' : '#e0f2fe;color:#075985'};padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">${safeAuthorRole}</span>`, { allowHtml: true })}
+        <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+        ${infoRow('Posted', createdAt)}
+      </tbody>
+    </table>
+
+    <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.5px;">Message</p>
+    <blockquote style="margin:0 0 24px;padding:14px 16px;background:#f8f8f8;border-left:4px solid ${RTU_RED};border-radius:0 6px 6px 0;font-size:14px;color:#333;line-height:1.6;">${safeMessage}</blockquote>
+
+    ${safeAttachmentUrl ? `
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 16px;">
+      <tr>
+        <td align="center" style="padding:0;">
+          <a href="${safeAttachmentUrl}" style="display:inline-block;background:${RTU_GOLD};color:#1f1f1f;padding:12px 26px;border-radius:6px;text-decoration:none;font-weight:700;font-size:14px;">Open Attachment</a>
+        </td>
+      </tr>
+    </table>
+    ` : ''}
+
+    <div style="text-align:center;margin-bottom:24px;">
+      <a href="${safeTrackingUrl}" style="display:inline-block;background:${RTU_RED};color:#ffffff;padding:13px 32px;border-radius:6px;text-decoration:none;font-weight:700;font-size:15px;">Open Proposal Tracker â†’</a>
+    </div>
+
+    <p style="margin:0;font-size:13px;color:#666;line-height:1.6;">This email includes the full feedback text for quick review. Use the tracker link to respond or review the full proposal timeline.</p>
+  `;
+
+  return emailShell(`[${props.proposalId}] New proposal feedback`, body);
+}
+
+export function buildNewProposalSubmissionAlertEmail(props: NewProposalSubmissionAlertTemplateProps): string {
+  const safeProposalId = escapeHtml(props.proposalId || 'Pending ID');
+  const safeSubmitterName = escapeHtml(props.submitterName || 'Unknown Submitter');
+  const safeSubmitterEmail = escapeHtml(props.submitterEmail || '');
+  const safeTitle = escapeHtml(props.title || 'Untitled Proposal');
+  const safeCategory = escapeHtml(props.category || 'Uncategorized');
+  const safeProjectType = escapeHtml(props.projectType || 'Unspecified');
+  const safeTrackingUrl = escapeHtml(props.trackingUrl);
+  const hasDocumentUrl = isTrustedAttachmentUrl(props.documentUrl || '');
+  const safeDocumentUrl = hasDocumentUrl ? escapeHtml(props.documentUrl) : '';
+  const descriptionPreview = props.description.length > 1200
+    ? `${props.description.slice(0, 1200)}...`
+    : props.description;
+  const safeDescription = sanitizeRichText(descriptionPreview || 'No executive summary provided.');
+
+  const body = `
+    <h2 style="margin:0 0 6px;font-size:20px;color:${RTU_RED};">New Project Proposal Submitted</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#444;">A new proposal has been submitted and routed into the project proposal tracker.</p>
+
+    <div style="background:#fdf5e6;border:2px dashed ${RTU_GOLD};border-radius:8px;padding:20px;text-align:center;margin-bottom:24px;">
+      <p style="margin:0;font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;">Proposal ID</p>
+      <p style="margin:6px 0 0;font-size:28px;font-weight:700;color:${RTU_RED};letter-spacing:2px;">${safeProposalId}</p>
+    </div>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e8e8e8;border-radius:6px;border-collapse:collapse;margin-bottom:24px;">
+      <tbody>
+        ${infoRow('Project Title', safeTitle)}
+        <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+        ${infoRow('Submitter', `${safeSubmitterName} &lt;${safeSubmitterEmail}&gt;`, { allowHtml: true })}
+        <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+        ${infoRow('Category', safeCategory)}
+        <tr><td colspan="2" style="border-top:1px solid #f0f0f0;"></td></tr>
+        ${infoRow('Project Type', safeProjectType)}
+      </tbody>
+    </table>
+
+    <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.5px;">Executive Summary</p>
+    <blockquote style="margin:0 0 24px;padding:14px 16px;background:#f8f8f8;border-left:4px solid ${RTU_RED};border-radius:0 6px 6px 0;font-size:14px;color:#333;line-height:1.6;">${safeDescription}</blockquote>
+
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 24px;">
+      <tr>
+        ${hasDocumentUrl ? `
+        <td class="cta-col" width="50%" align="center" style="padding:0 6px 0 0;">
+          <a href="${safeDocumentUrl}" class="cta-btn" style="display:inline-block;min-width:240px;background:${RTU_GOLD};color:#1f1f1f;padding:13px 24px;border-radius:6px;text-decoration:none;font-weight:700;font-size:14px;text-align:center;">Open Proposal Document</a>
+        </td>
+        ` : ''}
+        <td class="cta-col" width="${hasDocumentUrl ? '50%' : '100%'}" align="center" style="${hasDocumentUrl ? 'padding:0 0 0 6px;' : 'padding:0;'}">
+          <a href="${safeTrackingUrl}" class="cta-btn" style="display:inline-block;min-width:240px;background:${RTU_RED};color:#ffffff;padding:13px 24px;border-radius:6px;text-decoration:none;font-weight:700;font-size:14px;text-align:center;">Open Proposal Tracker →</a>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0;font-size:13px;color:#666;line-height:1.6;">Review the tracker for ownership-safe history, the formal feedback thread, and subsequent status transitions.</p>
+  `;
+
+  return emailShell(`[New Proposal ${props.proposalId || 'Pending ID'}] ${props.title}`, body);
 }

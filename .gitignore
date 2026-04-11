@@ -96,6 +96,14 @@ testing-rtu-osr-website-*.json
 # Local/internal artifacts
 .audit/
 
+# Local release scratch artifacts
+cmp-*.txt
+fix.ps1
+temp-proposal.pdf
+portal_mode_auth_test.log
+launch_final_check.md
+email_system_technical.md
+
 # Sensitive credential files
 *.key
 *.p12

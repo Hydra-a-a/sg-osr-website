@@ -33,4 +33,4 @@ export type GrievanceCategory = typeof GRIEVANCE_CATEGORIES[number];
 export type Campus = typeof CAMPUSES[number];
 export type CollegeInstitute = typeof COLLEGE_INSTITUTES[number];
 
-export type TicketStatus = 'Open' | 'In Progress' | 'Resolved' | 'Closed';
+export type TicketStatus = 'Open' | 'In Progress' | 'Resolved' | 'Closed' | 'Appealed';

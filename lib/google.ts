@@ -66,8 +66,12 @@ export async function getSlidesData(): Promise<SlideData[]> {
         const parsedSlides = z.array(SlideSchema).parse(res.data.slides || []);
         return parsedSlides;
 
-    } catch (error) {
-        console.error("Failed API or Validation parsing", redactErrorForLog(error));
+    } catch (error: any) {
+        if (error?.code !== 'ECONNRESET') {
+            console.error("Failed API or Validation parsing", redactErrorForLog(error));
+        } else {
+            console.warn("Google API connection reset (ECONNRESET). Check your internet connection if slides aren't loading.");
+        }
         return [];
     }
 }

@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
 import { authConfig } from '@/lib/auth.config';
 import { NextResponse } from 'next/server';
-import { deriveEffectivePortalRole, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
+import { deriveEffectivePortalRole, hasLeaderPrivilege, hasOfficerPrivilege, PORTAL_MODE_COOKIE, LEADER_ATTEMPT_COOKIE, OFFICER_ATTEMPT_COOKIE } from '@/lib/portal-mode';
 
 const { auth } = NextAuth(authConfig);
 
@@ -20,10 +20,10 @@ function generateNonce(): string {
 function buildCspHeader(nonce: string): string {
     const isProduction = process.env.NODE_ENV === 'production';
     const scriptSrc = isProduction
-        ? `script-src 'self' 'unsafe-inline'; script-src-elem 'self' 'unsafe-inline';`
-        : `script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-elem 'self' 'unsafe-inline';`;
+        ? `script-src 'self' 'nonce-${nonce}'; script-src-elem 'self' 'nonce-${nonce}'; script-src-attr 'none';`
+        : `script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-elem 'self' 'unsafe-inline'; script-src-attr 'none';`;
     const styleSrc = isProduction
-        ? `style-src 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline';`
+        ? `style-src 'self' 'nonce-${nonce}'; style-src-elem 'self' 'nonce-${nonce}'; style-src-attr 'none';`
         : `style-src 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline';`;
 
 
@@ -52,8 +52,10 @@ function buildCspReportOnlyHeader(nonce: string): string {
       default-src 'self';
       script-src 'self' 'nonce-${nonce}';
       script-src-elem 'self' 'nonce-${nonce}';
+      script-src-attr 'none';
       style-src 'self' 'nonce-${nonce}';
-      style-src-attr 'unsafe-inline';
+      style-src-elem 'self' 'nonce-${nonce}';
+      style-src-attr 'none';
       img-src 'self' blob: data: https://*.googleusercontent.com https://www.google.com https://*.fbcdn.net https://*.facebook.com;
       font-src 'self';
       media-src 'self' blob:;
@@ -127,9 +129,26 @@ export default auth((req) => {
     const pathname = nextUrl.pathname;
 
     // Define route protection tiers
-    const publicRoutes = ['/', '/login', '/news', '/directory', '/services', '/transparency', '/hub', '/osr', '/about'];
+    const publicRoutes = [
+        '/',
+        '/login',
+        '/news',
+        '/directory',
+        '/services',
+        '/services/grievance',
+        '/services/track',
+        '/transparency',
+        '/hub',
+        '/osr',
+        '/about',
+        '/student-government',
+        '/student-government/osr',
+        '/student-government/commissions',
+        '/student-government/councils',
+    ];
     const publicRoutePrefixes = ['/projects'];
-    const leaderOnlyRoutes: string[] = [];
+    const leaderOnlyRoutes: string[] = ['/services/proposals'];
+    const officerOnlyRoutes = ['/services/admin'];
 
     const normalizedPathname = pathname !== '/' && pathname.endsWith('/')
         ? pathname.slice(0, -1)
@@ -155,11 +174,36 @@ export default auth((req) => {
         return applySecurityHeaders(NextResponse.redirect(loginUrl), nonce, cspHeader, '/login');
     }
 
-    // Leader-only enforcement
-    const isLeaderRoute = leaderOnlyRoutes.some((r) => pathname.startsWith(r));
     const effectiveRole = deriveEffectivePortalRole(session?.user?.role, req.cookies.get(PORTAL_MODE_COOKIE)?.value);
-    if (isLeaderRoute && effectiveRole !== 'leader') {
-        return applySecurityHeaders(NextResponse.redirect(new URL('/?error=unauthorized', nextUrl)), nonce, cspHeader, '/');
+
+    // 1. Officer-only enforcement (must check BEFORE leader routes)
+    const isOfficerRoute = officerOnlyRoutes.some((r) => normalizedPathname === r || normalizedPathname.startsWith(`${r}/`));
+    if (isOfficerRoute) {
+        if (effectiveRole !== 'officer') {
+            const isAuthorized = hasOfficerPrivilege(session?.user?.role);
+            if (isAuthorized) {
+                // Hint for the UI to show a "Switch to Officer Mode" notice
+                const response = applySecurityHeaders(NextResponse.redirect(new URL('/', nextUrl)), nonce, cspHeader, '/');
+                response.cookies.set(OFFICER_ATTEMPT_COOKIE, '1', { path: '/', maxAge: 300, sameSite: 'lax' });
+                return response;
+            }
+            return applySecurityHeaders(NextResponse.redirect(new URL('/?error=unauthorized', nextUrl)), nonce, cspHeader, '/');
+        }
+    }
+
+    // 2. Leader-only enforcement (officers also pass since they have leader privilege)
+    const isLeaderRoute = leaderOnlyRoutes.some((r) => pathname.startsWith(r));
+    if (isLeaderRoute) {
+        if (!hasLeaderPrivilege(effectiveRole)) {
+            const isAuthorized = hasLeaderPrivilege(session?.user?.role);
+            if (isAuthorized) {
+                // Hint for the UI to show a "Switch to Leader Mode" notice
+                const response = applySecurityHeaders(NextResponse.redirect(new URL('/', nextUrl)), nonce, cspHeader, '/');
+                response.cookies.set(LEADER_ATTEMPT_COOKIE, '1', { path: '/', maxAge: 300, sameSite: 'lax' });
+                return response;
+            }
+            return applySecurityHeaders(NextResponse.redirect(new URL('/?error=unauthorized', nextUrl)), nonce, cspHeader, '/');
+        }
     }
 
     return nextWithSecurityHeaders(req, nonce, cspHeader);

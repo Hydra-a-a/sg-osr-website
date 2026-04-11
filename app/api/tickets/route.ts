@@ -12,12 +12,40 @@ import {
     generateTicketCredentials,
     hashTicketTrackingToken,
     writeTicketToSheet,
-    sendTicketEmails,
 } from '@/lib/tickets';
+import { emitGrievanceSubmissionNotifications } from '@/lib/grievance-notifications';
+
+const TICKET_NOTIFICATION_QUEUE_SHEET_TAB = process.env.TICKET_NOTIFICATION_QUEUE_SHEET_TAB || 'Ticket_Notification_Queue';
+const TICKET_NOTIFICATION_QUEUE_RANGE = `${TICKET_NOTIFICATION_QUEUE_SHEET_TAB}!A2:N`;
+const TICKET_NOTIFICATION_QUEUE_APPEND_RANGE = `${TICKET_NOTIFICATION_QUEUE_SHEET_TAB}!A1`;
+
+function getTicketSpreadsheetId(): string {
+    const id = String(process.env.TICKET_SPREADSHEET_ID || '').trim();
+    if (!id) {
+        throw new Error('TICKET_SPREADSHEET_ID environment variable is not set.');
+    }
+    return id;
+}
 
 function withNoStore(response: NextResponse): NextResponse {
     response.headers.set('Cache-Control', 'no-store');
     return response;
+}
+
+function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
+    const parsed = Number.parseInt(String(raw || '').trim(), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function resolveTicketSubmissionRateLimitConfig() {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const defaultLimit = isProduction ? 3 : 30;
+
+    return {
+        limit: parsePositiveIntEnv(process.env.TICKET_SUBMISSION_RATE_LIMIT_MAX, defaultLimit),
+        windowMs: parsePositiveIntEnv(process.env.TICKET_SUBMISSION_RATE_LIMIT_WINDOW_MS, 60 * 60 * 1000),
+        disableInDev: String(process.env.TICKET_SUBMISSION_RATE_LIMIT_DISABLE_IN_DEV || '').trim().toLowerCase() === 'true',
+    };
 }
 
 // ── Request schema ────────────────────────────────────────────────────────────
@@ -64,6 +92,10 @@ const TicketSubmissionSchema = z.object({
     attachmentUrl: z.string().url().max(2048).optional(),
     isAnonymous:  z.boolean().optional().default(false),
     contactEmail: z.string().email().optional(), // for anonymous users requesting a copy
+    updatesOptIn: z.boolean().optional().default(false),
+    updatesChannel: z.enum(['none', 'email']).optional().default('none'),
+    updatesDestination: z.string().email().max(254).optional(),
+    updatesNotes: safeText(500).optional().default(''),
     honeypot:     z.string().optional(),
     timestamp:    z.number().optional(),
 }).superRefine((data, ctx) => {
@@ -81,6 +113,32 @@ const TicketSubmissionSchema = z.object({
             code: z.ZodIssueCode.custom,
             path: ['studentId'],
             message: 'Student ID is required when anonymous mode is off.',
+        });
+    }
+
+    if (data.updatesOptIn) {
+        if (data.updatesChannel !== 'email') {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['updatesChannel'],
+                message: 'Optional update channel must be email when opt-in is enabled.',
+            });
+        }
+
+        if (!data.updatesDestination) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['updatesDestination'],
+                message: 'Optional update destination is required when opt-in is enabled.',
+            });
+        }
+    }
+
+    if (!data.updatesOptIn && data.updatesDestination) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['updatesDestination'],
+            message: 'Provide optional update destination only when opt-in is enabled.',
         });
     }
 });
@@ -128,6 +186,13 @@ async function parseTicketRequestPayload(request: Request): Promise<{ payload: u
                     const value = String(form.get('contactEmail') || '').trim();
                     return value || undefined;
                 })(),
+                updatesOptIn: parseBoolean(form.get('updatesOptIn') || undefined),
+                updatesChannel: String(form.get('updatesChannel') || 'none').trim().toLowerCase(),
+                updatesDestination: (() => {
+                    const value = String(form.get('updatesDestination') || '').trim();
+                    return value || undefined;
+                })(),
+                updatesNotes: String(form.get('updatesNotes') || '').trim(),
                 honeypot: String(form.get('honeypot') || ''),
                 timestamp: parseOptionalNumber(form.get('timestamp') || undefined),
             },
@@ -141,6 +206,8 @@ async function parseTicketRequestPayload(request: Request): Promise<{ payload: u
         const record = payload as Record<string, unknown>;
         const attachmentUrl = typeof record.attachmentUrl === 'string' ? record.attachmentUrl.trim() : undefined;
         const contactEmail = typeof record.contactEmail === 'string' ? record.contactEmail.trim() : undefined;
+        const updatesDestination = typeof record.updatesDestination === 'string' ? record.updatesDestination.trim() : undefined;
+        const updatesNotes = typeof record.updatesNotes === 'string' ? record.updatesNotes.trim() : '';
 
         return {
             payload: {
@@ -150,9 +217,17 @@ async function parseTicketRequestPayload(request: Request): Promise<{ payload: u
                     : record.attachmentKind,
                 attachmentUrl: attachmentUrl || undefined,
                 contactEmail: contactEmail || undefined,
+                updatesDestination: updatesDestination || undefined,
+                updatesNotes,
                 isAnonymous: typeof record.isAnonymous === 'string'
                     ? parseBoolean(record.isAnonymous)
                     : record.isAnonymous,
+                updatesOptIn: typeof record.updatesOptIn === 'string'
+                    ? parseBoolean(record.updatesOptIn)
+                    : record.updatesOptIn,
+                updatesChannel: typeof record.updatesChannel === 'string'
+                    ? record.updatesChannel.trim().toLowerCase()
+                    : record.updatesChannel,
             },
         };
     }
@@ -217,13 +292,22 @@ export async function POST(request: Request) {
         return withNoStore(toApiResponse(new ApiError(403, 'FORBIDDEN', 'Forbidden')));
     }
 
-    // Rate limit: 3 tickets per hour per IP (stricter than the old forms API)
-    const limit = await checkRateLimit(`tickets_api_${ip}`, 3, 3600000);
-    if (!limit.success) {
-        logAuditAction('TICKET_RATE_LIMITED', { ip });
-        const response = toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests. Try again later.'));
-        if (limit.retryAfter) response.headers.set('Retry-After', String(limit.retryAfter));
-        return withNoStore(response);
+    const rateLimitConfig = resolveTicketSubmissionRateLimitConfig();
+    const shouldSkipRateLimit = process.env.NODE_ENV !== 'production' && rateLimitConfig.disableInDev;
+
+    // Rate-limit by user + IP so local/proxy shared IPs do not throttle all testers together.
+    if (!shouldSkipRateLimit) {
+        const limit = await checkRateLimit(
+            `tickets_api_${sessionEmail}_${ip}`,
+            rateLimitConfig.limit,
+            rateLimitConfig.windowMs,
+        );
+        if (!limit.success) {
+            logAuditAction('TICKET_RATE_LIMITED', { ip, sessionEmail });
+            const response = toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests. Try again later.'));
+            if (limit.retryAfter) response.headers.set('Retry-After', String(limit.retryAfter));
+            return withNoStore(response);
+        }
     }
 
     try {
@@ -240,6 +324,12 @@ export async function POST(request: Request) {
         const complaintNarrative = (data.complaintNarrative || data.message || '').trim();
         const attachmentUrlFromPayload = sanitizeAttachmentUrl(data.attachmentUrl);
         const attachmentKind = data.attachmentKind;
+        const optionalUpdatesOptIn = Boolean(data.updatesOptIn);
+        const optionalUpdatesChannel = optionalUpdatesOptIn ? 'Email' : 'None';
+        const optionalUpdatesDestination = optionalUpdatesOptIn
+            ? String(data.updatesDestination || '').trim().toLowerCase()
+            : '';
+        const optionalUpdateNotes = optionalUpdatesOptIn ? String(data.updatesNotes || '').trim() : '';
 
         // Honeypot / speed check
         if (data.honeypot) {
@@ -313,24 +403,35 @@ export async function POST(request: Request) {
             complaintNarrative,
             attachmentUrl,
             trackingTokenHash: hashTicketTrackingToken(trackingToken),
+            optionalUpdateOptIn: optionalUpdatesOptIn,
+            optionalUpdateChannel: optionalUpdatesChannel,
+            optionalUpdateDestination: optionalUpdatesDestination,
+            optionalUpdateDestinationStatus: 'Unverified',
+            optionalUpdateNotes,
         });
 
-        // 2. Dispatch emails (Wait for this! Vercel kills async tasks the moment you return a response)
-        await sendTicketEmails({
+        await emitGrievanceSubmissionNotifications({
+            queue: {
+                spreadsheetId: getTicketSpreadsheetId(),
+                queueTab: TICKET_NOTIFICATION_QUEUE_SHEET_TAB,
+                queueRange: TICKET_NOTIFICATION_QUEUE_RANGE,
+                queueAppendRange: TICKET_NOTIFICATION_QUEUE_APPEND_RANGE,
+            },
             ticketId,
-            trackingToken,
             studentId: data.studentId,
-            name:         studentName,
+            name: studentName,
             studentEmail,
-            isAnonymous,
-            contactEmail: confirmationEmail,
             campus: data.campus,
             college: data.college,
-            category:     data.category,
-            subject:      data.subject,
+            category: data.category,
+            subject: data.subject,
             complaintNarrative,
             attachmentUrl,
             submittedAt,
+            recipientEmail: confirmationEmail || studentEmail,
+            optionalUpdateDestination: optionalUpdatesDestination,
+            optionalUpdateChannel: optionalUpdatesChannel,
+            optionalUpdateDestinationStatus: 'Unverified',
         });
 
         // Still log the success
@@ -350,7 +451,7 @@ export async function POST(request: Request) {
             trackingAccessToken: trackingToken,
             message: confirmationEmail
                 ? 'Your grievance has been submitted. You will receive a confirmation email shortly.'
-                : 'Your grievance has been submitted. Save your tracking link to view full updates.',
+                : `Your grievance has been submitted. Save your tracking link to view full updates.${optionalUpdatesOptIn ? ' Optional update contact was saved and is pending officer verification.' : ''}`,
         }));
 
     } catch (error) {
