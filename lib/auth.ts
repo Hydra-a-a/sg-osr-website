@@ -295,11 +295,6 @@ export async function getAuthorizedUsers(): Promise<Map<string, AuthorizedUserRe
                     parsedRole = 'officer';
                 }
 
-                // ADDED DEBUG LOG:
-                if (email === '2023-100433@rtu.edu.ph') {
-                    console.log(`[AUTH DEBUG] Email: ${email} -> rawRole: '${rawRole}', officerAccessFlag: ${hasExplicitOfficerAccess}, parsedRole: '${parsedRole}'`);
-                }
-
                 const role = parsedRole;
                 if (role === 'student') {
                     return; // Skip rows explicitly marked as student

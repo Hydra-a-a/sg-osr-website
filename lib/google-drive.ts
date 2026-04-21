@@ -4,9 +4,6 @@ import { google } from 'googleapis';
 import { getGoogleServiceAccountCredentials } from '@/lib/google-credentials';
 import { redactErrorForLog } from '@/lib/security';
 
-const DEFAULT_GRIEVANCE_ATTACHMENTS_FOLDER_ID = '1MUiWHPcAgCHtU8sfIBDp-lGX43wluJTi';
-const DEFAULT_ORGANIZATION_LOGOS_FOLDER_ID = '1x6ogYIOmOtC2BZ_aaXwa5QfAlxk9ZzWv';
-
 function getDriveClient() {
     const auth = new google.auth.GoogleAuth({
         credentials: getGoogleServiceAccountCredentials(),
@@ -171,7 +168,11 @@ export function extractGoogleDriveResourceKey(url: string): string | undefined {
 }
 
 export function getOrganizationLogosFolderId(): string {
-    return process.env.GOOGLE_DRIVE_ORGANIZATION_LOGOS_FOLDER_ID || DEFAULT_ORGANIZATION_LOGOS_FOLDER_ID;
+    const folderId = (process.env.GOOGLE_DRIVE_ORGANIZATION_LOGOS_FOLDER_ID || '').trim();
+    if (!folderId) {
+        throw new Error('GOOGLE_DRIVE_ORGANIZATION_LOGOS_FOLDER_ID is not configured in the environment.');
+    }
+    return folderId;
 }
 
 export async function getDriveFileMetadataById(fileId: string, resourceKey?: string): Promise<{
@@ -204,7 +205,11 @@ export async function getDriveFileMetadataById(fileId: string, resourceKey?: str
 }
 
 function getAttachmentsFolderId(): string {
-    return process.env.GOOGLE_DRIVE_GRIEVANCE_FOLDER_ID || DEFAULT_GRIEVANCE_ATTACHMENTS_FOLDER_ID;
+    const folderId = (process.env.GOOGLE_DRIVE_GRIEVANCE_FOLDER_ID || '').trim();
+    if (!folderId) {
+        throw new Error('GOOGLE_DRIVE_GRIEVANCE_FOLDER_ID is not configured in the environment.');
+    }
+    return folderId;
 }
 
 function sanitizeFileBaseName(name: string): string {

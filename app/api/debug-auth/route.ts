@@ -23,14 +23,8 @@ export async function GET() {
             role: data.role,
         }));
 
-        const specificUser = users.get('2023-100433@rtu.edu.ph') || 'NOT_FOUND';
-
         return NextResponse.json({ 
             status: 'success', 
-            specificUserSearch: {
-                email: '2023-100433@rtu.edu.ph',
-                result: specificUser
-            },
             diagnostics: {
                 headersRaw: firstRow,
                 firstDataRow: rows[1] || [],

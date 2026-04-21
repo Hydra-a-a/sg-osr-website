@@ -6,7 +6,6 @@ import { ApiError, toApiResponse } from '@/lib/api-errors';
 import { extractGoogleDriveFileId, getDriveFileMetadataById } from '@/lib/google-drive';
 import { TransparencyGuideSchema, type TransparencyGuide } from '@/schemas/transparency-hub';
 
-const DEFAULT_INFO_SPREADSHEET_ID = '1LSkRWGzqWAuTodMDIVlzYTMWr8AhFMywcUd3PoziXaw';
 const BASE_CANDIDATE_RANGES = [
     process.env.STUDENT_HUB_GUIDES_RANGE?.trim(),
     'Student Hub Control!A2:Z',
@@ -16,7 +15,6 @@ const CANDIDATE_SPREADSHEET_IDS = Array.from(new Set([
     process.env.STUDENT_HUB_GUIDES_SPREADSHEET_ID?.trim(),
     process.env.GOOGLE_SHEETS_INFO_ID?.trim(),
     process.env.GOOGLE_SHEETS_DIRECTORY_ID?.trim(),
-    DEFAULT_INFO_SPREADSHEET_ID,
 ].filter((value): value is string => Boolean(value))));
 
 export const dynamic = 'force-dynamic';
