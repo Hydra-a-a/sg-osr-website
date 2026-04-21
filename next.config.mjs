@@ -3,7 +3,7 @@ import { withSentryConfig } from '@sentry/nextjs';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactCompiler: true,
-  serverExternalPackages: ['jsdom'],
+
   experimental: {
     serverActions: {
       allowedOrigins: ["localhost:3000"],
