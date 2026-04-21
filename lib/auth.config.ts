@@ -31,7 +31,8 @@ function validateAuthUrlSafety() {
 
     const parsedUrl = parseAuthOriginFromEnv();
     if (!parsedUrl) {
-        throw new Error('[Auth] Missing or invalid NEXTAUTH_URL/AUTH_URL/VERCEL_URL in production.');
+        console.warn('[Auth] NEXTAUTH_URL/AUTH_URL/VERCEL_URL is not set in production. Falling back to trusted request host resolution.');
+        return;
     }
 
     if (parsedUrl.protocol !== 'https:') {
