@@ -3,7 +3,6 @@
   publish = ".next"
 
 [build.environment]
-  NEXT_USE_NETLIFY_EDGE = "true"
   NODE_VERSION = "20"
 
 [[plugins]]
