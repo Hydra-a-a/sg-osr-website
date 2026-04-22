@@ -19,18 +19,12 @@ function generateNonce(): string {
 
 function buildCspHeader(nonce: string): string {
     const isProduction = process.env.NODE_ENV === 'production';
-    const scriptSrc = isProduction
-        ? `script-src 'self' 'nonce-${nonce}'; script-src-elem 'self' 'nonce-${nonce}'; script-src-attr 'none';`
-        : `script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-elem 'self' 'unsafe-inline'; script-src-attr 'none';`;
-    const styleSrc = isProduction
-        ? `style-src 'self' 'nonce-${nonce}'; style-src-elem 'self' 'nonce-${nonce}'; style-src-attr 'none';`
-        : `style-src 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline';`;
-
-
     return `
       default-src 'self';
-      ${scriptSrc}
-      ${styleSrc}
+      script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isProduction ? '' : " 'unsafe-eval'"};
+      script-src-attr 'none';
+      style-src 'self' 'nonce-${nonce}';
+      style-src-attr 'unsafe-inline';
       img-src 'self' blob: data: https://*.googleusercontent.com https://www.google.com https://*.fbcdn.net https://*.facebook.com;
       font-src 'self';
       media-src 'self' blob:;
@@ -42,7 +36,6 @@ function buildCspHeader(nonce: string): string {
       connect-src 'self' https://*.google.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.ingest.sentry.io https://ingest.sentry.io;
       worker-src 'self' blob:;
       manifest-src 'self';
-      script-src-attr 'none';
       upgrade-insecure-requests;
     `.replace(/\s{2,}/g, ' ').trim();
 }
@@ -50,12 +43,10 @@ function buildCspHeader(nonce: string): string {
 function buildCspReportOnlyHeader(nonce: string): string {
     return `
       default-src 'self';
-      script-src 'self' 'nonce-${nonce}';
-      script-src-elem 'self' 'nonce-${nonce}';
+      script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
       script-src-attr 'none';
       style-src 'self' 'nonce-${nonce}';
-      style-src-elem 'self' 'nonce-${nonce}';
-      style-src-attr 'none';
+      style-src-attr 'unsafe-inline';
       img-src 'self' blob: data: https://*.googleusercontent.com https://www.google.com https://*.fbcdn.net https://*.facebook.com;
       font-src 'self';
       media-src 'self' blob:;
@@ -67,7 +58,6 @@ function buildCspReportOnlyHeader(nonce: string): string {
       connect-src 'self' https://*.google.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.ingest.sentry.io https://ingest.sentry.io;
       worker-src 'self' blob:;
       manifest-src 'self';
-      script-src-attr 'none';
       upgrade-insecure-requests;
     `.replace(/\s{2,}/g, ' ').trim();
 }
@@ -104,6 +94,7 @@ function nextWithSecurityHeaders(req: Parameters<ReturnType<typeof auth>>[0], no
     const requestHeaders = new Headers(req.headers);
     if (process.env.NODE_ENV === 'production') {
         requestHeaders.set('x-nonce', nonce);
+        requestHeaders.set('Content-Security-Policy', cspHeader);
     }
 
     const response = NextResponse.next({
@@ -210,6 +201,13 @@ export default auth((req) => {
 });
 
 export const config = {
-    // Run middleware on all routes except static files and API auth routes
-    matcher: ['/((?!_next/static|_next/image|favicon.ico|images|api/auth).*)'],
+    matcher: [
+        {
+            source: '/((?!_next/static|_next/image|favicon.ico|images|api/auth).*)',
+            missing: [
+                { type: 'header', key: 'next-router-prefetch' },
+                { type: 'header', key: 'purpose', value: 'prefetch' },
+            ],
+        },
+    ],
 };
