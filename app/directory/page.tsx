@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import Image from 'next/image';
 import { Search, Facebook, Linkedin, Users, Grid, List as ListIcon, Mail, MapPin, Building2 } from 'lucide-react';
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
+import BackLink from '@/components/BackLink';
 import { isSafeNavigationHref } from '@/lib/security';
 
 const councilBranchGroups = {
@@ -681,350 +682,389 @@ export default function DirectoryPage() {
     return (
         <>
             {/* Header — no motion, instant render */}
-            <section className="bg-gradient-rtu page-header">
-                <div className="container-main text-center">
-                    <div className="mx-auto mb-4 h-10 w-10 relative">
+            <section className="portal-section-slate pt-14 pb-8 md:pt-18 md:pb-10">
+                <div className="portal-noise-overlay" aria-hidden="true" />
+                <div className="container-main relative z-10">
+                    <div className="max-w-7xl">
+                        <BackLink href="/" label="Back to Home" className="mb-6 text-slate-200 hover:text-white transition-colors" />
+
+                        <div className="directory-hero-shell grid gap-7 lg:grid-cols-[minmax(0,1.15fr)_320px] lg:items-end">
+                            <div className="max-w-2xl">
+                                <span className="portal-eyebrow">Student Directory</span>
+                                <div className="mt-5">
+                                    <div className="directory-hero-icon relative flex h-12 w-12 items-center justify-center rounded-2xl">
+                                        <AnimatePresence mode="wait" initial={false}>
+                                            <motion.div
+                                                key={headerIconKey}
+                                                className="absolute inset-0 flex items-center justify-center"
+                                                initial={prefersReducedMotion ? false : { opacity: 0, y: 6 }}
+                                                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                                                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                                                transition={{ duration: 0.2 }}
+                                            >
+                                                <HeaderIcon className="text-white/85" size={28} />
+                                            </motion.div>
+                                        </AnimatePresence>
+                                    </div>
+                                </div>
+                                <h1 className="mt-6 portal-title">
+                                    University <span className="portal-title-accent">Directory</span>
+                                </h1>
+                                <p className="mt-5 portal-lead max-w-2xl">
+                                    Browse RTU organizations by hierarchy: SSC, Central Student Councils, College/Institute councils,
+                                    academic and non-academic organizations, plus university offices.
+                                </p>
+                            </div>
+
+                            <div className="directory-hero-meta-card portal-panel-soft p-5 md:p-6">
+                                <p className="directory-hero-meta-kicker">Live View</p>
+                                <div className="directory-hero-meta-grid mt-4">
+                                    <div className="directory-hero-meta-row">
+                                        <span className="directory-hero-meta-label">Focus</span>
+                                        <span className="directory-hero-meta-value">{modeDisplayName[mode]}</span>
+                                    </div>
+                                    <div className="directory-hero-meta-row">
+                                        <span className="directory-hero-meta-label">Results</span>
+                                        <span className="directory-hero-meta-value">{sectionDataCount}</span>
+                                    </div>
+                                    <div className="directory-hero-meta-row">
+                                        <span className="directory-hero-meta-label">Layout</span>
+                                        <span className="directory-hero-meta-value">{viewMode === 'grid' ? 'Grid' : 'List'}</span>
+                                    </div>
+                                    <div className="directory-hero-meta-row">
+                                        <span className="directory-hero-meta-label">Sort</span>
+                                        <span className="directory-hero-meta-value">{sortMode === 'nameAsc' ? 'Name A-Z' : 'Relevance'}</span>
+                                    </div>
+                                </div>
+                                {showRestoredHint && (
+                                    <p className="mt-4 text-xs text-amber-100/85">
+                                        Your last directory preferences were restored for this session.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="portal-panel directory-controls-panel mt-8 p-5 md:p-6">
+                            <LayoutGroup id="directory-mode-tabs">
+                                <div className="flex justify-center gap-2.5 md:gap-3 flex-wrap">
+                                    {modeButtons.map((modeButton) => {
+                                        const isActive = mode === modeButton.key;
+                                        return (
+                                            <button
+                                                key={modeButton.key}
+                                                onClick={() => {
+                                                    setMode(modeButton.key);
+                                                }}
+                                                className={`relative px-5 py-2.5 rounded-full text-sm font-semibold cursor-pointer border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/60 ${isActive ? 'directory-mode-pill-active' : 'directory-mode-pill-inactive'}`}
+                                                aria-pressed={isActive}
+                                                title={modeButton.label}
+                                            >
+                                                {isActive && (
+                                                    <motion.span
+                                                        aria-hidden
+                                                        layoutId="active-directory-mode"
+                                                        className="directory-mode-pill-bg absolute inset-0 rounded-full"
+                                                        transition={prefersReducedMotion
+                                                            ? { duration: 0 }
+                                                            : { type: 'spring', stiffness: 420, damping: 34, mass: 0.55 }}
+                                                    />
+                                                )}
+                                                <span className="relative z-10 md:hidden">{modeButton.shortLabel}</span>
+                                                <span className="relative z-10 hidden md:inline">{modeButton.label}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </LayoutGroup>
+
+                            <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                                <div className="directory-glass-field">
+                                    <Search size={20} className="text-slate-300" />
+                                    <input
+                                        type="text"
+                                        placeholder={modeSearchPlaceholders[mode]}
+                                        className="flex-1 min-w-0 bg-transparent text-base text-white outline-none placeholder:text-slate-400"
+                                        value={search}
+                                        onChange={(e) => {
+                                            setSearch(e.target.value);
+                                        }}
+                                    />
+                                </div>
+
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:justify-end">
+                                    <div className="flex items-center gap-3">
+                                        <label className="text-xs text-slate-300 font-semibold uppercase tracking-[0.12em]">
+                                            Sort
+                                        </label>
+                                        <select
+                                            value={sortMode}
+                                            onChange={(e) => setSortMode(e.target.value === 'nameAsc' ? 'nameAsc' : 'relevance')}
+                                            className="directory-select"
+                                            aria-label="Sort directory results"
+                                        >
+                                            <option value="relevance">Relevance</option>
+                                            <option value="nameAsc">Name A-Z</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="directory-view-toggle">
+                                        <button
+                                            onClick={() => handleViewChange('grid')}
+                                            className={`directory-view-toggle-button ${viewMode === 'grid' ? 'directory-view-toggle-button-active' : ''}`}
+                                            title="Grid View"
+                                            aria-label="Switch to grid view"
+                                            aria-pressed={viewMode === 'grid'}
+                                        >
+                                            <Grid size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleViewChange('list')}
+                                            className={`directory-view-toggle-button ${viewMode === 'list' ? 'directory-view-toggle-button-active' : ''}`}
+                                            title="List View"
+                                            aria-label="Switch to list view"
+                                            aria-pressed={viewMode === 'list'}
+                                        >
+                                            <ListIcon size={18} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section className="portal-section-dark pt-6 pb-12 md:pt-8 md:pb-14">
+                <div className="portal-noise-overlay" aria-hidden="true" />
+                <div className="container-main relative z-10">
+                    <div className="max-w-7xl">
+                    <div className="portal-panel directory-summary-panel px-4 py-3 md:px-5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                <span className="directory-summary-chip">{modeDisplayName[mode]}</span>
+                                <span className="text-sm font-semibold text-slate-100">
+                                    {sectionDataCount} {sectionDataCount === 1 ? 'result' : 'results'}
+                                </span>
+                                {showRestoredHint && (
+                                    <span className="directory-restored-chip">
+                                        Preferences restored
+                                    </span>
+                                )}
+                            </div>
+                            <button
+                                onClick={clearFilters}
+                                className="directory-filter-action"
+                            >
+                                Clear search and sort
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="mt-6">
+                        {isLoading && (
+                            <div className={viewMode === 'grid' ? 'grid grid-cols-1 gap-8 md:grid-cols-2 2xl:grid-cols-3' : 'flex flex-col gap-4'}>
+                                {Array.from({ length: 6 }).map((_, i) => (
+                                    <div key={i} className="portal-panel p-6 flex flex-col gap-4">
+                                        <div className="skeleton w-16 h-16 rounded-full" />
+                                        <div className="skeleton h-4 w-3/4" />
+                                        <div className="skeleton h-3 w-1/2" />
+                                        <div className="skeleton h-3 w-1/3" />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {error && (
+                            <div className="portal-notice portal-notice-red rounded-3xl px-5 py-4 text-center">
+                                Failed to load directory
+                            </div>
+                        )}
+                        <p className="sr-only" aria-live="polite">
+                            Showing {sectionDataCount} entries in {viewMode} view.
+                        </p>
+                        {!isLoading && !error && sectionDataCount === 0 && (
+                            <div className="portal-panel p-6 md:p-8 text-center">
+                                <p className="font-medium text-white">
+                                    {search
+                                        ? modeEmptyStateMessage[mode]
+                                        : `No ${mode === 'offices' ? 'offices' : 'entries'} in this section yet.`}
+                                </p>
+                                <p className="mt-2 text-sm text-slate-300">
+                                    Try one of these suggested searches:
+                                </p>
+                                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                                    {suggestionChips.map((chip) => (
+                                        <button
+                                            key={chip}
+                                            onClick={() => handleSuggestionChipClick(chip)}
+                                            className="directory-empty-chip"
+                                        >
+                                            {chip}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         <AnimatePresence mode="wait" initial={false}>
                             <motion.div
-                                key={headerIconKey}
-                                className="absolute inset-0 flex items-center justify-center"
-                                initial={prefersReducedMotion ? false : { opacity: 0, y: 6 }}
+                                key={`${mode}-results`}
+                                className={viewMode === 'grid' ? 'grid grid-cols-1 gap-8 md:grid-cols-2 2xl:grid-cols-3' : 'flex flex-col gap-4'}
+                                initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
                                 animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
                                 transition={{ duration: 0.2 }}
                             >
-                                <HeaderIcon className="text-white/80" size={40} />
+                                {mode !== 'offices' && sortedDisplayedOfficers.map((officer, idx) => (
+                                    <div
+                                        key={officer.id || idx}
+                                        className={`portal-panel directory-result-card sg-hover-card ${viewMode === 'list' ? 'p-6 flex-row items-start gap-4 sm:items-center sm:gap-6' : 'directory-result-card-grid p-7 md:p-8 flex-col'} flex content-visibility-auto`}
+                                    >
+                                        <div
+                                            className={`directory-avatar-gradient ${viewMode === 'list' ? 'mb-0 h-12 w-12 shrink-0' : 'mb-5 h-[4.5rem] w-[4.5rem]'} rounded-full flex items-center justify-center text-white font-bold text-xl`}
+                                        >
+                                            {getSafeExternalHref(officer.logoUrl) ? (
+                                                <div className="relative w-full h-full rounded-full overflow-hidden bg-white skeleton">
+                                                    <Image
+                                                        src={getSafeExternalHref(officer.logoUrl) as string}
+                                                        alt={`${officer.name} logo`}
+                                                        fill
+                                                        sizes={viewMode === 'list' ? '48px' : '64px'}
+                                                        unoptimized
+                                                        className="object-contain p-1"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                officer.name.charAt(0)
+                                            )}
+                                        </div>
+
+                                        <div className={`${viewMode === 'list' ? 'flex-1 min-w-0 space-y-1.5' : 'min-w-0 space-y-3'}`}>
+                                            <span className={`${directoryBadgeBaseClass} bg-sky-400/12 text-sky-200 border-white/10`}>
+                                                {officer.category || officerBadge}
+                                            </span>
+                                            <h3 className="font-semibold text-white break-words leading-snug text-[1.15rem]">
+                                                {officer.name}
+                                            </h3>
+                                            {officer.email && (
+                                                <p className="text-sm text-slate-300 break-words">
+                                                    {officer.email}
+                                                </p>
+                                            )}
+                                            {officer.position && viewMode === 'list' && (
+                                                <p className="text-xs text-slate-400 break-words">
+                                                    {officer.position}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className={`flex flex-wrap gap-2 ${viewMode === 'grid' ? 'mt-6' : 'ml-0 shrink-0 self-start sm:ml-4 sm:self-auto'}`}>
+                                            {officer.email && (
+                                                <a
+                                                    href={`mailto:${officer.email}`}
+                                                    className="directory-contact-link"
+                                                    title={`Email ${officer.name}`}
+                                                >
+                                                    <Mail size={18} />
+                                                    <span>Email</span>
+                                                </a>
+                                            )}
+                                            {getSafeExternalHref(officer.facebookUrl) && (
+                                                <a
+                                                    href={getSafeExternalHref(officer.facebookUrl)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="directory-contact-link"
+                                                    title={`Facebook page for ${officer.name}`}
+                                                >
+                                                    <Facebook size={18} />
+                                                    <span>Facebook</span>
+                                                </a>
+                                            )}
+                                            {getSafeExternalHref(officer.linkedinUrl) && (
+                                                <a
+                                                    href={getSafeExternalHref(officer.linkedinUrl)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="directory-contact-link"
+                                                    title="LinkedIn Profile"
+                                                >
+                                                    <Linkedin size={18} />
+                                                    <span>LinkedIn</span>
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {mode === 'offices' && sortedFilteredOffices.map((office, idx) => (
+                                    <div
+                                        key={office.id || idx}
+                                        className={`portal-panel directory-result-card sg-hover-card ${viewMode === 'list' ? 'p-6 flex-row items-start gap-4 sm:items-center sm:gap-6' : 'directory-result-card-grid p-7 md:p-8 flex-col'} flex content-visibility-auto`}
+                                    >
+                                        <div
+                                            className={`directory-avatar-gradient ${viewMode === 'list' ? 'mb-0 h-12 w-12 shrink-0' : 'mb-5 h-[4.5rem] w-[4.5rem]'} rounded-full flex items-center justify-center text-white`}
+                                        >
+                                            {getSafeExternalHref(office.logoUrl) ? (
+                                                <div className="relative w-full h-full rounded-full overflow-hidden bg-white skeleton">
+                                                    <Image
+                                                        src={getSafeExternalHref(office.logoUrl) as string}
+                                                        alt={`${office.officeName} logo`}
+                                                        fill
+                                                        sizes={viewMode === 'list' ? '48px' : '64px'}
+                                                        unoptimized
+                                                        className="object-contain p-1"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <Building2 size={22} />
+                                            )}
+                                        </div>
+
+                                        <div className={`${viewMode === 'list' ? 'flex-1 min-w-0 space-y-1.5' : 'min-w-0 space-y-3'}`}>
+                                            <span className={`${directoryBadgeBaseClass} bg-amber-300/12 text-amber-100 border-white/10`}>
+                                                University Office
+                                            </span>
+                                            <h3 className="font-semibold text-white break-words leading-snug text-[1.15rem]">
+                                                {office.officeName}
+                                            </h3>
+
+                                            {office.headDirector && (
+                                                <p className="directory-office-head text-sm break-words">
+                                                    Head/Director: {office.headDirector}
+                                                </p>
+                                            )}
+
+                                            {office.branch && (
+                                                <p className="text-xs text-slate-400 break-words">
+                                                    {office.branch}
+                                                </p>
+                                            )}
+
+                                            <div className="space-y-1 text-sm text-slate-300">
+                                                {office.location && (
+                                                    <p className="flex items-center gap-2">
+                                                        <MapPin size={14} />
+                                                        <span>{office.location}</span>
+                                                    </p>
+                                                )}
+                                                {office.email && (
+                                                    <a
+                                                        href={`mailto:${office.email}`}
+                                                        className="inline-flex items-center gap-2 no-underline text-slate-300 hover:text-white transition-colors"
+                                                    >
+                                                        <Mail size={14} />
+                                                        <span>{office.email}</span>
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </motion.div>
                         </AnimatePresence>
                     </div>
-                    <h1 className="page-header-title font-bold text-white mb-3">
-                        University <span className="text-gradient-gold">Directory</span>
-                    </h1>
-                    <p className="page-header-subtitle max-w-lg mx-auto">
-                        Browse RTU organizations by hierarchy: SSC, Central Student Councils, College/Institute councils, academic and non-academic organizations, plus university offices.
-                    </p>
-                </div>
-            </section>
-
-            {/* Directory Hierarchy Tabs */}
-            <section className="container-main mt-8 md:mt-10 mb-4">
-                <LayoutGroup id="directory-mode-tabs">
-                    <div className="flex gap-3 md:gap-4 justify-center flex-wrap">
-                        {modeButtons.map((modeButton) => {
-                            const isActive = mode === modeButton.key;
-                            return (
-                                <button
-                                    key={modeButton.key}
-                                    onClick={() => {
-                                        setMode(modeButton.key);
-                                    }}
-                                    className={`relative px-5 py-2.5 rounded-full text-sm font-semibold cursor-pointer border-2 transition-colors ${isActive ? 'directory-mode-pill-active' : 'directory-mode-pill-inactive'}`}
-                                    aria-pressed={isActive}
-                                    title={modeButton.label}
-                                >
-                                    {isActive && (
-                                        <motion.span
-                                            aria-hidden
-                                            layoutId="active-directory-mode"
-                                            className="directory-mode-pill-bg absolute inset-0 rounded-full"
-                                            transition={prefersReducedMotion
-                                                ? { duration: 0 }
-                                                : { type: 'spring', stiffness: 420, damping: 34, mass: 0.55 }}
-                                        />
-                                    )}
-                                    <span className="relative z-10 md:hidden">{modeButton.shortLabel}</span>
-                                    <span className="relative z-10 hidden md:inline">{modeButton.label}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </LayoutGroup>
-            </section>
-
-            {/* Search Bar & View Toggle */}
-            <section className="container-main mt-2 md:mt-3">
-                <div className="card p-5 md:p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
-                    <div className="flex items-center gap-3 flex-1 min-w-0 rounded-lg p-2 border border-soft bg-surface-base">
-                        <Search size={20} className="text-subtle" />
-                        <input
-                            type="text"
-                            placeholder={modeSearchPlaceholders[mode]}
-                            className="flex-1 min-w-0 outline-none text-base bg-transparent text-strong placeholder:text-subtle"
-                            value={search}
-                            onChange={(e) => {
-                                setSearch(e.target.value);
-                            }}
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-3 self-end sm:self-auto">
-                        <label className="text-xs text-subtle font-semibold uppercase tracking-[0.06em]">
-                            Sort
-                        </label>
-                        <select
-                            value={sortMode}
-                            onChange={(e) => setSortMode(e.target.value === 'nameAsc' ? 'nameAsc' : 'relevance')}
-                            className="h-9 rounded-lg border border-soft px-3 text-sm text-body bg-white outline-none"
-                            aria-label="Sort directory results"
-                        >
-                            <option value="relevance">Relevance</option>
-                            <option value="nameAsc">Name A-Z</option>
-                        </select>
-
-                        {/* View Controls */}
-                        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-                        <button
-                            onClick={() => handleViewChange('grid')}
-                            className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-amber-500' : 'text-gray-400 hover:text-gray-600'}`}
-                            title="Grid View"
-                            aria-label="Switch to grid view"
-                            aria-pressed={viewMode === 'grid'}
-                        >
-                            <Grid size={18} />
-                        </button>
-                        <button
-                            onClick={() => handleViewChange('list')}
-                            className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-amber-500' : 'text-gray-400 hover:text-gray-600'}`}
-                            title="List View"
-                            aria-label="Switch to list view"
-                            aria-pressed={viewMode === 'list'}
-                        >
-                            <ListIcon size={18} />
-                        </button>
-                        </div>
                     </div>
                 </div>
             </section>
-
-            <section className="container-main mt-4 mb-2">
-                <div className="rounded-xl border border-soft bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
-                    <div className="flex items-center gap-2 min-w-0">
-                        <span className="pill-label bg-blue-50 text-blue-700 border border-blue-100">{modeDisplayName[mode]}</span>
-                        <span className="text-sm text-body font-semibold">{sectionDataCount} {sectionDataCount === 1 ? 'result' : 'results'}</span>
-                        {showRestoredHint && (
-                            <span className="micro-note text-blue-700 bg-blue-50 border border-blue-100 rounded-full px-2 py-0.5">
-                                Preferences restored
-                            </span>
-                        )}
-                    </div>
-                    <button
-                        onClick={clearFilters}
-                        className="text-sm font-medium text-subtle hover:text-body transition-colors"
-                    >
-                        Clear search and sort
-                    </button>
-                </div>
-            </section>
-
-            {/* Grid */}
-            <section className="section pt-10 md:pt-12">
-                <div className="container-main">
-                    {isLoading && (
-                        <div className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-4"}>
-                            {Array.from({ length: 6 }).map((_, i) => (
-                                <div key={i} className="card p-6 flex flex-col gap-4">
-                                    <div className="skeleton w-16 h-16 rounded-full" />
-                                    <div className="skeleton h-4 w-3/4" />
-                                    <div className="skeleton h-3 w-1/2" />
-                                    <div className="skeleton h-3 w-1/3" />
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    {error && (
-                        <p className="text-center text-red-500">Failed to load directory</p>
-                    )}
-                    <p className="sr-only" aria-live="polite">
-                        Showing {sectionDataCount} entries in {viewMode} view.
-                    </p>
-                    {!isLoading && !error && sectionDataCount === 0 && (
-                        <div className="card p-6 text-center">
-                            <p className="text-body font-medium">
-                                {search
-                                    ? modeEmptyStateMessage[mode]
-                                    : `No ${mode === 'offices' ? 'offices' : 'entries'} in this section yet.`}
-                            </p>
-                            <p className="text-sm text-subtle mt-2">
-                                Try one of these suggested searches:
-                            </p>
-                            <div className="mt-3 flex flex-wrap justify-center gap-2">
-                                {suggestionChips.map((chip) => (
-                                    <button
-                                        key={chip}
-                                        onClick={() => handleSuggestionChipClick(chip)}
-                                        className="pill-label pill-label-tight bg-surface-base text-body border border-soft hover:bg-blue-50 hover:text-blue-700 hover:border-blue-100 transition-colors"
-                                    >
-                                        {chip}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                    <AnimatePresence mode="wait" initial={false}>
-                        <motion.div
-                            key={`${mode}-results`}
-                            className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" : "flex flex-col gap-4"}
-                            initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
-                            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
-                            transition={{ duration: 0.2 }}
-                        >
-                            {mode !== 'offices' && sortedDisplayedOfficers.map((officer, idx) => (
-                                <div
-                                    key={officer.id || idx}
-                                    className={`card p-6 flex ${viewMode === 'list' ? 'flex-row items-start sm:items-center gap-4 sm:gap-6' : 'flex-col'} content-visibility-auto`}
-                                >
-                                {/* Avatar */}
-                                <div
-                                    className={`directory-avatar-gradient ${viewMode === 'list' ? 'w-12 h-12 mb-0 shrink-0' : 'w-16 h-16 mb-4'} rounded-full flex items-center justify-center text-white font-bold text-xl`}
-                                >
-                                    {getSafeExternalHref(officer.logoUrl) ? (
-                                        <div className="relative w-full h-full rounded-full overflow-hidden bg-white skeleton">
-                                            <Image
-                                                src={getSafeExternalHref(officer.logoUrl) as string}
-                                                alt={`${officer.name} logo`}
-                                                fill
-                                                sizes={viewMode === 'list' ? '48px' : '64px'}
-                                                unoptimized
-                                                className="object-contain p-1"
-                                            />
-                                        </div>
-                                    ) : (
-                                        officer.name.charAt(0)
-                                    )}
-                                </div>
-
-                                <div className={`${viewMode === 'list' ? 'flex-1 min-w-0' : 'min-w-0'} space-y-1.5`}>
-                                    {/* Category Badge */}
-                                    <span className={`${directoryBadgeBaseClass} bg-blue-50 text-blue-700 border-blue-100`}>
-                                        {officer.category || officerBadge}
-                                    </span>
-                                    {/* Organization Name */}
-                                    <h3 className="font-semibold text-strong break-words leading-snug">
-                                        {officer.name}
-                                    </h3>
-                                    {/* Email */}
-                                    {officer.email && (
-                                        <p className="text-sm text-subtle break-words">
-                                            {officer.email}
-                                        </p>
-                                    )}
-                                    {/* Position/Acronym for list view */}
-                                    {officer.position && viewMode === 'list' && (
-                                        <p className="text-xs text-subtle break-words">
-                                            {officer.position}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* Right side: Contact buttons */}
-                                <div className={`flex flex-wrap gap-2 ${viewMode === 'grid' ? 'mt-auto' : 'ml-0 sm:ml-4 shrink-0'} ${viewMode === 'list' ? 'self-start sm:self-auto' : ''}`}>
-                                    {officer.email && (
-                                        <a
-                                            href={`mailto:${officer.email}`}
-                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full border border-soft bg-white text-sm text-subtle hover:text-brand hover:bg-gray-50 transition-colors"
-                                            title={`Email ${officer.name}`}
-                                        >
-                                            <Mail size={18} />
-                                            <span>Email</span>
-                                        </a>
-                                    )}
-                                    {getSafeExternalHref(officer.facebookUrl) && (
-                                        <a
-                                            href={getSafeExternalHref(officer.facebookUrl)}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full border border-soft bg-white text-sm text-subtle hover:text-brand hover:bg-gray-50 transition-colors"
-                                            title={`Facebook page for ${officer.name}`}
-                                        >
-                                            <Facebook size={18} />
-                                            <span>Facebook</span>
-                                        </a>
-                                    )}
-                                    {getSafeExternalHref(officer.linkedinUrl) && (
-                                        <a
-                                            href={getSafeExternalHref(officer.linkedinUrl)}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full border border-soft bg-white text-sm text-subtle hover:text-brand hover:bg-gray-50 transition-colors"
-                                            title="LinkedIn Profile"
-                                        >
-                                            <Linkedin size={18} />
-                                            <span>LinkedIn</span>
-                                        </a>
-                                    )}
-                                </div>
-                                </div>
-                            ))}
-
-                            {mode === 'offices' && sortedFilteredOffices.map((office, idx) => (
-                                <div
-                                    key={office.id || idx}
-                                    className={`card p-6 flex ${viewMode === 'list' ? 'flex-row items-start sm:items-center gap-4 sm:gap-6' : 'flex-col'} content-visibility-auto`}
-                                >
-                                <div
-                                    className={`directory-avatar-gradient ${viewMode === 'list' ? 'w-12 h-12 mb-0 shrink-0' : 'w-16 h-16 mb-4'} rounded-full flex items-center justify-center text-white`}
-                                >
-                                    {getSafeExternalHref(office.logoUrl) ? (
-                                        <div className="relative w-full h-full rounded-full overflow-hidden bg-white skeleton">
-                                            <Image
-                                                src={getSafeExternalHref(office.logoUrl) as string}
-                                                alt={`${office.officeName} logo`}
-                                                fill
-                                                sizes={viewMode === 'list' ? '48px' : '64px'}
-                                                unoptimized
-                                                className="object-contain p-1"
-                                            />
-                                        </div>
-                                    ) : (
-                                        <Building2 size={22} />
-                                    )}
-                                </div>
-
-                                <div className={`${viewMode === 'list' ? 'flex-1 min-w-0' : 'min-w-0'} space-y-1.5`}>
-                                    <span className={`${directoryBadgeBaseClass} bg-amber-50 text-amber-700 border-amber-100`}>
-                                        University Office
-                                    </span>
-                                    <h3 className="font-semibold text-strong break-words leading-snug">
-                                        {office.officeName}
-                                    </h3>
-
-                                    {office.headDirector && (
-                                        <p className="directory-office-head text-sm break-words">
-                                            Head/Director: {office.headDirector}
-                                        </p>
-                                    )}
-
-                                    {office.branch && (
-                                        <p className="text-xs text-subtle break-words">
-                                            {office.branch}
-                                        </p>
-                                    )}
-
-                                    <div className="space-y-1 text-sm text-subtle">
-                                        {office.location && (
-                                            <p className="flex items-center gap-2">
-                                                <MapPin size={14} />
-                                                <span>{office.location}</span>
-                                            </p>
-                                        )}
-                                        {office.email && (
-                                            <a
-                                                href={`mailto:${office.email}`}
-                                                className="flex items-center gap-2 no-underline text-subtle hover:text-brand transition-colors"
-                                            >
-                                                <Mail size={14} />
-                                                <span>{office.email}</span>
-                                            </a>
-                                        )}
-                                    </div>
-                                </div>
-                                </div>
-                            ))}
-                        </motion.div>
-                    </AnimatePresence>
-                </div>
-            </section >
         </>
     );
 }

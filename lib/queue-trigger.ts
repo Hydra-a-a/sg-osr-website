@@ -16,11 +16,19 @@
 const TRIGGER_DELAY_MS = 300; // let the append settle before we read the queue
 const TRIGGER_LIMIT = 10;     // max notifications to process per trigger call
 
-function resolveQueueSecret(): string {
+function resolveTicketSecret(): string {
     return (
-        process.env.TICKET_STATUS_SYNC_SECRET
-        || process.env.CRON_SECRET
-        || ''
+        process.env.TICKET_STATUS_SYNC_SECRET ||
+        process.env.CRON_SECRET ||
+        ''
+    ).trim();
+}
+
+function resolveProposalSecret(): string {
+    return (
+        process.env.PROPOSAL_STATUS_SYNC_SECRET ||
+        process.env.CRON_SECRET ||
+        ''
     ).trim();
 }
 
@@ -42,7 +50,7 @@ function resolveAppUrl(): string {
  */
 export function triggerTicketQueueInBackground(): void {
     const appUrl = resolveAppUrl();
-    const secret = resolveQueueSecret();
+    const secret = resolveTicketSecret();
 
     if (!appUrl || !secret) {
         console.warn(
@@ -86,12 +94,12 @@ export function triggerTicketQueueInBackground(): void {
  */
 export function triggerProposalQueueInBackground(): void {
     const appUrl = resolveAppUrl();
-    const secret = resolveQueueSecret();
+    const secret = resolveProposalSecret();
 
     if (!appUrl || !secret) {
         console.warn(
             '[QueueTrigger] Skipping background trigger — NEXT_PUBLIC_APP_URL or ' +
-            'TICKET_STATUS_SYNC_SECRET is not configured.',
+            'PROPOSAL_STATUS_SYNC_SECRET is not configured.',
         );
         return;
     }

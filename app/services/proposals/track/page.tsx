@@ -619,17 +619,6 @@ export default function ProposalTrackingPage() {
 
                                     <Timeline status={proposal.status} />
 
-                                    <div className="proposal-card p-6">
-                                        <h3 className="text-sm font-semibold text-white mb-3">Officer Feedback</h3>
-                                        <p className="text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">
-                                            {proposal.reviewNotes || 'No formal reviewer notes have been published yet. Check back as the review progresses.'}
-                                        </p>
-                                        {proposal.updatedAt ? (
-                                            <p className="text-xs text-slate-400 mt-4">
-                                                Last updated {formatDateTime(proposal.updatedAt)}
-                                            </p>
-                                        ) : null}
-                                    </div>
 
                                     <div className="proposal-card p-6">
                                         <div className="flex items-center justify-between gap-4 mb-5">

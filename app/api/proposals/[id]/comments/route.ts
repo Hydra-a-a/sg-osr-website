@@ -16,6 +16,7 @@ import {
     resolveProposalsSpreadsheetId,
 } from '@/lib/proposals';
 import { emitProposalCommentNotifications } from '@/lib/proposal-notifications';
+import { triggerProposalQueueInBackground } from '@/lib/queue-trigger';
 
 // enqueueProposalNotificationEvent is superseded by emitProposalCommentNotifications.
 const PROPOSAL_NOTIFICATION_QUEUE_TAB = process.env.PROPOSAL_NOTIFICATION_QUEUE_SHEET_TAB || 'Project_Proposal_Notification_Queue';
@@ -235,6 +236,11 @@ export async function POST(
             message: comment.message,
             attachmentUrl: comment.attachmentUrl,
             createdAt: new Date().toISOString(),
+        });
+
+        // Trigger background processing for near-live emails
+        triggerProposalQueueInBackground().catch(err => {
+            console.error('[PROPOSAL_COMMENT] Failed to trigger background queue:', err);
         });
 
         return withNoStore(NextResponse.json({

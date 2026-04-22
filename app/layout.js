@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import AuthProvider from "@/components/AuthProvider";
 import PageTransition from "@/components/PageTransition";
 import { CspNonceProvider } from "@/components/CspNonceProvider";
+import ViewportModeGuard from "@/components/ViewportModeGuard";
 import { getSiteConfig } from "@/lib/slideConfig";
 import { headers } from "next/headers";
 
@@ -23,6 +24,12 @@ export const metadata = {
   description: "The unified digital portal of the RTU Supreme Student Council and Office of the Student Regent. Access student services, officer directory, transparency reports, and campus resources.",
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
+
 export default async function RootLayout({ children }) {
   const config = await getSiteConfig();
   const requestHeaders = await headers();
@@ -36,6 +43,7 @@ export default async function RootLayout({ children }) {
       >
         <a href="#main-content" className="skip-link">Skip to main content</a>
         <CspNonceProvider nonce={nonce}>
+          <ViewportModeGuard />
           <AuthProvider>
             <NavbarClient config={config} />
             <main id="main-content" className="flex-1" tabIndex={-1}>

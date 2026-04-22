@@ -401,7 +401,14 @@ function AppealsThread({ ticketId, detailsRedacted }: { ticketId: string; detail
                     comments.map((c, i) => (
                         <div key={c.commentId || i} className="bg-surface-muted/40 p-4 rounded-xl border border-soft">
                             <div className="flex items-center justify-between gap-4 mb-2">
-                                <span className="font-semibold text-sm text-body">{c.author}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-sm text-body">{c.author}</span>
+                                    {c.authorRole === 'OFFICER' && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                            Official Action
+                                        </span>
+                                    )}
+                                </div>
                                 <span className="text-xs text-subtle">{c.timestamp}</span>
                             </div>
                             {c.isAppeal && (
@@ -856,24 +863,6 @@ function TrackContent() {
                                 </div>
                             </div>
                         </div>
-
-                        {/* Resolution notes */}
-                        {!ticket.detailsRedacted && ticket.resolutionNotes?.trim() && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.15 }}
-                                className="card p-6"
-                            >
-                                <h3 className="text-sm font-semibold text-body mb-3 flex items-center gap-2">
-                                    <FileText size={14} className="text-subtle" />
-                                    Resolution Notes
-                                </h3>
-                                <p className="text-sm text-body whitespace-pre-wrap leading-relaxed">
-                                    {ticket.resolutionNotes}
-                                </p>
-                            </motion.div>
-                        )}
 
                         {/* Appeals Thread */}
                         <AppealsThread ticketId={ticket.ticketId} detailsRedacted={ticket.detailsRedacted} />

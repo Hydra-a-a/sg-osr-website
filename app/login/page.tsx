@@ -4,10 +4,10 @@ import { useState, useEffect, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldCheck, ChevronLeft, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, BadgeCheck, GraduationCap } from 'lucide-react';
 import { LEADER_ATTEMPT_COOKIE, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
+import BackLink from '@/components/BackLink';
 
 type AuthProviderResponse = Record<string, {
     id?: string;
@@ -208,192 +208,206 @@ function LoginContent() {
     };
 
     return (
-        <section className="min-h-screen flex items-center justify-center relative overflow-hidden bg-surface-base" aria-label="Login section">
-            {/* Background Decorations */}
-            <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
-                <div className="absolute top-[-10%] right-[-5%] w-[40vw] h-[40vw] rounded-full bg-rtu-blue opacity-[0.03] blur-3xl" />
-                <div className="absolute bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] rounded-full bg-rtu-gold opacity-[0.05] blur-3xl" />
-            </div>
+        <section className="portal-section-dark login-portal-shell min-h-screen flex items-center justify-center relative overflow-hidden py-10 md:py-14" aria-label="Login section">
+            <div className="portal-noise-overlay" aria-hidden="true" />
+            <div className="login-portal-glow login-portal-glow-blue" aria-hidden="true" />
 
             <div className="container-main relative z-10 flex justify-center">
                 <motion.div
-                    className="w-full max-w-lg"
+                    className="w-full max-w-xl"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
                 >
-                    <div className="text-center mb-10 md:mb-11">
-                        <Link href="/" className="inline-flex items-center gap-2 text-sm text-text-muted hover:text-rtu-blue transition-colors mb-6 no-underline">
-                            <ChevronLeft size={16} />
-                            Back to Portal
-                        </Link>
-                        <div className="relative w-20 h-20 mx-auto mb-4">
-                            <Image
-                                src="/images/OSR_LOGO.jpg"
-                                alt="Logo"
-                                fill
-                                sizes="80px"
-                                className="object-contain rounded-full shadow-lg"
-                            />
+                    <div className="mb-8 flex justify-center md:mb-10">
+                        <BackLink href="/" label="Return to Portal" className="mb-2" />
+                    </div>
+
+                    <div className="login-portal-layout">
+                        <div className="login-portal-copy text-center">
+                            <span className="portal-eyebrow mb-6 block">Institutional Account Access</span>
+                            <div className="relative mx-auto h-20 w-20 md:h-24 md:w-24 aspect-square">
+                                <Image
+                                    src="/images/OSR_LOGO.jpg"
+                                    alt="RTU OSR logo"
+                                    fill
+                                    sizes="96px"
+                                    className="object-cover rounded-full shadow-lg ring-1 ring-white/10"
+                                />
+                            </div>
+                            <h1 className="portal-title mb-4">
+                                RTU Account <span className="portal-title-accent">Sign In</span>
+                            </h1>
+                            <p className="portal-lead mx-auto">
+                                Sign in using your official <strong className="font-semibold text-slate-100">@rtu.edu.ph</strong> account to access institutional portal services.
+                                Google verifies your identity, and access is granted in accordance with your authorized RTU role and permissions.
+                            </p>
                         </div>
-                        <h1 className="page-header-title text-[clamp(1.65rem,2.2vw+0.9rem,2.3rem)] font-bold text-rtu-blue">RTU Account Sign In</h1>
-                        <p className="text-text-muted mt-2 text-sm leading-relaxed max-w-md mx-auto">Access the grievance portal with your official RTU email.</p>
-                    </div>
 
-                    <div className="card shadow-xl border-t-4 border-t-rtu-blue bg-white p-6 sm:p-8 overflow-hidden relative">
-                        <AnimatePresence mode="wait">
-                            <motion.div
-                                key="login-step"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
-                            >
-                                <div className="mb-7">
-                                    <h2 className="text-xl font-bold text-strong leading-tight mb-2">Sign In</h2>
-                                    <p className="text-sm text-text-muted leading-relaxed">
-                                        Use your institutional <strong>@rtu.edu.ph</strong> account to submit grievances, track tickets, and access role-based portal tools.
-                                    </p>
-                                </div>
+                        <div className="portal-panel sg-hover-card login-portal-card p-6 sm:p-8 md:p-9">
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key="login-step"
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 20 }}
+                                >
+                                    <div className="mb-7 text-center">
+                                        <span className="pill-label pill-label-tight mb-4 border border-sky-400/15 bg-sky-400/10 text-sky-100">
+                                            Institutional Authentication
+                                        </span>
+                                        <h2 className="text-2xl font-semibold text-white leading-tight mb-2">Select Access Type</h2>
+                                        <p className="text-sm text-slate-300 leading-relaxed">
+                                            Select the appropriate sign-in route for your account. Access privileges are determined after authentication based on your verified RTU credentials and institutional authorization policies.
+                                        </p>
+                                    </div>
 
-                                {/* Error Banner */}
-                                {errorMessage && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3"
-                                    >
-                                        <AlertTriangle className="text-red-500 mt-0.5 shrink-0" size={18} />
-                                        <p className="text-sm text-red-700">{errorMessage}</p>
-                                    </motion.div>
-                                )}
+                                    {/* Error Banner */}
+                                    {errorMessage && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="login-alert-panel login-alert-panel-danger mb-6 flex items-start gap-3 rounded-2xl p-4"
+                                        >
+                                            <AlertTriangle className="mt-0.5 shrink-0 text-red-200" size={18} />
+                                            <p className="text-sm text-red-50">{errorMessage}</p>
+                                        </motion.div>
+                                    )}
 
-                                {showFacebookLiteHelp && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg"
-                                    >
-                                        <p className="text-sm font-semibold text-amber-800">Facebook Lite sign-in fallback</p>
-                                        <ol className="mt-2 text-sm text-amber-700 list-decimal pl-5 space-y-1">
-                                            <li>Tap the 3-dot menu in Facebook Lite.</li>
-                                            <li>Choose Open in browser.</li>
-                                            <li>Use Chrome, Safari, Firefox, or Edge to continue Google sign-in.</li>
-                                        </ol>
-                                    </motion.div>
-                                )}
+                                    {showFacebookLiteHelp && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="login-alert-panel login-alert-panel-warn mb-6 rounded-2xl p-4"
+                                        >
+                                            <p className="text-sm font-semibold text-amber-50">Facebook Lite Sign-In Guidance</p>
+                                            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-amber-100">
+                                                <li>Tap the 3-dot menu in Facebook Lite.</li>
+                                                <li>Choose Open in browser.</li>
+                                                <li>Use Chrome, Safari, Firefox, or Edge to continue Google sign-in.</li>
+                                            </ol>
+                                        </motion.div>
+                                    )}
 
-                                <div className="space-y-3">
-                                    <button
-                                        onClick={() => handleLogin('student')}
-                                        disabled={disableGoogleSignIn}
-                                        className="w-full flex items-center justify-between gap-3 px-4 py-3.5 bg-white border border-soft rounded-xl hover:bg-gray-50 transition-all duration-200 shadow-sm group disabled:opacity-70"
-                                    >
-                                        {isLoading && activePortal === 'student' ? (
-                                            <div className="w-5 h-5 border-2 border-rtu-blue border-t-transparent rounded-full animate-spin" />
-                                        ) : (
-                                            <>
-                                                <div className="flex items-center gap-3 text-left">
-                                                    <Image src="https://www.google.com/favicon.ico" alt="Google" width={18} height={18} />
-                                                    <div>
-                                                        <p className="font-semibold text-strong">Student Access</p>
-                                                        <p className="text-xs text-subtle leading-relaxed">
-                                                            {googleProviderReady === false ? 'Unavailable until Google sign-in is configured.' : 'Submit and track grievances'}
+                                    <div className="space-y-3">
+                                        <button
+                                            onClick={() => handleLogin('student')}
+                                            disabled={disableGoogleSignIn}
+                                            className="login-gateway-button login-gateway-button-student w-full"
+                                        >
+                                            {isLoading && activePortal === 'student' ? (
+                                                <div className="w-5 h-5 border-2 border-sky-300 border-t-transparent rounded-full animate-spin" />
+                                            ) : (
+                                                <div className="flex w-full items-start gap-4 text-left">
+                                                    <span className="login-gateway-icon login-gateway-icon-student" aria-hidden="true">
+                                                        <GraduationCap size={18} />
+                                                    </span>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-semibold text-white">Student Access</p>
+                                                            <Image src="https://www.google.com/favicon.ico" alt="Google" width={16} height={16} />
+                                                        </div>
+                                                        <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                                                            {googleProviderReady === false ? 'Unavailable until Google sign-in is configured.' : 'For students submitting grievances, tracking records, and accessing student-facing portal services.'}
                                                         </p>
                                                     </div>
                                                 </div>
-                                            </>
-                                        )}
-                                    </button>
+                                            )}
+                                        </button>
 
-                                    <button
-                                        onClick={() => handleLogin('leader')}
-                                        disabled={disableGoogleSignIn}
-                                        className="w-full flex items-center justify-between gap-3 px-4 py-3.5 bg-white border border-amber-200 rounded-xl hover:bg-amber-50 transition-all duration-200 shadow-sm group disabled:opacity-70"
-                                    >
-                                        {isLoading && activePortal === 'leader' ? (
-                                            <div className="w-5 h-5 border-2 border-rtu-gold-dark border-t-transparent rounded-full animate-spin" />
-                                        ) : (
-                                            <>
-                                                <div className="flex items-center gap-3 text-left">
-                                                    <Image src="https://www.google.com/favicon.ico" alt="Google" width={18} height={18} />
-                                                    <div>
-                                                        <p className="font-semibold text-strong">Student Leader Access</p>
-                                                        <p className="text-xs text-subtle leading-relaxed">
-                                                            {googleProviderReady === false ? 'Unavailable until Google sign-in is configured.' : 'Review leadership-only portal tools'}
+                                        <button
+                                            onClick={() => handleLogin('leader')}
+                                            disabled={disableGoogleSignIn}
+                                            className="login-gateway-button login-gateway-button-leader w-full"
+                                        >
+                                            {isLoading && activePortal === 'leader' ? (
+                                                <div className="w-5 h-5 border-2 border-amber-200 border-t-transparent rounded-full animate-spin" />
+                                            ) : (
+                                                <div className="flex w-full items-start gap-4 text-left">
+                                                    <span className="login-gateway-icon login-gateway-icon-leader" aria-hidden="true">
+                                                        <BadgeCheck size={18} />
+                                                    </span>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-semibold text-white">Student Leader Access</p>
+                                                            <Image src="https://www.google.com/favicon.ico" alt="Google" width={16} height={16} />
+                                                        </div>
+                                                        <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                                                            {googleProviderReady === false ? 'Unavailable until Google sign-in is configured.' : 'For councils, committees, and other recognized student leadership accounts with authorized access.'}
                                                         </p>
                                                     </div>
                                                 </div>
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
+                                            )}
+                                        </button>
+                                    </div>
 
-                                {localDevLoginEnabled && (
-                                    <div className="mt-6 pt-5 border-t border-amber-100">
-                                        <h4 className="pill-label pill-label-tight mb-3 bg-amber-100 text-amber-700">
-                                            Localhost Login Simulation
-                                        </h4>
-                                        <div className="space-y-3">
-                                            <input
-                                                type="email"
-                                                value={devEmail}
-                                                onChange={(e) => setDevEmail(e.target.value)}
-                                                placeholder="student@rtu.edu.ph"
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
-                                            />
-                                            <select
-                                                value={devRole}
-                                                onChange={(e) => {
-                                                    const v = e.target.value;
-                                                    setDevRole(v === 'officer' ? 'officer' : v === 'leader' ? 'leader' : 'student');
-                                                }}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
-                                            >
-                                                <option value="student">Student</option>
-                                                <option value="leader">Student Leader</option>
-                                                <option value="officer">Officer (Admin)</option>
-                                            </select>
-                                            <input
-                                                type="password"
-                                                value={devToken}
-                                                onChange={(e) => setDevToken(e.target.value)}
-                                                placeholder="Local simulation token"
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
-                                            />
-                                            <button
-                                                onClick={handleLocalDevLogin}
-                                                disabled={isLoading || !devToken}
-                                                className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition-all duration-200 shadow-sm disabled:opacity-70"
-                                            >
-                                                {isLoading && activePortal === devRole ? (
-                                                    <div className="w-5 h-5 border-2 border-amber-700 border-t-transparent rounded-full animate-spin" />
-                                                ) : (
-                                                    <span className="font-semibold text-amber-800">Simulate Local Login</span>
-                                                )}
-                                            </button>
-                                            <p className="micro-note text-amber-700/80">
-                                                Enabled only in non-production with explicit env flags and localhost checks.
-                                            </p>
+                                    {localDevLoginEnabled && (
+                                        <div className="mt-6 border-t border-white/10 pt-5">
+                                            <h4 className="pill-label pill-label-tight mb-3 border border-amber-300/15 bg-amber-500/10 text-amber-100">
+                                                Local Development Sign-In Simulation
+                                            </h4>
+                                            <div className="space-y-3">
+                                                <input
+                                                    type="email"
+                                                    value={devEmail}
+                                                    onChange={(e) => setDevEmail(e.target.value)}
+                                                    placeholder="student@rtu.edu.ph"
+                                                    className="login-dev-input w-full"
+                                                />
+                                                <select
+                                                    value={devRole}
+                                                    onChange={(e) => {
+                                                        const v = e.target.value;
+                                                        setDevRole(v === 'officer' ? 'officer' : v === 'leader' ? 'leader' : 'student');
+                                                    }}
+                                                    className="login-dev-input w-full"
+                                                >
+                                                    <option value="student">Student</option>
+                                                    <option value="leader">Student Leader</option>
+                                                    <option value="officer">Officer (Admin)</option>
+                                                </select>
+                                                <input
+                                                    type="password"
+                                                    value={devToken}
+                                                    onChange={(e) => setDevToken(e.target.value)}
+                                                    placeholder="Local development token"
+                                                    className="login-dev-input w-full"
+                                                />
+                                                <button
+                                                    onClick={handleLocalDevLogin}
+                                                    disabled={isLoading || !devToken}
+                                                    className="login-dev-submit w-full"
+                                                >
+                                                    {isLoading && activePortal === devRole ? (
+                                                        <div className="w-5 h-5 border-2 border-amber-200 border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <span className="font-semibold text-amber-50">Simulate Local Sign-In</span>
+                                                    )}
+                                                </button>
+                                                <p className="micro-note text-amber-100/80">
+                                                    Available only in non-production environments with explicit local development safeguards.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="mt-8 border-t border-white/10 pt-6">
+                                        <div className="login-alert-panel login-alert-panel-info flex items-start gap-3 rounded-2xl p-4">
+                                            <ShieldCheck className="mt-0.5 shrink-0 text-sky-200" size={18} />
+                                            <div>
+                                                <h4 className="pill-label pill-label-tight border border-sky-300/15 bg-sky-400/10 text-sky-100">Security Notice</h4>
+                                                <p className="micro-note mt-1 text-sky-100/80">
+                                                    Authentication is managed through Google Sign-In. This portal does not store user passwords, and all access levels are enforced after authentication.
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
-                                )}
-
-                                <div className="mt-8 pt-6 border-t border-gray-100">
-                                    <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg">
-                                        <ShieldCheck className="text-rtu-blue mt-0.5 shrink-0" size={18} />
-                                        <div>
-                                            <h4 className="pill-label pill-label-tight bg-blue-100 text-rtu-blue">Security Notice</h4>
-                                            <p className="micro-note text-rtu-blue/70 mt-1">
-                                                Authentication is handled by Google sign-in; this portal does not store your password.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        </AnimatePresence>
+                                </motion.div>
+                            </AnimatePresence>
+                        </div>
                     </div>
 
-                    <p className="text-center micro-note text-text-muted mt-8 opacity-50">
+                    <p className="text-center micro-note mt-8 text-slate-400/70">
                         &copy; 2026 RTU Supreme Student Council &middot; Rizaliano Konek Initiative
                     </p>
                 </motion.div>
@@ -405,8 +419,8 @@ function LoginContent() {
 export default function LoginPage() {
     return (
         <Suspense fallback={
-            <main className="min-h-screen flex items-center justify-center bg-surface-base">
-                <div className="w-8 h-8 border-2 border-rtu-blue border-t-transparent rounded-full animate-spin" />
+            <main className="portal-section-dark min-h-screen flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-sky-300 border-t-transparent rounded-full animate-spin" />
             </main>
         }>
             <LoginContent />

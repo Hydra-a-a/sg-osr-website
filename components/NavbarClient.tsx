@@ -59,13 +59,22 @@ function subscribeNoop(): () => void {
     return () => {};
 }
 
+function readForcedMobileLayout(): boolean {
+    if (typeof document === 'undefined') {
+        return false;
+    }
+
+    return document.documentElement.dataset.mobileDesktopMode === 'true';
+}
+
 export default function NavbarClient({ config }: { config: SiteConfig }) {
     const pathname = usePathname();
     const { data: session, status } = useSession();
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [forceMobileLayout, setForceMobileLayout] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
-    const [authLoadTimedOut, setAuthLoadTimedOut] = useState(false);
+    const [authLoadTimedOutPath, setAuthLoadTimedOutPath] = useState<string | null>(null);
     const [dismissedLeaderNotice, setDismissedLeaderNotice] = useState(false);
     const [dismissedOfficerNotice, setDismissedOfficerNotice] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
@@ -119,16 +128,29 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
 
     useEffect(() => {
         if (status !== 'loading') {
-            setAuthLoadTimedOut(false);
             return;
         }
 
+        const activePath = pathname || '/';
         const timeoutId = window.setTimeout(() => {
-            setAuthLoadTimedOut(true);
+            setAuthLoadTimedOutPath(activePath);
         }, 3000);
 
         return () => window.clearTimeout(timeoutId);
-    }, [status]);
+    }, [pathname, status]);
+
+    useEffect(() => {
+        const syncForcedMobileLayout = () => {
+            setForceMobileLayout(readForcedMobileLayout());
+        };
+
+        syncForcedMobileLayout();
+        window.addEventListener('viewport-mode-change', syncForcedMobileLayout as EventListener);
+
+        return () => {
+            window.removeEventListener('viewport-mode-change', syncForcedMobileLayout as EventListener);
+        };
+    }, []);
 
     const navLinks = [...baseNavLinks];
     if (config.electionsActive) {
@@ -149,7 +171,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
         && Boolean(session?.user)
         && !dismissedOfficerNotice
         && shouldShowOfficerAccessNotice(session?.user?.role, effectiveRole, officerAttempt);
-    const showAuthLoadingPlaceholder = status === 'loading' && !authLoadTimedOut;
+    const showAuthLoadingPlaceholder = status === 'loading' && authLoadTimedOutPath !== (pathname || '/');
 
     const switchPortalMode = (mode: 'student' | 'leader' | 'officer') => {
         const secure = window.location.protocol === 'https:' ? '; Secure' : '';
@@ -262,7 +284,8 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                         </div>
                     </Link>
 
-                    <div className="hidden md:flex items-center gap-2">
+                    {!forceMobileLayout && (
+                        <div className="hidden md:flex items-center gap-2">
                         {navLinks.map((link) => (
                             <Link
                                 key={link.href}
@@ -374,11 +397,12 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                 Sign In
                             </Link>
                         )}
-                    </div>
+                        </div>
+                    )}
 
                     <button
                         type="button"
-                        className="md:hidden flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white"
+                        className={`${forceMobileLayout ? 'flex' : 'md:hidden flex'} h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white`}
                         onClick={() => setMobileOpen((open) => !open)}
                         aria-label="Toggle navigation"
                         aria-expanded={mobileOpen}
@@ -394,7 +418,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                             <motion.button
                                 type="button"
                                 aria-label="Close mobile navigation"
-                                className="md:hidden fixed inset-0 top-[4.75rem] z-40 bg-[#07111d]/45"
+                                className={`${forceMobileLayout ? '' : 'md:hidden'} fixed inset-0 top-[4.75rem] z-40 bg-[#07111d]/45`}
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
@@ -405,7 +429,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                 initial={{ opacity: 0, y: -8 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -8 }}
-                                className="portal-mobile-panel md:hidden relative z-50 overflow-hidden border-t border-white/8"
+                                className={`portal-mobile-panel ${forceMobileLayout ? '' : 'md:hidden'} relative z-50 overflow-hidden border-t border-white/8`}
                             >
                                 <div className="container-main flex flex-col gap-2 py-4">
                                     {navLinks.map((link) => (

@@ -859,3 +859,34 @@ export async function syncTicketUpdateNotifications(options: SyncTicketUpdateOpt
         dryRun: Boolean(options.dryRun),
     };
 }
+
+export function generateGrievanceCommentId(): string {
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    return `C-${yy}${mm}-${randomBase36(8)}`;
+}
+
+const COMMENTS_APPEND_RANGE = 'Ticket_Comments_Appeals!A1';
+
+export async function appendGrievanceComment(comment: {
+    commentId: string;
+    ticketId: string;
+    timestamp: string;
+    authorEmail: string;
+    authorRole: string;
+    message: string;
+    attachmentUrl?: string;
+    isAppeal?: boolean;
+}): Promise<void> {
+    await appendSheetData(getTicketSpreadsheetId(), COMMENTS_APPEND_RANGE, [[
+        comment.commentId,
+        comment.ticketId,
+        comment.timestamp,
+        comment.authorEmail,
+        comment.authorRole,
+        comment.message,
+        comment.attachmentUrl || '',
+        comment.isAppeal ? 'TRUE' : 'FALSE',
+    ]]);
+}

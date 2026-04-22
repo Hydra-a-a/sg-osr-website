@@ -17,6 +17,7 @@ import {
     resolveProposalsSpreadsheetId,
 } from '@/lib/proposals';
 import { emitProposalSubmissionNotifications } from '@/lib/proposal-notifications';
+import { triggerProposalQueueInBackground } from '@/lib/queue-trigger';
 
 const PROPOSAL_NOTIFICATION_QUEUE_TAB = process.env.PROPOSAL_NOTIFICATION_QUEUE_SHEET_TAB || 'Project_Proposal_Notification_Queue';
 const PROPOSAL_NOTIFICATION_QUEUE_RANGE = `${PROPOSAL_NOTIFICATION_QUEUE_TAB}!A2:N`;
@@ -181,6 +182,11 @@ export async function POST(request: NextRequest) {
                 description,
                 attachmentUrl: driveLink,
                 submittedAt: new Date().toISOString(),
+            });
+
+            // Trigger background processing for near-live emails
+            triggerProposalQueueInBackground().catch(err => {
+                console.error('[PROPOSAL_SUBMIT] Failed to trigger background queue:', err);
             });
         }
 

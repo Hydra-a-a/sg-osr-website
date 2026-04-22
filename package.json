@@ -21,6 +21,9 @@
     "test:portal-mode-auth": "node tests/test-portal-mode-auth.js",
     "test:hub-guides-pdf-gating": "node tests/test-hub-guides-pdf-gating.js",
     "test:directory-logo-pipeline": "node tests/test-directory-logo-pipeline.js",
+    "test:directory-portal-theme": "node tests/test-directory-portal-theme.js",
+    "test:login-portal-theme": "node tests/test-login-portal-theme.js",
+    "test:mobile-desktop-mode": "node tests/test-mobile-desktop-mode.js",
     "test:security": "npm run test:inline-style-scan && npm run test:forms-auth-guard && npm run test:api-error-envelope && npm run test:csp-policy && npm run test:redacted-logging && npm run test:ticket-security-hardening && npm run test:ticket-owner-access && npm run test:ticket-comments-appeals && npm run test:ticket-update-notification-sync && npm run test:portal-mode-auth && npm run test:hub-guides-pdf-gating && npm run test:directory-logo-pipeline"
   },
   "overrides": {

@@ -7,11 +7,14 @@ import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { PORTAL_MODE_COOKIE, deriveEffectivePortalRole } from '@/lib/portal-mode';
 import {
+    appendProposalComment,
+    generateProposalCommentId,
     lookupProposalByRowNumber,
     mapProposalRow,
     resolveProposalsSpreadsheetId,
 } from '@/lib/proposals';
 import { emitProposalAdminUpdateNotifications } from '@/lib/proposal-notifications';
+import { triggerProposalQueueInBackground } from '@/lib/queue-trigger';
 
 // enqueueProposalNotificationEvent is superseded by emitProposalAdminUpdateNotifications.
 const PROPOSAL_RANGE = 'Project_Proposals!A2:L';
@@ -152,6 +155,20 @@ export async function PATCH(request: NextRequest) {
         ]);
 
         if ((statusChanged || reviewNotesChanged) && currentProposal.submitterEmail) {
+            // Append review notes as a threaded comment if changed
+            if (reviewNotesChanged && parsed.data.reviewNotes) {
+                await appendProposalComment({
+                    commentId: generateProposalCommentId(),
+                    proposalId: currentProposal.proposalId,
+                    timestamp: nowPht,
+                    authorEmail: actor,
+                    authorRole: 'OFFICER',
+                    message: `[Official Review Note]: ${parsed.data.reviewNotes}`,
+                }).catch(err => {
+                    console.error('[Admin Proposals API] Failed to append threaded comment:', err);
+                });
+            }
+
             await emitProposalAdminUpdateNotifications({
                 queue: {
                     spreadsheetId,
@@ -167,6 +184,11 @@ export async function PATCH(request: NextRequest) {
                 reviewNotes: reviewNotesChanged ? parsed.data.reviewNotes : undefined,
                 updatedAt: new Date().toISOString(),
                 updatedBy: actor,
+            });
+
+            // Trigger background processing for near-live emails
+            triggerProposalQueueInBackground().catch(err => {
+                console.error('[Admin Proposals API] Failed to trigger background queue:', err);
             });
         }
 

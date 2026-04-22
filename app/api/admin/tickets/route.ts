@@ -6,7 +6,7 @@ import { ApiError, toApiResponse } from '@/lib/api-errors';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { PORTAL_MODE_COOKIE, deriveEffectivePortalRole } from '@/lib/portal-mode';
-import { TICKET_COLS } from '@/lib/tickets';
+import { TICKET_COLS, appendGrievanceComment, generateGrievanceCommentId } from '@/lib/tickets';
 import type { TicketStatus } from '@/lib/ticket-constants';
 import { emitGrievanceAdminUpdateNotifications, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
 import { triggerTicketQueueInBackground } from '@/lib/queue-trigger';
@@ -234,6 +234,20 @@ export async function PATCH(request: NextRequest) {
         });
 
         if (statusChanged || resolutionNotesChanged || update.publish) {
+            // Append resolution notes as a threaded comment if published and changed
+            if (update.publish && resolutionNotesChanged && update.resolutionNotes) {
+                await appendGrievanceComment({
+                    commentId: generateGrievanceCommentId(),
+                    ticketId: normalizedTargetId,
+                    timestamp: nowPht,
+                    authorEmail: actor,
+                    authorRole: 'OFFICER',
+                    message: `[Official Resolution Note]: ${update.resolutionNotes}`,
+                }).catch(err => {
+                    console.error('[Admin Tickets API] Failed to append threaded comment:', err);
+                });
+            }
+
             await emitGrievanceAdminUpdateNotifications({
                 queue: {
                     spreadsheetId,

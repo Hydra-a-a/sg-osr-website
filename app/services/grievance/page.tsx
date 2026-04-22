@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { FileText, Send, CheckCircle, AlertCircle, Search, ArrowRight, BookOpen, UploadCloud } from 'lucide-react';
+import { FileText, Send, CheckCircle, AlertCircle, Search, ArrowRight, BookOpen, UploadCloud, ChevronLeft, ShieldCheck } from 'lucide-react';
 import {
     CAMPUSES,
     COLLEGE_INSTITUTES,
@@ -50,6 +50,7 @@ export default function GrievancePage() {
     const [wantsCopy, setWantsCopy] = useState(false);
     const [wantsAnonymousUpdates, setWantsAnonymousUpdates] = useState(false);
     const [anonymousUpdateEmail, setAnonymousUpdateEmail] = useState('');
+    const [isPrivacyChecked, setIsPrivacyChecked] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -64,7 +65,6 @@ export default function GrievancePage() {
     const [attachment, setAttachment] = useState<File | null>(null);
     const [attachmentKind, setAttachmentKind] = useState<AttachmentKind>('document');
     const [attachmentError, setAttachmentError] = useState<string | null>(null);
-    // fake input field. if a bot fills this in, we drop the request. got tired of spam emails.
     const [submitting, setSubmitting] = useState(false);
     const [result, setResult] = useState<{
         success: boolean;
@@ -112,6 +112,11 @@ export default function GrievancePage() {
 
         if (!isAuthenticated) {
             setResult({ success: false, message: 'Please sign in with your @rtu.edu.ph account to submit this form.' });
+            return;
+        }
+
+        if (!isPrivacyChecked) {
+            setResult({ success: false, message: 'You must acknowledge the Data Privacy Act to submit.' });
             return;
         }
 
@@ -219,6 +224,7 @@ export default function GrievancePage() {
                 setWantsCopy(false);
                 setWantsAnonymousUpdates(false);
                 setAnonymousUpdateEmail('');
+                setIsPrivacyChecked(false);
                 formStartTimestampRef.current = Date.now();
             } else {
                 const errorPayload = json.error;
@@ -237,396 +243,437 @@ export default function GrievancePage() {
     };
 
     return (
-        <>
-            {/* Header — instant, no motion */}
-            <section className="bg-gradient-rtu page-header">
-                <div className="container-main text-center">
-                    <FileText className="mx-auto mb-4 text-white/80" size={40} />
-                    <h1 className="page-header-title font-bold text-white mb-3">
-                        Student <span className="text-gradient-gold">Grievance</span> Form
+        <main className="portal-section-dark min-h-screen relative pt-24 pb-16">
+            <div className="portal-noise-overlay" />
+            <div className="absolute top-[-10%] right-[-5%] w-[40vw] h-[40vw] rounded-full sg-glow-blue pointer-events-none" />
+            <div className="absolute bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] rounded-full sg-glow-gold pointer-events-none" />
+
+            <div className="container-main max-w-4xl relative z-10">
+                <div className="flex flex-col sm:flex-row justify-between items-center mb-12 gap-4">
+                    <Link href="/services" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800/40 hover:bg-slate-700/50 border border-white/10 text-sm font-medium text-slate-200 transition-all backdrop-blur-sm shadow-sm hover:shadow-md">
+                        <ChevronLeft size={16} /> Back to Services
+                    </Link>
+                    <Link href="/services/track" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-rtu-blue/20 hover:bg-rtu-blue/30 border border-rtu-blue/30 text-sm font-medium text-rtu-gold transition-all backdrop-blur-sm shadow-sm hover:shadow-md hover:border-rtu-gold/30">
+                        <BookOpen size={16} /> Track Grievances
+                    </Link>
+                </div>
+
+                <div className="text-center mb-12">
+                    <FileText className="mx-auto mb-5 text-rtu-gold drop-shadow-[0_0_15px_rgba(203,165,77,0.3)]" size={56} />
+                    <h1 className="text-3xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400 tracking-tight">
+                        Student Grievance Form
                     </h1>
-                    <p className="page-header-subtitle max-w-lg mx-auto">
-                        Submit student grievances securely, anonymously, to the University Student Government.
+                    <p className="text-base md:text-lg max-w-xl mx-auto text-slate-400 leading-relaxed">
+                        Submit official grievances securely to the Student Council. The strictest confidentiality is maintained.
                     </p>
                 </div>
-            </section>
 
-            <section className="section-tight">
-                <div className="container-main max-w-3xl">
-                    <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-                        <Link href="/services" className="text-sm inline-flex items-center gap-2 font-medium text-subtle hover:text-body transition-colors">
-                            ← Back to Services
-                        </Link>
-                        <Link href="/services/track" className="text-sm inline-flex items-center gap-2 font-semibold px-5 py-2.5 rounded-xl border-2 border-rtu-blue text-rtu-blue hover:bg-rtu-blue hover:text-white transition-all">
-                            <BookOpen size={16} /> Track Submitted Grievances
-                        </Link>
+                <motion.form
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    onSubmit={handleSubmit}
+                    className="portal-panel sg-hover-card p-6 sm:p-10 space-y-8 bg-slate-900/60 border border-white/10"
+                >
+                    {/* hidden bot trap */}
+                    <div className="is-hidden-offscreen" aria-hidden="true">
+                        <label htmlFor="user_website_url">Website URL (leave blank)</label>
+                        <input
+                            type="text"
+                            id="user_website_url"
+                            name="user_website_url"
+                            value={formData.honeypot}
+                            onChange={e => setFormData({ ...formData, honeypot: e.target.value })}
+                            tabIndex={-1}
+                            autoComplete="off"
+                        />
                     </div>
-                    <motion.form
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.2 }}
-                        onSubmit={handleSubmit}
-                        className="card p-8"
-                    >
-                        <div className="space-y-5">
-                            {/* hidden bot trap */}
-                            <div className="is-hidden-offscreen" aria-hidden="true">
-                                <label htmlFor="user_website_url">Website URL (leave blank)</label>
+
+                    {!isAuthenticated && (
+                        <div className="portal-panel bg-amber-500/5 border-amber-500/20 p-8 md:p-12 rounded-xl flex flex-col items-center text-center shadow-[0_0_30px_rgba(245,158,11,0.05)]">
+                            <AlertCircle className="text-amber-400 mb-4 drop-shadow-md" size={40} />
+                            <h3 className="text-amber-300 text-xl font-semibold mb-3">Authentication Required</h3>
+                            <p className="text-base text-amber-200/80 mb-8 max-w-md flex-1 leading-relaxed">
+                                Log in with your current <strong>@rtu.edu.ph</strong> account to submit an official grievance securely.
+                            </p>
+                            <Link
+                                href={`/login?callbackUrl=${encodeURIComponent('/services/grievance')}`}
+                                className="inline-flex items-center justify-center gap-2 font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 border border-amber-500/30 w-full sm:w-auto px-8 py-3 rounded-lg transition-all hover:shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+                            >
+                                Log in to Submit
+                            </Link>
+                        </div>
+                    )}
+
+                    {/* Section 1: Submission Mode */}
+                    <div className="space-y-4">
+                        <h3 className="portal-eyebrow text-rtu-gold">1. Submission Privacy</h3>
+                        <div className="rounded-xl border border-white/10 p-5 bg-black/20">
+                            <label className="flex items-center gap-3 cursor-pointer">
                                 <input
-                                    type="text"
-                                    id="user_website_url"
-                                    name="user_website_url"
-                                    value={formData.honeypot}
-                                    onChange={e => setFormData({ ...formData, honeypot: e.target.value })}
-                                    tabIndex={-1}
-                                    autoComplete="off"
+                                    type="checkbox"
+                                    checked={isAnonymous}
+                                    onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setIsAnonymous(checked);
+                                        if (checked) {
+                                            setFormData(prev => ({ ...prev, name: '', email: '', studentId: '' }));
+                                        } else {
+                                            setWantsAnonymousUpdates(false);
+                                            setAnonymousUpdateEmail('');
+                                        }
+                                    }}
+                                    disabled={!isAuthenticated || submitting}
+                                    className="h-4 w-4 rounded border-white/20 bg-black/50 text-rtu-blue focus:ring-rtu-blue"
                                 />
-                            </div>
+                                <span className="text-sm font-medium text-white">Remain Anonymous</span>
+                            </label>
+                            <p className="mt-2 text-xs text-slate-400">
+                                This will restrict your identity inputs. Please ensure that all submissions are conducive to a respectful environment.
+                            </p>
 
-                            <div className="rounded-xl border border-soft p-4 bg-surface-muted">
-                                <label className="flex items-center gap-3 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={isAnonymous}
-                                        onChange={(e) => {
-                                            const checked = e.target.checked;
-                                            setIsAnonymous(checked);
-                                            if (checked) {
-                                                setFormData(prev => ({ ...prev, name: '', email: '', studentId: '' }));
-                                            } else {
-                                                setWantsAnonymousUpdates(false);
-                                                setAnonymousUpdateEmail('');
-                                            }
-                                        }}
-                                        disabled={!isAuthenticated || submitting}
-                                        className="h-4 w-4"
-                                    />
-                                    <span className="text-sm font-medium text-body">Remain anonymous</span>
-                                </label>
-                                <p className="mt-2 text-xs text-subtle">
-                                    When enabled, your grievance is sent without your name or email. Please ensure that all submissions are conducive to a respectful and constructive environment, even when anonymous.
-                                </p>
-
-                                {isAnonymous && !wantsAnonymousUpdates && (
-                                    <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                                        <p className="text-xs text-amber-900">
-                                            Recommendation: enable <strong>Receive optional updates anonymously</strong> so you can receive case updates by email.
-                                            If you skip this, updates are still possible, but you may need to check the tracker manually using your ticket ID and access link.
-                                        </p>
-                                    </div>
-                                )}
-
-                                {isAnonymous && (
-                                    <div className="mt-3 rounded-lg border border-soft bg-surface-base p-3">
-                                        <label className="flex items-center gap-3 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={wantsAnonymousUpdates}
-                                                onChange={(e) => {
-                                                    const checked = e.target.checked;
-                                                    setWantsAnonymousUpdates(checked);
-                                                    if (!checked) {
-                                                        setAnonymousUpdateEmail('');
-                                                    }
-                                                }}
-                                                disabled={!isAuthenticated || submitting}
-                                                className="h-4 w-4"
-                                            />
-                                            <span className="text-sm font-medium text-body">Receive optional updates anonymously</span>
-                                        </label>
-                                        <p className="mt-1 text-xs text-subtle">
-                                            This contact channel is separate from your identity and requires officer verification before updates can be delivered.
-                                        </p>
-
-                                        {wantsAnonymousUpdates && (
-                                            <div className="mt-3">
-                                                <label className="block text-sm font-medium mb-1.5 text-body">
-                                                    Optional update email
-                                                </label>
-                                                <input
-                                                    type="email"
-                                                    required
-                                                    maxLength={254}
-                                                    value={anonymousUpdateEmail}
-                                                    onChange={(e) => setAnonymousUpdateEmail(e.target.value)}
-                                                    disabled={!isAuthenticated || submitting}
-                                                    className="field-input text-sm"
-                                                    placeholder="you@example.com"
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            {!isAnonymous && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1.5 text-body">
-                                            Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            required
-                                            minLength={2}
-                                            maxLength={100}
-                                            value={formData.name}
-                                            onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                            disabled={!isAuthenticated || submitting}
-                                            className="field-input text-sm"
-                                            placeholder="Juan Dela Cruz"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1.5 text-body">
-                                            Email
-                                        </label>
-                                        <input
-                                            type="email"
-                                            required
-                                            maxLength={254}
-                                            value={formData.email}
-                                            onChange={e => setFormData({ ...formData, email: e.target.value })}
-                                            disabled={!isAuthenticated || submitting}
-                                            className="field-input text-sm"
-                                            placeholder="2026-xxxxxx@rtu.edu.ph"
-                                        />
-                                    </div>
+                            {isAnonymous && !wantsAnonymousUpdates && (
+                                <div className="mt-4 p-4 rounded-lg bg-rtu-gold/10 border border-rtu-gold/20">
+                                    <p className="text-xs text-amber-200/80">
+                                        <strong className="text-amber-200 block mb-1">Recommendation: Enable Optional Updates</strong>
+                                        Turn on &quot;Receive optional updates&quot; so you can receive case updates via an anonymous email. Otherwise, you must manually track this case using the tracking link sequence we provide at the very end.
+                                    </p>
                                 </div>
                             )}
 
-                            {/* Optional: receive a copy */}
-                            <div className="pt-3 border-t border-soft mb-5">
-                                <label className="flex items-center gap-3 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={wantsCopy}
-                                        onChange={(e) => setWantsCopy(e.target.checked)}
-                                        disabled={submitting}
-                                        className="h-4 w-4"
-                                    />
-                                    <span className="text-sm font-medium text-body">Send me a copy <span className="text-subtle font-normal">(optional)</span></span>
-                                </label>
-
-                                {wantsCopy && (
-                                    <p className="text-xs text-subtle mt-1.5 pl-7">
-                                        We will send your confirmation and secure tracking link to <strong>{sessionEmail}</strong>.
-                                    </p>
-                                )}
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                {!isAnonymous && (
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1.5 text-body">
-                                            Student ID
-                                        </label>
+                            {isAnonymous && (
+                                <div className="mt-4 p-4 rounded-lg border border-white/5 bg-white/5">
+                                    <label className="flex items-center gap-3 cursor-pointer">
                                         <input
-                                            type="text"
-                                            required
-                                            minLength={3}
-                                            maxLength={40}
-                                            value={formData.studentId}
-                                            onChange={e => setFormData({ ...formData, studentId: e.target.value })}
-                                            disabled={!isAuthenticated || submitting}
-                                            className="field-input text-sm"
-                                            placeholder="2026-xxxxxx"
-                                        />
-                                    </div>
-                                )}
-
-                                <div>
-                                    <label className="block text-sm font-medium mb-1.5 text-body">
-                                        Campus
-                                    </label>
-                                    <select
-                                        required
-                                        value={formData.campus}
-                                        onChange={e => setFormData({ ...formData, campus: e.target.value as Campus })}
-                                        disabled={!isAuthenticated || submitting}
-                                        className="field-input text-sm"
-                                    >
-                                        {CAMPUSES.map(campus => (
-                                            <option key={campus} value={campus}>{campus}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium mb-1.5 text-body">
-                                        College / Institute
-                                    </label>
-                                    <select
-                                        required
-                                        value={formData.college}
-                                        onChange={e => setFormData({ ...formData, college: e.target.value as CollegeInstitute })}
-                                        disabled={!isAuthenticated || submitting}
-                                        className="field-input text-sm"
-                                    >
-                                        {COLLEGE_INSTITUTES.map(college => (
-                                            <option key={college} value={college}>{college}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium mb-1.5 text-body">
-                                        Category
-                                    </label>
-                                    <select
-                                        required
-                                        value={formData.category}
-                                        onChange={e => setFormData({ ...formData, category: e.target.value as GrievanceCategory })}
-                                        disabled={!isAuthenticated || submitting}
-                                        className="field-input text-sm"
-                                    >
-                                        {GRIEVANCE_CATEGORIES.map(cat => (
-                                            <option key={cat} value={cat}>{cat}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium mb-1.5 text-body">
-                                        Subject <span className="text-subtle">(optional)</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        maxLength={200}
-                                        value={formData.subject}
-                                        onChange={e => setFormData({ ...formData, subject: e.target.value })}
-                                        disabled={!isAuthenticated || submitting}
-                                        className="field-input text-sm"
-                                        placeholder="Brief subject line"
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium mb-1.5 text-body">
-                                    Complaint Narrative
-                                </label>
-                                <textarea
-                                    required
-                                    minLength={10}
-                                    maxLength={5000}
-                                    rows={5}
-                                    value={formData.complaintNarrative}
-                                    onChange={e => setFormData({ ...formData, complaintNarrative: e.target.value })}
-                                    disabled={!isAuthenticated || submitting}
-                                    className="field-input text-sm resize-none"
-                                    placeholder="Describe your grievance in detail..."
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium mb-1.5 text-body">
-                                    Attachment <span className="text-subtle">(optional)</span>
-                                </label>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1 text-subtle">Attachment type</label>
-                                        <select
-                                            value={attachmentKind}
+                                            type="checkbox"
+                                            checked={wantsAnonymousUpdates}
                                             onChange={(e) => {
-                                                const nextKind = e.target.value as AttachmentKind;
-                                                setAttachmentKind(nextKind);
-                                                if (attachment) {
-                                                    const ext = getFileExtension(attachment.name);
-                                                    if (!ATTACHMENT_KIND_CONFIG[nextKind].extensions.has(ext)) {
-                                                        setAttachment(null);
-                                                        setAttachmentError(`Selected file was removed. Please choose ${ATTACHMENT_KIND_CONFIG[nextKind].label} files only.`);
-                                                    } else {
-                                                        setAttachmentError(null);
-                                                    }
+                                                const checked = e.target.checked;
+                                                setWantsAnonymousUpdates(checked);
+                                                if (!checked) {
+                                                    setAnonymousUpdateEmail('');
                                                 }
                                             }}
                                             disabled={!isAuthenticated || submitting}
-                                            className="field-input text-sm"
-                                        >
-                                            <option value="document">{ATTACHMENT_KIND_CONFIG.document.label}</option>
-                                            <option value="image">{ATTACHMENT_KIND_CONFIG.image.label}</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1 text-subtle">Choose file</label>
-                                        <input
-                                            id="grievance-attachment"
-                                            type="file"
-                                            accept={ATTACHMENT_KIND_CONFIG[attachmentKind].accept}
-                                            disabled={!isAuthenticated || submitting}
-                                            onChange={(e) => handleAttachmentChange(e.target.files?.[0] || null)}
-                                            className="sr-only"
+                                            className="h-4 w-4 rounded border-white/20 bg-black/50 text-rtu-blue focus:ring-rtu-blue"
                                         />
-                                        <label
-                                            htmlFor="grievance-attachment"
-                                            className="field-input text-sm min-h-[44px] flex items-center justify-center gap-2 cursor-pointer border-dashed"
-                                        >
-                                            <UploadCloud size={16} />
-                                            <span>{attachment ? 'Replace selected file' : 'Click to add a file'}</span>
-                                        </label>
-                                    </div>
-                                </div>
-                                <p className="text-xs text-subtle mt-1.5">{ALL_ALLOWED_EXTENSIONS_NOTE}</p>
-                                <p className="text-xs text-subtle mt-1">Maximum file size: 10MB.</p>
-                                {attachmentError && (
-                                    <p className="text-xs text-red-700 mt-1">{attachmentError}</p>
-                                )}
-                                {attachment && !attachmentError && (
-                                    <p className="text-xs text-green-700 mt-1">Selected: {attachment.name}</p>
-                                )}
-                                {!attachment && !attachmentError && (
-                                    <div className="mt-2 space-y-2">
-                                        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
-                                            <p className="text-xs text-amber-900">
-                                                Submitting without proof is allowed, but it may be more difficult to establish a prima facie case at intake.
-                                                In those cases, the Council may need corroborating complaints or additional supporting details before validation can proceed.
-                                            </p>
+                                        <span className="text-sm font-medium text-white">Receive optional updates anonymously</span>
+                                    </label>
+                                    <p className="mt-2 text-xs text-slate-400">
+                                        This contact channel is separate from your identity and requires officer verification before updates can be delivered.
+                                    </p>
+
+                                    {wantsAnonymousUpdates && (
+                                        <div className="mt-4 pt-4 border-t border-white/10">
+                                            <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                                Temporary/Alias Email Address
+                                            </label>
+                                            <input
+                                                type="email"
+                                                required
+                                                maxLength={254}
+                                                value={anonymousUpdateEmail}
+                                                onChange={(e) => setAnonymousUpdateEmail(e.target.value)}
+                                                disabled={!isAuthenticated || submitting}
+                                                className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:border-rtu-blue focus:ring-1 focus:ring-rtu-blue transition-colors text-sm"
+                                                placeholder="alias@example.com"
+                                            />
                                         </div>
-                                        <details className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-                                            <summary className="text-xs font-semibold text-blue-900 cursor-pointer select-none">
-                                                What is a prima facie case?
-                                            </summary>
-                                            <p className="text-xs text-blue-900 mt-2">
-                                                It means there is enough initial, credible information to justify opening formal review.
-                                                Supporting files, screenshots, documents, or specific factual details help establish this threshold faster.
-                                            </p>
-                                        </details>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Optional: receive a copy */}
+                        <div className="pt-2">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={wantsCopy}
+                                    onChange={(e) => setWantsCopy(e.target.checked)}
+                                    disabled={submitting}
+                                    className="h-4 w-4 rounded border-white/20 bg-black/50 text-rtu-blue focus:ring-rtu-blue"
+                                />
+                                <span className="text-sm font-medium text-white">Email me a receipt and tracking link <span className="text-slate-400 font-normal">(optional)</span></span>
+                            </label>
+
+                            {wantsCopy && (
+                                <p className="text-xs text-slate-400 mt-2 pl-7">
+                                    We will dispatch your case records to <strong>{sessionEmail}</strong>.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Section 2: Case Details */}
+                    <div className="space-y-5 pt-6 border-t border-white/10">
+                        <h3 className="portal-eyebrow text-rtu-gold">2. Case Details</h3>
+
+                        {!isAnonymous && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                        Full Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        minLength={2}
+                                        maxLength={100}
+                                        value={formData.name}
+                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                        disabled={!isAuthenticated || submitting}
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:border-rtu-blue focus:ring-1 focus:ring-rtu-blue transition-colors text-sm"
+                                        placeholder="Juan Dela Cruz"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                        Email
+                                    </label>
+                                    <input
+                                        type="email"
+                                        required
+                                        maxLength={254}
+                                        value={formData.email}
+                                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                        disabled={!isAuthenticated || submitting}
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:border-rtu-blue focus:ring-1 focus:ring-rtu-blue transition-colors text-sm"
+                                        placeholder="2026-xxxxxx@rtu.edu.ph"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                        Student ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        minLength={3}
+                                        maxLength={40}
+                                        value={formData.studentId}
+                                        onChange={e => setFormData({ ...formData, studentId: e.target.value })}
+                                        disabled={!isAuthenticated || submitting}
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:border-rtu-blue focus:ring-1 focus:ring-rtu-blue transition-colors text-sm"
+                                        placeholder="2026-xxxxxx"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            {!isAnonymous ? null : <div className="sm:col-span-2 hidden"></div>} {/* Spacer */}
+
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                    Campus
+                                </label>
+                                <select
+                                    required
+                                    value={formData.campus}
+                                    onChange={e => setFormData({ ...formData, campus: e.target.value as Campus })}
+                                    disabled={!isAuthenticated || submitting}
+                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:border-rtu-blue focus:ring-1 focus:ring-rtu-blue transition-colors text-sm [&>option]:bg-slate-900"
+                                >
+                                    {CAMPUSES.map(campus => (
+                                        <option key={campus} value={campus}>{campus}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="sm:col-span-2">
+                                <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                    College / Institute
+                                </label>
+                                <select
+                                    required
+                                    value={formData.college}
+                                    onChange={e => setFormData({ ...formData, college: e.target.value as CollegeInstitute })}
+                                    disabled={!isAuthenticated || submitting}
+                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:border-rtu-blue focus:ring-1 focus:ring-rtu-blue transition-colors text-sm [&>option]:bg-slate-900"
+                                >
+                                    {COLLEGE_INSTITUTES.map(college => (
+                                        <option key={college} value={college}>{college}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                    Category
+                                </label>
+                                <select
+                                    required
+                                    value={formData.category}
+                                    onChange={e => setFormData({ ...formData, category: e.target.value as GrievanceCategory })}
+                                    disabled={!isAuthenticated || submitting}
+                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:border-rtu-blue focus:ring-1 focus:ring-rtu-blue transition-colors text-sm [&>option]:bg-slate-900"
+                                >
+                                    {GRIEVANCE_CATEGORIES.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                    Subject <span className="text-slate-400 font-normal">(optional)</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    maxLength={200}
+                                    value={formData.subject}
+                                    onChange={e => setFormData({ ...formData, subject: e.target.value })}
+                                    disabled={!isAuthenticated || submitting}
+                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:border-rtu-blue focus:ring-1 focus:ring-rtu-blue transition-colors text-sm"
+                                    placeholder="Brief subject line"
+                                />
                             </div>
                         </div>
 
-                        {/* Result Banner — this animation is appropriate (user-triggered) */}
+                        <div>
+                            <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                Complaint Narrative
+                            </label>
+                            <textarea
+                                required
+                                minLength={10}
+                                maxLength={5000}
+                                rows={6}
+                                value={formData.complaintNarrative}
+                                onChange={e => setFormData({ ...formData, complaintNarrative: e.target.value })}
+                                disabled={!isAuthenticated || submitting}
+                                className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:border-rtu-blue focus:ring-1 focus:ring-rtu-blue transition-colors text-sm resize-y"
+                                placeholder="Describe your grievance in extensive detail. Include dates, parties involved, and any past actions taken..."
+                            />
+                        </div>
+                    </div>
+
+                    {/* Section 3: Supporting Documents */}
+                    <div className="space-y-4 pt-6 border-t border-white/10">
+                        <h3 className="portal-eyebrow text-rtu-gold">3. Supporting Evidence</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-medium mb-1 text-slate-400">Reference Format</label>
+                                <select
+                                    value={attachmentKind}
+                                    onChange={(e) => {
+                                        const nextKind = e.target.value as AttachmentKind;
+                                        setAttachmentKind(nextKind);
+                                        if (attachment) {
+                                            const ext = getFileExtension(attachment.name);
+                                            if (!ATTACHMENT_KIND_CONFIG[nextKind].extensions.has(ext)) {
+                                                setAttachment(null);
+                                                setAttachmentError(`Selected file was removed. Please choose ${ATTACHMENT_KIND_CONFIG[nextKind].label} files only.`);
+                                            } else {
+                                                setAttachmentError(null);
+                                            }
+                                        }
+                                    }}
+                                    disabled={!isAuthenticated || submitting}
+                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:border-rtu-blue focus:ring-1 focus:ring-rtu-blue transition-colors text-sm [&>option]:bg-slate-900"
+                                >
+                                    <option value="document">{ATTACHMENT_KIND_CONFIG.document.label}</option>
+                                    <option value="image">{ATTACHMENT_KIND_CONFIG.image.label}</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium mb-1 text-slate-400">File Upload</label>
+                                <input
+                                    id="grievance-attachment"
+                                    type="file"
+                                    accept={ATTACHMENT_KIND_CONFIG[attachmentKind].accept}
+                                    disabled={!isAuthenticated || submitting}
+                                    onChange={(e) => handleAttachmentChange(e.target.files?.[0] || null)}
+                                    className="sr-only"
+                                />
+                                <label
+                                    htmlFor="grievance-attachment"
+                                    className="w-full min-h-[38px] bg-white/5 border border-white/20 border-dashed rounded-lg px-4 py-2 flex items-center justify-center gap-2 cursor-pointer hover:bg-white/10 hover:border-white/30 transition-all text-sm text-slate-200"
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            document.getElementById('grievance-attachment')?.click();
+                                        }
+                                    }}
+                                >
+                                    <UploadCloud size={16} className="text-rtu-blue" />
+                                    <span>{attachment ? 'Swap File' : 'Click to Upload'}</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1 text-xs text-slate-400">
+                            <p>{ALL_ALLOWED_EXTENSIONS_NOTE}</p>
+                            <p>Maximum file capacity: 10MB.</p>
+                        </div>
+
+                        {attachmentError && (
+                            <p className="text-xs text-red-400/90 bg-red-900/20 py-2 px-3 rounded border border-red-500/20">{attachmentError}</p>
+                        )}
+                        {attachment && !attachmentError && (
+                            <p className="text-xs text-green-400 bg-green-900/20 py-2 px-3 rounded border border-green-500/20 flex items-center gap-2">
+                                <CheckCircle size={14} /> Attached successfully: {attachment.name}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Section 4: Compliance & Submit */}
+                    <div className="space-y-5 pt-8 border-t border-white/10">
+                        <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-5">
+                            <div className="flex items-start gap-4">
+                                <ShieldCheck className="text-sky-400 mt-1 shrink-0" size={24} />
+                                <div className="flex-1 space-y-3">
+                                    <h3 className="text-sky-300 font-semibold mb-1">Data Privacy Act & Legal Compliance</h3>
+                                    <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+                                        In compliance with Republic Act No. 10173 (Data Privacy Act of 2012), the Rizal Technological University Supreme Student Council will securely collect and process your digital grievance forms solely for the purpose of dispute resolution, institutional reform, and organizational records. By submitting this form, you affirm that the details provided are accurate to the best of your knowledge and that you consent to our administrative processing.
+                                    </p>
+                                    <label className="flex items-center gap-3 cursor-pointer pt-3 pb-1 border-t border-sky-500/10 mt-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={isPrivacyChecked}
+                                            onChange={(e) => setIsPrivacyChecked(e.target.checked)}
+                                            disabled={!isAuthenticated || submitting}
+                                            className="h-4 w-4 rounded border-sky-500/30 bg-black/50 text-sky-500 focus:ring-sky-500"
+                                        />
+                                        <span className="text-sm font-medium text-white">I have read and consent to the Data Privacy Act stipulations.</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Result Banner */}
                         <AnimatePresence>
                             {result && (
                                 <motion.div
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
-                                    className={`mt-5 p-4 rounded-xl flex items-start gap-3 text-sm ${result.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                                        }`}
+                                    className={`p-4 rounded-xl flex items-start gap-3 border ${result.success ? 'bg-green-500/10 border-green-500/20 text-green-200' : 'bg-red-500/10 border-red-500/20 text-red-200'}`}
                                 >
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 mb-1">
+                                            {result.success ? <CheckCircle size={18} className="text-green-400" /> : <AlertCircle size={18} className="text-red-400" />}
                                             <span className="font-bold">{result.success ? 'Success' : 'Error'}</span>
                                         </div>
-                                        <p className="mb-2">{result.message}</p>
+                                        <p className="mb-2 text-sm text-slate-300">{result.message}</p>
 
                                         {result.success && result.ticketId && (
-                                            <div className="mt-4 p-4 bg-white/60 dark:bg-black/20 rounded-lg border border-green-200">
-                                                <p className="eyebrow-label text-green-700 mb-1">Your Tracking ID</p>
-                                                <p className="text-2xl font-mono font-bold text-green-900 mb-3">{result.ticketId}</p>
+                                            <div className="mt-4 p-5 bg-black/30 rounded-lg border border-green-500/20">
+                                                <p className="portal-eyebrow text-green-500 mb-2">Secure Tracking ID</p>
+                                                <p className="text-2xl font-mono font-bold text-white mb-4 tracking-wider">{result.ticketId}</p>
 
                                                 <Link
                                                     href={result.trackingAccessToken
                                                         ? `/services/track?id=${encodeURIComponent(result.ticketId)}&access=${encodeURIComponent(result.trackingAccessToken)}`
                                                         : `/services/track?id=${encodeURIComponent(result.ticketId)}`}
-                                                    className="inline-flex items-center gap-2 text-sm font-medium text-green-700 hover:text-green-900 transition-colors"
+                                                    className="sg-inline-link inline-flex items-center gap-2 text-sm font-medium border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 text-green-300 px-5 py-2.5 rounded-lg transition-colors"
                                                 >
-                                                    Track status <ArrowRight size={14} />
+                                                    Track secure status <ArrowRight size={14} />
                                                 </Link>
                                             </div>
                                         )}
@@ -635,32 +682,35 @@ export default function GrievancePage() {
                             )}
                         </AnimatePresence>
 
-                        {isAuthenticated ? (
-                            <button
-                                type="submit"
-                                disabled={submitting}
-                                className={`btn-primary w-full mt-6 gap-2 text-base ${submitting ? 'is-submitting' : ''}`}
-                            >
-                                {submitting ? <span className="btn-spinner" /> : <Send size={18} />}
-                                {submitting ? 'Submitting...' : 'Submit Grievance'}
-                            </button>
-                        ) : (
-                            <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                                <p className="text-sm text-amber-900">
-                                    Log in with your <strong>@rtu.edu.ph</strong> account to submit this form.
-                                </p>
-                                <Link
-                                    href={`/login?callbackUrl=${encodeURIComponent('/services/grievance')}`}
-                                    className="btn-primary w-full mt-3 inline-flex items-center justify-center gap-2 text-base"
-                                >
-                                    Continue to Login
-                                </Link>
-                            </div>
-                        )}
-                    </motion.form>
-
-                </div>
-            </section>
-        </>
+                        <button
+                            type="submit"
+                            disabled={submitting || !isAuthenticated || !isPrivacyChecked}
+                            className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_0_20px_rgba(30,58,138,0.3)]
+                                ${submitting
+                                    ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-white/10'
+                                    : !isPrivacyChecked || !isAuthenticated
+                                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
+                                        : 'bg-rtu-blue hover:bg-blue-800 text-white border border-blue-400/30 hover:shadow-[0_0_30px_rgba(30,58,138,0.5)]'
+                                }`}
+                        >
+                            {submitting ? (
+                                <>
+                                    <div className="w-5 h-5 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
+                                    Encrypting & Submitting...
+                                </>
+                            ) : (
+                                <>
+                                    <Send size={18} className={!isPrivacyChecked || !isAuthenticated ? 'opacity-50' : ''} />
+                                    Submit Official Grievance
+                                </>
+                            )}
+                        </button>
+                        <p className="text-center text-xs text-slate-500 mt-4">
+                            Please ensure all inputs are accurate to avoid delays.
+                        </p>
+                    </div>
+                </motion.form>
+            </div>
+        </main>
     );
 }
