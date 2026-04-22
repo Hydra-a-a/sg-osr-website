@@ -1,3 +1,4 @@
+import path from 'path';
 import { z } from 'zod';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
@@ -10,12 +11,23 @@ import { TICKET_COLS, appendGrievanceComment, generateGrievanceCommentId } from 
 import type { TicketStatus } from '@/lib/ticket-constants';
 import { emitGrievanceAdminUpdateNotifications, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
 import { triggerTicketQueueInBackground } from '@/lib/queue-trigger';
+import { uploadTicketAttachmentToDrive } from '@/lib/google-drive';
 
 const TICKET_RANGE = 'Tickets!A2:AF';
 const TICKET_STATUS_VALUES = ['Open', 'In Progress', 'Resolved', 'Closed', 'Appealed'] as const;
 const TICKET_NOTIFICATION_QUEUE_SHEET_TAB = process.env.TICKET_NOTIFICATION_QUEUE_SHEET_TAB || 'Ticket_Notification_Queue';
 const TICKET_NOTIFICATION_QUEUE_RANGE = `${TICKET_NOTIFICATION_QUEUE_SHEET_TAB}!A2:N`;
 const TICKET_NOTIFICATION_QUEUE_APPEND_RANGE = `${TICKET_NOTIFICATION_QUEUE_SHEET_TAB}!A1`;
+
+const MAX_RESOLUTION_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ALLOWED_RESOLUTION_ATTACHMENT_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.pdf', '.doc', '.docx']);
+const ALLOWED_RESOLUTION_ATTACHMENT_MIME_TYPES = new Set([
+    'image/png',
+    'image/jpeg',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
 
 const TicketAdminUpdateSchema = z.object({
     ticketId: z.string().trim().regex(/^TKT-\d{4}-[A-Z0-9]{4,16}$/i, 'Invalid ticket ID format'),
@@ -175,10 +187,45 @@ export async function PATCH(request: NextRequest) {
             return withNoStore(response);
         }
 
-        const payload = await request.json();
-        const parsed = TicketAdminUpdateSchema.safeParse(payload);
+        // Accept multipart/form-data (with attachment) or plain JSON (without)
+        let rawPayload: unknown;
+        let resolutionAttachmentFile: File | undefined;
+        const contentType = request.headers.get('content-type') || '';
+
+        if (contentType.includes('multipart/form-data')) {
+            const form = await request.formData();
+            rawPayload = {
+                ticketId: form.get('ticketId'),
+                status: form.get('status') || undefined,
+                resolutionNotes: form.get('resolutionNotes') || undefined,
+                publish: form.get('publish') === 'true',
+                publishNote: form.get('publishNote') || '',
+            };
+            const fileEntry = form.get('resolutionAttachment');
+            if (fileEntry instanceof File && fileEntry.size > 0) {
+                resolutionAttachmentFile = fileEntry;
+            }
+        } else {
+            rawPayload = await request.json();
+        }
+
+        const parsed = TicketAdminUpdateSchema.safeParse(rawPayload);
         if (!parsed.success) {
             return withNoStore(toApiResponse(new ApiError(400, 'INVALID_PAYLOAD', 'Invalid admin update payload.')));
+        }
+
+        // Validate attachment type and size if one was provided
+        if (resolutionAttachmentFile) {
+            if (resolutionAttachmentFile.size > MAX_RESOLUTION_ATTACHMENT_BYTES) {
+                return withNoStore(toApiResponse(new ApiError(400, 'ATTACHMENT_TOO_LARGE', 'Attachment must be 10 MB or smaller.')));
+            }
+            const ext = path.extname(resolutionAttachmentFile.name || '').toLowerCase();
+            if (!ALLOWED_RESOLUTION_ATTACHMENT_EXTENSIONS.has(ext)) {
+                return withNoStore(toApiResponse(new ApiError(400, 'ATTACHMENT_TYPE_NOT_ALLOWED', 'Only PNG, JPG, PDF, DOC, and DOCX files are allowed.')));
+            }
+            if (resolutionAttachmentFile.type && !ALLOWED_RESOLUTION_ATTACHMENT_MIME_TYPES.has(resolutionAttachmentFile.type)) {
+                return withNoStore(toApiResponse(new ApiError(400, 'ATTACHMENT_MIME_NOT_ALLOWED', 'Unsupported attachment MIME type.')));
+            }
         }
 
         const update = parsed.data;
@@ -236,6 +283,22 @@ export async function PATCH(request: NextRequest) {
         if (statusChanged || resolutionNotesChanged || update.publish) {
             // Append resolution notes as a threaded comment if published and changed
             if (update.publish && resolutionNotesChanged && update.resolutionNotes) {
+                // Upload officer attachment to Drive if one was provided
+                let resolutionAttachmentUrl = '';
+                if (resolutionAttachmentFile) {
+                    try {
+                        const buffer = Buffer.from(await resolutionAttachmentFile.arrayBuffer());
+                        resolutionAttachmentUrl = await uploadTicketAttachmentToDrive({
+                            ticketId: normalizedTargetId,
+                            fileName: resolutionAttachmentFile.name,
+                            mimeType: resolutionAttachmentFile.type || 'application/octet-stream',
+                            buffer,
+                        });
+                    } catch (uploadErr) {
+                        console.error('[Admin Tickets API] Failed to upload resolution attachment:', uploadErr);
+                    }
+                }
+
                 await appendGrievanceComment({
                     commentId: generateGrievanceCommentId(),
                     ticketId: normalizedTargetId,
@@ -243,6 +306,7 @@ export async function PATCH(request: NextRequest) {
                     authorEmail: actor,
                     authorRole: 'OFFICER',
                     message: `[Official Resolution Note]: ${update.resolutionNotes}`,
+                    attachmentUrl: resolutionAttachmentUrl,
                 }).catch(err => {
                     console.error('[Admin Tickets API] Failed to append threaded comment:', err);
                 });

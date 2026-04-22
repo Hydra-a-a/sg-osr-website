@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CheckCircle2, ExternalLink, Loader2, Save, Search, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ExternalLink, Loader2, Paperclip, Save, Search, ShieldAlert, X } from 'lucide-react';
 import { NoncedStyle } from '@/components/CspNonceProvider';
 
 const STATUS_OPTIONS = ['Open', 'In Progress', 'Resolved', 'Closed', 'Appealed'] as const;
@@ -98,6 +98,7 @@ export default function AdminGrievancesPage() {
     const [commentsLoading, setCommentsLoading] = useState(false);
     const [commentsError, setCommentsError] = useState('');
     const [selectedAttachmentUrl, setSelectedAttachmentUrl] = useState('');
+    const [resolutionAttachment, setResolutionAttachment] = useState<File | null>(null);
 
     const activeTicket = useMemo(
         () => tickets.find((ticket) => ticket.ticketId === activeTicketId) || null,
@@ -317,6 +318,7 @@ export default function AdminGrievancesPage() {
         setPublishNow(false);
         setPublishNote(ticket.officerPublishNote || '');
         setSaveMessage('');
+        setResolutionAttachment(null);
     }
 
     async function persistTicketUpdate(next: {
@@ -325,13 +327,36 @@ export default function AdminGrievancesPage() {
         resolutionNotes: string;
         publish: boolean;
         publishNote: string;
+        attachment?: File | null;
     }) {
+        let body: BodyInit;
+        const headers: Record<string, string> = {};
+
+        if (next.attachment) {
+            const form = new FormData();
+            form.append('ticketId', next.ticketId);
+            form.append('status', next.status);
+            form.append('resolutionNotes', next.resolutionNotes);
+            form.append('publish', String(next.publish));
+            form.append('publishNote', next.publishNote);
+            form.append('resolutionAttachment', next.attachment);
+            body = form;
+            // Do NOT set Content-Type — browser sets it with the boundary automatically
+        } else {
+            headers['Content-Type'] = 'application/json';
+            body = JSON.stringify({
+                ticketId: next.ticketId,
+                status: next.status,
+                resolutionNotes: next.resolutionNotes,
+                publish: next.publish,
+                publishNote: next.publishNote,
+            });
+        }
+
         const response = await fetch('/api/admin/tickets', {
             method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(next),
+            headers,
+            body,
         });
 
         const data = await response.json();
@@ -373,12 +398,14 @@ export default function AdminGrievancesPage() {
                 resolutionNotes,
                 publish: publishNow,
                 publishNote,
+                attachment: resolutionAttachment,
             });
 
             setSaveMessage(publishNow
                 ? 'Controls saved and published. Student notifications can now flow from the sheet sync process.'
                 : 'Draft controls saved to the sheet. Publish when ready to release updates.');
             setPublishNow(false);
+            setResolutionAttachment(null);
         } catch (saveError: any) {
             setError(saveError?.message || 'Failed to save grievance controls.');
         } finally {
@@ -646,6 +673,47 @@ export default function AdminGrievancesPage() {
                                                 placeholder="Write officer resolution notes..."
                                             />
                                         </label>
+
+                                        <div className="rounded-xl border border-white/10 bg-black/20 p-3.5">
+                                            <p className="text-sm text-slate-300 mb-2 flex items-center gap-1.5">
+                                                <Paperclip size={14} /> Optional Evidence Attachment
+                                                <span className="text-xs text-slate-500">(PNG, JPG, PDF, DOC — max 10 MB)</span>
+                                            </p>
+                                            {resolutionAttachment ? (
+                                                <div className="flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+                                                    <Paperclip size={13} />
+                                                    <span className="flex-1 truncate">{resolutionAttachment.name}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setResolutionAttachment(null)}
+                                                        className="text-emerald-300 hover:text-white transition"
+                                                        aria-label="Remove attachment"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-white/20 bg-white/5 hover:bg-white/10 px-3 py-2 text-sm text-slate-400 hover:text-slate-200 transition">
+                                                    <Paperclip size={14} />
+                                                    <span>Click to attach a file</span>
+                                                    <input
+                                                        type="file"
+                                                        className="sr-only"
+                                                        accept=".png,.jpg,.jpeg,.pdf,.doc,.docx"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) setResolutionAttachment(file);
+                                                            e.target.value = '';
+                                                        }}
+                                                    />
+                                                </label>
+                                            )}
+                                            {!publishNow && resolutionAttachment && (
+                                                <p className="mt-2 text-[11px] text-amber-300/80">
+                                                    Attachment is only uploaded to Drive and linked in the comment thread when &quot;Publish&quot; is checked.
+                                                </p>
+                                            )}
+                                        </div>
 
                                         <label className="block">
                                             <span className="text-sm text-slate-300">Publish Note (Officer metadata)</span>

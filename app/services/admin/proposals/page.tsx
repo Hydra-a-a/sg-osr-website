@@ -48,6 +48,7 @@ const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
 
 export default function AdminProposalsPage() {
     const attachmentInputRef = useRef<HTMLInputElement>(null);
+    const reviewAttachmentInputRef = useRef<HTMLInputElement>(null);
     const [proposals, setProposals] = useState<ProposalItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -58,6 +59,8 @@ export default function AdminProposalsPage() {
     const [activeRow, setActiveRow] = useState<number | null>(null);
     const [status, setStatus] = useState<ProposalStatus>('Pending Review');
     const [reviewNotes, setReviewNotes] = useState('');
+    const [reviewAttachment, setReviewAttachment] = useState<File | null>(null);
+    const [reviewAttachmentError, setReviewAttachmentError] = useState('');
     const [comments, setComments] = useState<ProposalCommentItem[]>([]);
     const [commentsLoading, setCommentsLoading] = useState(false);
     const [commentsError, setCommentsError] = useState('');
@@ -173,12 +176,41 @@ export default function AdminProposalsPage() {
         setActiveRow(proposal.rowNumber);
         setStatus((STATUS_OPTIONS.includes(proposal.status as ProposalStatus) ? proposal.status : 'Pending Review') as ProposalStatus);
         setReviewNotes(proposal.reviewNotes || '');
+        setReviewAttachment(null);
+        setReviewAttachmentError('');
         setComments([]);
         setCommentsError('');
         setReplyMessage('');
         setReplyAttachment(null);
         setReplyAttachmentError('');
         setSuccess('');
+    }
+
+    function handleReviewAttachmentChange(file: File | null) {
+        if (!file) {
+            setReviewAttachment(null);
+            setReviewAttachmentError('');
+            return;
+        }
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+            setReviewAttachment(null);
+            setReviewAttachmentError('Attachment must be 10 MB or smaller.');
+            return;
+        }
+        const lowerName = file.name.toLowerCase();
+        const ext = lowerName.includes('.') ? lowerName.slice(lowerName.lastIndexOf('.')) : '';
+        if (!ALLOWED_ATTACHMENT_EXTENSIONS.has(ext)) {
+            setReviewAttachment(null);
+            setReviewAttachmentError('Allowed files: PNG, JPG, PDF, DOC, and DOCX.');
+            return;
+        }
+        if (file.type && !ALLOWED_ATTACHMENT_MIME_TYPES.has(file.type)) {
+            setReviewAttachment(null);
+            setReviewAttachmentError('Unsupported attachment type.');
+            return;
+        }
+        setReviewAttachment(file);
+        setReviewAttachmentError('');
     }
 
     function handleAttachmentChange(file: File | null) {
@@ -221,17 +253,21 @@ export default function AdminProposalsPage() {
         setSuccess('');
 
         try {
-            const response = await fetch('/api/admin/proposals', {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    rowNumber: activeProposal.rowNumber,
-                    status,
-                    reviewNotes,
-                }),
-            });
+            let response: Response;
+            if (reviewAttachment) {
+                const form = new FormData();
+                form.set('rowNumber', String(activeProposal.rowNumber));
+                form.set('status', status);
+                form.set('reviewNotes', reviewNotes);
+                form.set('reviewAttachment', reviewAttachment);
+                response = await fetch('/api/admin/proposals', { method: 'PATCH', body: form });
+            } else {
+                response = await fetch('/api/admin/proposals', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rowNumber: activeProposal.rowNumber, status, reviewNotes }),
+                });
+            }
 
             const data = await response.json();
             if (!response.ok) {
@@ -241,7 +277,6 @@ export default function AdminProposalsPage() {
             setProposals((current) =>
                 current.map((proposal) => {
                     if (proposal.rowNumber !== activeProposal.rowNumber) return proposal;
-
                     return {
                         ...proposal,
                         status,
@@ -252,6 +287,9 @@ export default function AdminProposalsPage() {
                 })
             );
 
+            setReviewAttachment(null);
+            setReviewAttachmentError('');
+            if (reviewAttachmentInputRef.current) reviewAttachmentInputRef.current.value = '';
             setSuccess('Proposal status and notes saved to the sheet.');
         } catch (saveError: any) {
             setError(saveError?.message || 'Failed to save proposal controls.');
@@ -424,6 +462,39 @@ export default function AdminProposalsPage() {
                                                 placeholder="Document reviewer rationale and action items..."
                                             />
                                         </label>
+
+                                        {/* Optional attachment for the review note */}
+                                        <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+                                            <p className="text-xs font-medium text-slate-300 mb-2 flex items-center gap-1.5">
+                                                <Paperclip size={12} />
+                                                Supporting Document <span className="text-slate-500 font-normal">(optional — appended to thread)</span>
+                                            </p>
+                                            <input
+                                                ref={reviewAttachmentInputRef}
+                                                type="file"
+                                                id="review-note-attachment"
+                                                accept=".png,.jpg,.jpeg,.pdf,.doc,.docx"
+                                                className="hidden"
+                                                onChange={(e) => handleReviewAttachmentChange(e.target.files?.[0] || null)}
+                                            />
+                                            <label
+                                                htmlFor="review-note-attachment"
+                                                className="inline-flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-white/20 bg-white/5 hover:bg-white/10 text-slate-300 text-xs px-3 py-2 transition"
+                                            >
+                                                <Paperclip size={13} />
+                                                {reviewAttachment ? reviewAttachment.name : 'Attach file...'}
+                                            </label>
+                                            {reviewAttachment && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setReviewAttachment(null); setReviewAttachmentError(''); if (reviewAttachmentInputRef.current) reviewAttachmentInputRef.current.value = ''; }}
+                                                    className="ml-2 text-xs text-red-300 hover:text-red-200 transition"
+                                                >
+                                                    Remove
+                                                </button>
+                                            )}
+                                            {reviewAttachmentError && <p className="mt-1.5 text-xs text-red-300">{reviewAttachmentError}</p>}
+                                        </div>
 
                                         <button
                                             type="button"

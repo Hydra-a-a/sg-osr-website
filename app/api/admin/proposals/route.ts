@@ -1,3 +1,4 @@
+import path from 'path';
 import { z } from 'zod';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
@@ -15,6 +16,7 @@ import {
 } from '@/lib/proposals';
 import { emitProposalAdminUpdateNotifications } from '@/lib/proposal-notifications';
 import { triggerProposalQueueInBackground } from '@/lib/queue-trigger';
+import { uploadProposalAttachmentToDrive } from '@/lib/google-drive';
 
 // enqueueProposalNotificationEvent is superseded by emitProposalAdminUpdateNotifications.
 const PROPOSAL_RANGE = 'Project_Proposals!A2:L';
@@ -22,6 +24,16 @@ const STATUS_OPTIONS = ['Pending Review', 'Under Review', 'Approved', 'Rejected'
 const PROPOSAL_NOTIFICATION_QUEUE_TAB = process.env.PROPOSAL_NOTIFICATION_QUEUE_SHEET_TAB || 'Project_Proposal_Notification_Queue';
 const PROPOSAL_NOTIFICATION_QUEUE_RANGE = `${PROPOSAL_NOTIFICATION_QUEUE_TAB}!A2:N`;
 const PROPOSAL_NOTIFICATION_QUEUE_APPEND_RANGE = `${PROPOSAL_NOTIFICATION_QUEUE_TAB}!A1`;
+
+const MAX_REVIEW_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ALLOWED_REVIEW_ATTACHMENT_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.pdf', '.doc', '.docx']);
+const ALLOWED_REVIEW_ATTACHMENT_MIME_TYPES = new Set([
+    'image/png',
+    'image/jpeg',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
 
 const ProposalAdminUpdateSchema = z.object({
     rowNumber: z.number().int().positive(),
@@ -129,10 +141,43 @@ export async function PATCH(request: NextRequest) {
             return withNoStore(response);
         }
 
-        const payload = await request.json();
-        const parsed = ProposalAdminUpdateSchema.safeParse(payload);
+        // Accept either JSON or multipart (when an attachment is included)
+        let rawPayload: unknown;
+        let reviewAttachmentFile: File | undefined;
+        const contentType = request.headers.get('content-type') || '';
+
+        if (contentType.includes('multipart/form-data')) {
+            const form = await request.formData();
+            rawPayload = {
+                rowNumber: Number(form.get('rowNumber')),
+                status: form.get('status'),
+                reviewNotes: form.get('reviewNotes') ?? '',
+            };
+            const fileEntry = form.get('reviewAttachment');
+            if (fileEntry instanceof File && fileEntry.size > 0) {
+                reviewAttachmentFile = fileEntry;
+            }
+        } else {
+            rawPayload = await request.json();
+        }
+
+        const parsed = ProposalAdminUpdateSchema.safeParse(rawPayload);
         if (!parsed.success) {
             return withNoStore(toApiResponse(new ApiError(400, 'INVALID_PAYLOAD', 'Invalid proposal update payload.')));
+        }
+
+        // Validate the optional attachment if present
+        if (reviewAttachmentFile) {
+            if (reviewAttachmentFile.size > MAX_REVIEW_ATTACHMENT_BYTES) {
+                return withNoStore(toApiResponse(new ApiError(400, 'ATTACHMENT_TOO_LARGE', 'Attachment must be 10 MB or smaller.')));
+            }
+            const ext = path.extname(reviewAttachmentFile.name || '').toLowerCase();
+            if (!ALLOWED_REVIEW_ATTACHMENT_EXTENSIONS.has(ext)) {
+                return withNoStore(toApiResponse(new ApiError(400, 'ATTACHMENT_TYPE_NOT_ALLOWED', 'Only PNG, JPG, PDF, DOC, and DOCX files are allowed.')));
+            }
+            if (reviewAttachmentFile.type && !ALLOWED_REVIEW_ATTACHMENT_MIME_TYPES.has(reviewAttachmentFile.type)) {
+                return withNoStore(toApiResponse(new ApiError(400, 'ATTACHMENT_MIME_NOT_ALLOWED', 'Unsupported attachment MIME type.')));
+            }
         }
 
         const { spreadsheetId } = resolveProposalsSpreadsheetId();
@@ -157,6 +202,23 @@ export async function PATCH(request: NextRequest) {
         if ((statusChanged || reviewNotesChanged) && currentProposal.submitterEmail) {
             // Append review notes as a threaded comment if changed
             if (reviewNotesChanged && parsed.data.reviewNotes) {
+                // Upload officer attachment to Drive if provided
+                let reviewAttachmentUrl = '';
+                if (reviewAttachmentFile) {
+                    try {
+                        const buffer = Buffer.from(await reviewAttachmentFile.arrayBuffer());
+                        reviewAttachmentUrl = await uploadProposalAttachmentToDrive({
+                            title: currentProposal.title,
+                            submitterEmail: actor,
+                            fileName: reviewAttachmentFile.name,
+                            mimeType: reviewAttachmentFile.type || 'application/octet-stream',
+                            buffer,
+                        });
+                    } catch (uploadErr) {
+                        console.error('[Admin Proposals API] Failed to upload review attachment:', uploadErr);
+                    }
+                }
+
                 await appendProposalComment({
                     commentId: generateProposalCommentId(),
                     proposalId: currentProposal.proposalId,
@@ -164,6 +226,7 @@ export async function PATCH(request: NextRequest) {
                     authorEmail: actor,
                     authorRole: 'OFFICER',
                     message: `[Official Review Note]: ${parsed.data.reviewNotes}`,
+                    attachmentUrl: reviewAttachmentUrl,
                 }).catch(err => {
                     console.error('[Admin Proposals API] Failed to append threaded comment:', err);
                 });
