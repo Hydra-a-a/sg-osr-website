@@ -9,6 +9,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck, ChevronLeft, AlertTriangle } from 'lucide-react';
 import { LEADER_ATTEMPT_COOKIE, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
 
+type AuthProviderResponse = Record<string, {
+    id?: string;
+    name?: string;
+    type?: string;
+    signinUrl?: string;
+    callbackUrl?: string;
+}>;
+
+function extractProviderOrigin(provider?: { signinUrl?: string; callbackUrl?: string }): string | null {
+    const candidate = provider?.callbackUrl || provider?.signinUrl;
+    if (!candidate) {
+        return null;
+    }
+
+    try {
+        return new URL(candidate).origin;
+    } catch {
+        return null;
+    }
+}
+
 function writePortalSelectionCookies(portal: 'student' | 'leader') {
     if (typeof window === 'undefined') {
         return;
@@ -34,6 +55,8 @@ function LoginContent() {
     const [devRole, setDevRole] = useState<'student' | 'leader' | 'officer'>('student');
     const [devToken, setDevToken] = useState('');
     const [isLocalHost, setIsLocalHost] = useState(false);
+    const [googleProviderReady, setGoogleProviderReady] = useState<boolean | null>(null);
+    const [providerLoadError, setProviderLoadError] = useState<string | null>(null);
     const searchParams = useSearchParams();
     const localDevLoginEnabled = process.env.NODE_ENV !== 'production'
         && process.env.NEXT_PUBLIC_ENABLE_LOCAL_LOGIN_SIMULATION === 'true'
@@ -65,6 +88,49 @@ function LoginContent() {
         return () => window.cancelAnimationFrame(frame);
     }, []);
 
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadProviders = async () => {
+            try {
+                const response = await fetch('/api/auth/providers', { cache: 'no-store' });
+                if (!response.ok) {
+                    throw new Error('Failed to load auth providers.');
+                }
+
+                const providers = await response.json() as AuthProviderResponse;
+                const googleProvider = providers.google;
+                const providerOrigin = extractProviderOrigin(googleProvider);
+                const currentOrigin = typeof window === 'undefined' ? null : window.location.origin;
+                const hasMismatchedOrigin = Boolean(
+                    googleProvider?.id
+                    && providerOrigin
+                    && currentOrigin
+                    && providerOrigin !== currentOrigin
+                );
+
+                if (!cancelled) {
+                    setGoogleProviderReady(Boolean(googleProvider?.id) && !hasMismatchedOrigin);
+                    setProviderLoadError(
+                        hasMismatchedOrigin
+                            ? 'Google sign-in is configured for a different deployment host. Update NEXTAUTH_URL or AUTH_URL for this environment.'
+                            : null
+                    );
+                }
+            } catch {
+                if (!cancelled) {
+                    setGoogleProviderReady(false);
+                    setProviderLoadError('Google sign-in is not available on this deployment right now.');
+                }
+            }
+        };
+
+        loadProviders();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     const requestedCallbackUrl = searchParams.get('callbackUrl');
     const callbackUrl = requestedCallbackUrl?.startsWith('/') && !requestedCallbackUrl.startsWith('//')
         ? requestedCallbackUrl
@@ -78,17 +144,23 @@ function LoginContent() {
         OAuthCallback: 'Google sign-in could not complete in this browser. Open this page in Chrome, Firefox, Safari, or Edge and try again.',
         OAuthAccountNotLinked: 'This email is already linked to another sign-in method.',
         CredentialsSignin: 'Local simulation login failed. Check your token and try again.',
-        Configuration: 'Local simulation is not fully configured on the server.',
+        Configuration: 'Google sign-in is not fully configured on this deployment. Check the auth environment variables for the active platform.',
         Default: 'An unexpected error occurred. Please try again.',
     };
 
     const authErrorMessage = errorParam
         ? errorMessages[errorParam] || errorMessages.Default
         : null;
-    const errorMessage = localSimError || authErrorMessage;
+    const errorMessage = localSimError || providerLoadError || authErrorMessage;
     const showFacebookLiteHelp = isFacebookLite && (errorParam === 'OAuthSignin' || errorParam === 'OAuthCallback');
+    const disableGoogleSignIn = isLoading || googleProviderReady === false;
 
     const handleLogin = async (portal: 'student' | 'leader') => {
+        if (googleProviderReady === false) {
+            setLocalSimError('Google sign-in is not available on this deployment right now.');
+            return;
+        }
+
         setLocalSimError(null);
         setIsLoading(true);
         setActivePortal(portal);
@@ -213,7 +285,7 @@ function LoginContent() {
                                 <div className="space-y-3">
                                     <button
                                         onClick={() => handleLogin('student')}
-                                        disabled={isLoading}
+                                        disabled={disableGoogleSignIn}
                                         className="w-full flex items-center justify-between gap-3 px-4 py-3.5 bg-white border border-soft rounded-xl hover:bg-gray-50 transition-all duration-200 shadow-sm group disabled:opacity-70"
                                     >
                                         {isLoading && activePortal === 'student' ? (
@@ -224,7 +296,9 @@ function LoginContent() {
                                                     <Image src="https://www.google.com/favicon.ico" alt="Google" width={18} height={18} />
                                                     <div>
                                                         <p className="font-semibold text-strong">Student Access</p>
-                                                        <p className="text-xs text-subtle leading-relaxed">Submit and track grievances</p>
+                                                        <p className="text-xs text-subtle leading-relaxed">
+                                                            {googleProviderReady === false ? 'Unavailable until Google sign-in is configured.' : 'Submit and track grievances'}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </>
@@ -233,7 +307,7 @@ function LoginContent() {
 
                                     <button
                                         onClick={() => handleLogin('leader')}
-                                        disabled={isLoading}
+                                        disabled={disableGoogleSignIn}
                                         className="w-full flex items-center justify-between gap-3 px-4 py-3.5 bg-white border border-amber-200 rounded-xl hover:bg-amber-50 transition-all duration-200 shadow-sm group disabled:opacity-70"
                                     >
                                         {isLoading && activePortal === 'leader' ? (
@@ -244,7 +318,9 @@ function LoginContent() {
                                                     <Image src="https://www.google.com/favicon.ico" alt="Google" width={18} height={18} />
                                                     <div>
                                                         <p className="font-semibold text-strong">Student Leader Access</p>
-                                                        <p className="text-xs text-subtle leading-relaxed">Review leadership-only portal tools</p>
+                                                        <p className="text-xs text-subtle leading-relaxed">
+                                                            {googleProviderReady === false ? 'Unavailable until Google sign-in is configured.' : 'Review leadership-only portal tools'}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </>

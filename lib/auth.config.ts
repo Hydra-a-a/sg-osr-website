@@ -13,8 +13,19 @@ const FORBIDDEN_AUTH_HOST_PATTERNS = [
     /(^|\.)trycloudflare\.com$/i,
 ];
 
+const PREVIEW_AUTH_HOST_PATTERNS = [
+    /--[a-z0-9-]+\.netlify\.app$/i,
+    /-git-[^.]+\.vercel\.app$/i,
+];
+
+function getConfiguredAuthOrigin(): string | undefined {
+    const rawUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL;
+    const normalized = rawUrl?.trim();
+    return normalized || undefined;
+}
+
 function parseAuthOriginFromEnv(): URL | null {
-    const rawUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL || process.env.VERCEL_URL;
+    const rawUrl = getConfiguredAuthOrigin();
     if (!rawUrl) return null;
 
     const normalized = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
@@ -26,12 +37,64 @@ function parseAuthOriginFromEnv(): URL | null {
     }
 }
 
+function getAuthSecret(): string | undefined {
+    const rawSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+    const normalized = rawSecret?.trim();
+    return normalized || undefined;
+}
+
+function getConfiguredAuthOriginValidationError(): string | null {
+    if (process.env.NODE_ENV !== 'production') {
+        return null;
+    }
+
+    const parsedUrl = parseAuthOriginFromEnv();
+    if (!parsedUrl) {
+        return 'NEXTAUTH_URL or AUTH_URL';
+    }
+
+    if (parsedUrl.protocol !== 'https:') {
+        return 'an HTTPS NEXTAUTH_URL or AUTH_URL';
+    }
+
+    const host = parsedUrl.hostname.toLowerCase();
+    if (FORBIDDEN_AUTH_HOST_PATTERNS.some((pattern) => pattern.test(host))) {
+        return 'a public production NEXTAUTH_URL or AUTH_URL';
+    }
+
+    if (PREVIEW_AUTH_HOST_PATTERNS.some((pattern) => pattern.test(host))) {
+        return 'a stable production NEXTAUTH_URL or AUTH_URL';
+    }
+
+    return null;
+}
+
+function getMissingGoogleAuthConfig(): string[] {
+    const missing: string[] = [];
+
+    if (!(process.env.AUTH_GOOGLE_ID || '').trim()) {
+        missing.push('AUTH_GOOGLE_ID');
+    }
+    if (!(process.env.AUTH_GOOGLE_SECRET || '').trim()) {
+        missing.push('AUTH_GOOGLE_SECRET');
+    }
+    if (process.env.NODE_ENV === 'production' && !getAuthSecret()) {
+        missing.push('AUTH_SECRET');
+    }
+    const authOriginError = getConfiguredAuthOriginValidationError();
+    if (authOriginError) {
+        missing.push(authOriginError);
+    }
+
+    return missing;
+}
+
 function validateAuthUrlSafety() {
     if (process.env.NODE_ENV !== 'production') return;
 
     const parsedUrl = parseAuthOriginFromEnv();
     if (!parsedUrl) {
-        console.warn('[Auth] NEXTAUTH_URL/AUTH_URL/VERCEL_URL is not set in production. Falling back to trusted request host resolution.');
+        console.warn('[Auth] NEXTAUTH_URL/AUTH_URL is not set in production. Falling back to trusted request host resolution.');
         return;
     }
 
@@ -43,6 +106,12 @@ function validateAuthUrlSafety() {
     if (FORBIDDEN_AUTH_HOST_PATTERNS.some((pattern) => pattern.test(host))) {
         throw new Error(
             `[Auth] Refusing production startup with tunnel/local OAuth host: ${host}. Set NEXTAUTH_URL to your real domain.`,
+        );
+    }
+
+    if (PREVIEW_AUTH_HOST_PATTERNS.some((pattern) => pattern.test(host))) {
+        console.warn(
+            `[Auth] Preview-style canonical auth host detected: ${host}. Set NEXTAUTH_URL or AUTH_URL to the stable production host for this deployment.`,
         );
     }
 }
@@ -77,28 +146,37 @@ function isLocalHost(hostname: string): boolean {
     return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
 }
 
-const providers: NextAuthConfig['providers'] = [
-    Google({
-        clientId: process.env.AUTH_GOOGLE_ID,
-        clientSecret: process.env.AUTH_GOOGLE_SECRET,
-        authorization: {
-            params: {
-                prompt: 'consent',
-                hd: ALLOWED_DOMAIN,
-                access_type: 'offline',
-                include_granted_scopes: 'true',
-                scope: [
-                    'openid',
-                    'email',
-                    'profile',
-                    'https://www.googleapis.com/auth/classroom.courses.readonly',
-                    'https://www.googleapis.com/auth/classroom.coursework.me',
-                    'https://www.googleapis.com/auth/classroom.coursework.students',
-                ].join(' '),
+const providers: NextAuthConfig['providers'] = [];
+
+const missingGoogleAuthConfig = getMissingGoogleAuthConfig();
+if (missingGoogleAuthConfig.length === 0) {
+    providers.push(
+        Google({
+            clientId: process.env.AUTH_GOOGLE_ID,
+            clientSecret: process.env.AUTH_GOOGLE_SECRET,
+            authorization: {
+                params: {
+                    prompt: 'consent',
+                    hd: ALLOWED_DOMAIN,
+                    access_type: 'offline',
+                    include_granted_scopes: 'true',
+                    scope: [
+                        'openid',
+                        'email',
+                        'profile',
+                        'https://www.googleapis.com/auth/classroom.courses.readonly',
+                        'https://www.googleapis.com/auth/classroom.coursework.me',
+                        'https://www.googleapis.com/auth/classroom.coursework.students',
+                    ].join(' '),
+                },
             },
-        },
-    }),
-];
+        })
+    );
+} else {
+    console.error(
+        `[Auth] Google sign-in disabled because required configuration is missing: ${missingGoogleAuthConfig.join(', ')}.`,
+    );
+}
 
 if (isLocalDevLoginEnabled()) {
     providers.push(
@@ -168,6 +246,7 @@ if (isLocalDevLoginEnabled()) {
 
 export const authConfig = {
     providers,
+    secret: getAuthSecret(),
     pages: {
         signIn: '/login',
         error: '/login',

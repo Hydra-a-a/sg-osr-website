@@ -7,5 +7,13 @@ import { SessionProvider } from 'next-auth/react';
  * Wraps the application so useSession() works in client components.
  */
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-    return <SessionProvider>{children}</SessionProvider>;
+    return (
+        <SessionProvider
+            basePath="/api/auth"
+            refetchOnWindowFocus={false}
+            refetchWhenOffline={false}
+        >
+            {children}
+        </SessionProvider>
+    );
 }

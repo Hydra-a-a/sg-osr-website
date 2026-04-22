@@ -146,6 +146,20 @@ interface Office {
     priority?: number;
 }
 
+interface DirectoryEntryRecord {
+    id?: string;
+    name?: string;
+    position?: string;
+    branch?: string;
+    category?: string;
+    email?: string;
+    facebookUrl?: string;
+    linkedinUrl?: string;
+    logoUrl?: string;
+    location?: string;
+    entryType?: 'office';
+}
+
 const academicBranchKeywords = ['cengsc', 'cbeasc', 'cassc', 'cedsc', 'iasc', 'icssc', 'ihksc', 'college', 'institute'];
 const nonAcademicBranchKeywords = ['osr', 'ssc', 'mccsc', 'pccsc', 'pasig', 'supreme', 'student regent'];
 
@@ -167,6 +181,12 @@ const normalizeCategory = (category?: string): string => {
     if (c.includes('constitutional commission') || c.includes('constitutional commision')) {
         return 'ssc';
     }
+    if (c.includes('legislative committee')) {
+        return 'ssc';
+    }
+    if (c.includes('office of the ssc president') || c.includes('office of ssc president') || c.includes('ssc president')) {
+        return 'ssc';
+    }
     if (c.includes('office of student regent') || c.includes('office of the student regent')) {
         return 'ssc';
     }
@@ -186,7 +206,13 @@ const normalizeCategory = (category?: string): string => {
 const inferCouncilModeFromText = (officer: Officer): CouncilMode | '' => {
     const haystack = `${officer.branch || ''} ${officer.position || ''} ${officer.name || ''}`.toLowerCase();
 
-    if (branchMatchKeywords.SSC.some((k) => haystack.includes(k))) {
+    if (
+        branchMatchKeywords.SSC.some((k) => haystack.includes(k))
+        || haystack.includes('constitutional commission')
+        || haystack.includes('legislative committee')
+        || haystack.includes('office of the ssc president')
+        || haystack.includes('office of ssc president')
+    ) {
         return 'ssc';
     }
     if (branchMatchKeywords.OSR.some((k) => haystack.includes(k))) {
@@ -330,6 +356,7 @@ const getSafeExternalHref = (href?: string): string | undefined => {
 type DirectoryResponsePayload = {
     leaders?: Officer[];
     offices?: Office[];
+    data?: DirectoryEntryRecord[];
     error?: { message?: string } | string;
 };
 
@@ -357,8 +384,46 @@ async function fetchDirectoryPayload(url: string): Promise<DirectoryResponsePayl
 
 export default function DirectoryPage() {
     const { data: response, error, isLoading } = useSWR('/api/directory', fetchDirectoryPayload, DIRECTORY_SWR_OPTIONS);
-    const officers = useMemo(() => (response?.leaders || []) as Officer[], [response?.leaders]);
-    const offices = useMemo(() => (response?.offices || []) as Office[], [response?.offices]);
+    const officers = useMemo(() => {
+        if (Array.isArray(response?.leaders) && response.leaders.length > 0) {
+            return response.leaders as Officer[];
+        }
+
+        return ((response?.data || []) as DirectoryEntryRecord[])
+            .filter((entry) => entry.entryType !== 'office')
+            .map((entry, index) => ({
+                id: entry.id || `entry-${index}`,
+                name: entry.name || '',
+                position: entry.position || 'Organization',
+                branch: entry.branch,
+                category: entry.category,
+                email: entry.email,
+                facebookUrl: entry.facebookUrl,
+                linkedinUrl: entry.linkedinUrl,
+                logoUrl: entry.logoUrl,
+            }))
+            .filter((entry) => Boolean(entry.name));
+    }, [response?.data, response?.leaders]);
+    const offices = useMemo(() => {
+        if (Array.isArray(response?.offices) && response.offices.length > 0) {
+            return response.offices as Office[];
+        }
+
+        return ((response?.data || []) as DirectoryEntryRecord[])
+            .filter((entry) => entry.entryType === 'office')
+            .map((entry, index) => ({
+                id: entry.id || `office-${index}`,
+                officeName: entry.name || '',
+                location: entry.location,
+                headDirector: entry.position?.startsWith('Head/Director:')
+                    ? entry.position.replace(/^Head\/Director:\s*/i, '')
+                    : entry.position,
+                email: entry.email,
+                branch: entry.branch,
+                logoUrl: entry.logoUrl,
+            }))
+            .filter((entry) => Boolean(entry.officeName));
+    }, [response?.data, response?.offices]);
     const prefersReducedMotion = useReducedMotion();
 
     const [search, setSearch] = useState('');

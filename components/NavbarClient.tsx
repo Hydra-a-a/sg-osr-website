@@ -65,6 +65,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
+    const [authLoadTimedOut, setAuthLoadTimedOut] = useState(false);
     const [dismissedLeaderNotice, setDismissedLeaderNotice] = useState(false);
     const [dismissedOfficerNotice, setDismissedOfficerNotice] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
@@ -116,6 +117,19 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
         };
     }, [mobileOpen]);
 
+    useEffect(() => {
+        if (status !== 'loading') {
+            setAuthLoadTimedOut(false);
+            return;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            setAuthLoadTimedOut(true);
+        }, 3000);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [status]);
+
     const navLinks = [...baseNavLinks];
     if (config.electionsActive) {
         navLinks.push({ href: '/elections', label: 'Elections' });
@@ -135,6 +149,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
         && Boolean(session?.user)
         && !dismissedOfficerNotice
         && shouldShowOfficerAccessNotice(session?.user?.role, effectiveRole, officerAttempt);
+    const showAuthLoadingPlaceholder = status === 'loading' && !authLoadTimedOut;
 
     const switchPortalMode = (mode: 'student' | 'leader' | 'officer') => {
         const secure = window.location.protocol === 'https:' ? '; Secure' : '';
@@ -260,7 +275,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                             </Link>
                         ))}
 
-                        {status === 'loading' ? (
+                        {showAuthLoadingPlaceholder ? (
                             <div className="ml-2 h-9 w-9 rounded-full bg-white/10 animate-pulse" />
                         ) : session?.user ? (
                             <div className="relative ml-2" ref={profileRef}>
