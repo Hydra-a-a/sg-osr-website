@@ -169,9 +169,6 @@ export function extractGoogleDriveResourceKey(url: string): string | undefined {
 
 export function getOrganizationLogosFolderId(): string {
     const folderId = (process.env.GOOGLE_DRIVE_ORGANIZATION_LOGOS_FOLDER_ID || '').trim();
-    if (!folderId) {
-        throw new Error('GOOGLE_DRIVE_ORGANIZATION_LOGOS_FOLDER_ID is not configured in the environment.');
-    }
     return folderId;
 }
 
