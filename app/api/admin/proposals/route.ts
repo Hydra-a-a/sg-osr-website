@@ -250,9 +250,7 @@ export async function PATCH(request: NextRequest) {
             });
 
             // Trigger background processing for near-live emails
-            triggerProposalQueueInBackground().catch(err => {
-                console.error('[Admin Proposals API] Failed to trigger background queue:', err);
-            });
+            triggerProposalQueueInBackground();
         }
 
         return withNoStore(NextResponse.json({

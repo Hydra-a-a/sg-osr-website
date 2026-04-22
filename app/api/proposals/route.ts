@@ -185,9 +185,7 @@ export async function POST(request: NextRequest) {
             });
 
             // Trigger background processing for near-live emails
-            triggerProposalQueueInBackground().catch(err => {
-                console.error('[PROPOSAL_SUBMIT] Failed to trigger background queue:', err);
-            });
+            triggerProposalQueueInBackground();
         }
 
         return withNoStore(NextResponse.json({
