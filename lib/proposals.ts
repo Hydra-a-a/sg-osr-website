@@ -31,6 +31,7 @@ export type ProposalStatus =
 
 export type ProposalNotificationType = 'status_update' | 'comment';
 type QueueStatus = 'pending' | 'retry' | 'sent' | 'skipped';
+const OFFICIAL_STATUS_UPDATE_PREFIX = '[Official Status Update]:';
 
 export interface ProposalRecord {
     proposalId: string;
@@ -61,6 +62,21 @@ export interface ProposalCommentRecord {
     authorRole: string;
     message: string;
     attachmentUrl: string;
+}
+
+export function buildProposalStatusHistoryMessage(
+    status: ProposalStatus,
+    previousStatus?: ProposalStatus | null,
+): string {
+    if (previousStatus && previousStatus !== status) {
+        return `${OFFICIAL_STATUS_UPDATE_PREFIX} Proposal status changed from "${previousStatus}" to "${status}".`;
+    }
+
+    return `${OFFICIAL_STATUS_UPDATE_PREFIX} Proposal status changed to "${status}".`;
+}
+
+export function isProposalStatusHistoryMessage(message: string): boolean {
+    return String(message || '').trim().startsWith(OFFICIAL_STATUS_UPDATE_PREFIX);
 }
 
 interface QueueRecord {

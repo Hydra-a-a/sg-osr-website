@@ -2,6 +2,7 @@ import path from 'path';
 import { z } from 'zod';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { getAuthorizedUsers } from '@/lib/auth';
 import { uploadProposalAttachmentToDrive } from '@/lib/google-drive';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -9,7 +10,9 @@ import { deriveEffectivePortalRole, hasOfficerPrivilege } from '@/lib/portal-mod
 import { getClientIp, redactErrorForLog, sanitizeText } from '@/lib/security';
 import {
     appendProposalComment,
+    buildProposalStatusHistoryMessage,
     generateProposalCommentId,
+    isProposalStatusHistoryMessage,
     listProposalComments,
     lookupProposalByIdForOwner,
     parseProposalId,
@@ -41,6 +44,98 @@ const ProposalCommentSchema = z.object({
 function withNoStore(response: NextResponse): NextResponse {
     response.headers.set('Cache-Control', 'no-store');
     return response;
+}
+
+function toPHTString(isoUtc: string): string {
+    const date = new Date(isoUtc);
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    });
+
+    const parts = formatter.formatToParts(date);
+    const byType = (type: Intl.DateTimeFormatPartTypes): string =>
+        parts.find((part) => part.type === type)?.value || '';
+
+    return `${byType('year')}-${byType('month')}-${byType('day')} ${byType('hour')}:${byType('minute')}:${byType('second')} PHT`;
+}
+
+function parseCommentTimestamp(value: string): number {
+    const normalized = String(value || '').trim();
+    if (!normalized) {
+        return 0;
+    }
+
+    const phtMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) PHT$/i);
+    if (phtMatch) {
+        const [, year, month, day, hour, minute, second] = phtMatch;
+        return Date.UTC(
+            Number(year),
+            Number(month) - 1,
+            Number(day),
+            Number(hour) - 8,
+            Number(minute),
+            Number(second),
+        );
+    }
+
+    const slashMatch = normalized.replace(',', '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)$/i);
+    if (slashMatch) {
+        const [, month, day, year, rawHour, minute, second, meridiem] = slashMatch;
+        let hour = Number(rawHour);
+        if (meridiem.toUpperCase() === 'PM' && hour !== 12) hour += 12;
+        if (meridiem.toUpperCase() === 'AM' && hour === 12) hour = 0;
+        return Date.UTC(Number(year), Number(month) - 1, Number(day), hour - 8, Number(minute), Number(second));
+    }
+
+    const parsed = Date.parse(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function resolveOfficerDisplayName(authorEmail: string, fallbackName = 'OSR Officer'): Promise<string> {
+    const normalizedEmail = String(authorEmail || '').trim().toLowerCase();
+    if (!normalizedEmail) {
+        return fallbackName;
+    }
+
+    try {
+        const authorizedUsers = await getAuthorizedUsers();
+        const userRecord = authorizedUsers.get(normalizedEmail);
+        if (userRecord?.name?.trim()) {
+            return userRecord.name.trim();
+        }
+        if (userRecord?.council?.trim()) {
+            return userRecord.council.trim();
+        }
+    } catch (error) {
+        console.warn('[Proposal Comments API] Failed to resolve officer display name:', redactErrorForLog(error));
+    }
+
+    return fallbackName;
+}
+
+async function buildSyntheticStatusHistoryComment(proposal: Awaited<ReturnType<typeof lookupProposalByIdForOwner>>) {
+    const timestamp = proposal?.updatedAt || proposal?.submittedAt || '';
+    if (!proposal?.status || !timestamp) {
+        return null;
+    }
+
+    return {
+        commentId: `STATUS-${proposal.proposalId}-${timestamp}`,
+        proposalId: proposal.proposalId,
+        timestamp,
+        authorEmail: proposal.updatedBy || '',
+        authorRole: 'OFFICER',
+        authorName: await resolveOfficerDisplayName(proposal.updatedBy, 'OSR Officer'),
+        message: buildProposalStatusHistoryMessage(proposal.status),
+        attachmentUrl: '',
+    };
 }
 
 function validateAttachment(file: File): void {
@@ -114,16 +209,34 @@ export async function GET(
         }
 
         const comments = await listProposalComments(proposalId);
+        const hasStatusHistoryEntry = comments.some((comment) => isProposalStatusHistoryMessage(comment.message));
+        const syntheticStatusComment = hasStatusHistoryEntry ? null : await buildSyntheticStatusHistoryComment(access.proposal);
+        const commentItems = syntheticStatusComment ? [...comments, syntheticStatusComment] : comments;
+        const officerNames = new Map<string, string>();
+
+        await Promise.all(commentItems.map(async (comment) => {
+            if (comment.authorRole !== 'OFFICER') {
+                return;
+            }
+            const key = String(comment.authorEmail || '').trim().toLowerCase();
+            if (!key || officerNames.has(key)) {
+                return;
+            }
+            officerNames.set(key, await resolveOfficerDisplayName(comment.authorEmail, 'OSR Officer'));
+        }));
+
+        commentItems.sort((left, right) => parseCommentTimestamp(left.timestamp) - parseCommentTimestamp(right.timestamp));
+
         return withNoStore(NextResponse.json({
             success: true,
-            comments: comments.map((comment) => ({
+            comments: commentItems.map((comment) => ({
                 commentId: comment.commentId,
                 proposalId: comment.proposalId,
                 timestamp: comment.timestamp,
                 authorEmail: comment.authorEmail,
                 authorRole: comment.authorRole,
                 authorName: comment.authorRole === 'OFFICER'
-                    ? 'OSR Officer'
+                    ? (officerNames.get(String(comment.authorEmail || '').trim().toLowerCase()) || 'OSR Officer')
                     : access.proposal.submitterName || 'Proposal Submitter',
                 message: comment.message,
                 attachmentUrl: comment.attachmentUrl,
@@ -200,9 +313,9 @@ export async function POST(
         const authorEmail = access.session?.user?.email?.toLowerCase().trim() || access.proposal.submitterEmail;
         const authorRole = access.isOfficer ? 'OFFICER' : 'LEADER';
         const authorName = access.isOfficer
-            ? (access.session?.user?.name || 'OSR Officer')
+            ? (String(access.session?.user?.name || '').trim() || await resolveOfficerDisplayName(authorEmail, 'OSR Officer'))
             : (access.session?.user?.name || access.proposal.submitterName || 'Leader');
-        const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' });
+        const timestamp = toPHTString(new Date().toISOString());
 
         const comment = {
             commentId: generateProposalCommentId(),

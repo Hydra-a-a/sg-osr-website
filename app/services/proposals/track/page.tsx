@@ -108,6 +108,16 @@ function parseSafeDate(value: string | undefined): Date {
         return new Date(utcMillis);
     }
 
+    const slashFormat = raw.replace(',', '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(AM|PM)$/i);
+    if (slashFormat) {
+        const [, m, d, y, hh, mm, ss, meridiem] = slashFormat;
+        let hour = Number(hh);
+        if (meridiem.toUpperCase() === 'PM' && hour !== 12) hour += 12;
+        if (meridiem.toUpperCase() === 'AM' && hour === 12) hour = 0;
+        const utcMillis = Date.UTC(Number(y), Number(m) - 1, Number(d), hour - 8, Number(mm), Number(ss));
+        return new Date(utcMillis);
+    }
+
     return new Date(raw);
 }
 

@@ -9,6 +9,7 @@ import { batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { PORTAL_MODE_COOKIE, deriveEffectivePortalRole } from '@/lib/portal-mode';
 import {
     appendProposalComment,
+    buildProposalStatusHistoryMessage,
     generateProposalCommentId,
     lookupProposalByRowNumber,
     mapProposalRow,
@@ -199,7 +200,7 @@ export async function PATCH(request: NextRequest) {
             { range: `Project_Proposals!L${parsed.data.rowNumber}:L${parsed.data.rowNumber}`, values: [[nowPht]] },
         ]);
 
-        let threadComment: {
+        const appendedComments: Array<{
             commentId: string;
             proposalId: string;
             timestamp: string;
@@ -208,9 +209,36 @@ export async function PATCH(request: NextRequest) {
             authorName: string;
             message: string;
             attachmentUrl: string;
-        } | null = null;
+        }> = [];
 
         if ((statusChanged || reviewNotesChanged) && currentProposal.submitterEmail) {
+            if (statusChanged) {
+                const statusHistoryComment = {
+                    commentId: generateProposalCommentId(),
+                    proposalId: currentProposal.proposalId,
+                    timestamp: nowPht,
+                    authorEmail: actor,
+                    authorRole: 'OFFICER',
+                    authorName: String(session.user.name || '').trim() || 'OSR Officer',
+                    message: buildProposalStatusHistoryMessage(currentProposal.status as typeof STATUS_OPTIONS[number], parsed.data.status),
+                    attachmentUrl: '',
+                };
+
+                await appendProposalComment({
+                    commentId: statusHistoryComment.commentId,
+                    proposalId: statusHistoryComment.proposalId,
+                    timestamp: statusHistoryComment.timestamp,
+                    authorEmail: statusHistoryComment.authorEmail,
+                    authorRole: statusHistoryComment.authorRole,
+                    message: statusHistoryComment.message,
+                    attachmentUrl: statusHistoryComment.attachmentUrl,
+                }).then(() => {
+                    appendedComments.push(statusHistoryComment);
+                }).catch(err => {
+                    console.error('[Admin Proposals API] Failed to append status-history comment:', err);
+                });
+            }
+
             // Append review notes as a threaded comment if changed
             if (reviewNotesChanged && parsed.data.reviewNotes) {
                 // Upload officer attachment to Drive if provided
@@ -230,13 +258,13 @@ export async function PATCH(request: NextRequest) {
                     }
                 }
 
-                threadComment = {
+                const threadComment = {
                     commentId: generateProposalCommentId(),
                     proposalId: currentProposal.proposalId,
                     timestamp: nowPht,
                     authorEmail: actor,
                     authorRole: 'OFFICER',
-                    authorName: 'OSR Officer',
+                    authorName: String(session.user.name || '').trim() || 'OSR Officer',
                     message: `[Official Review Note]: ${parsed.data.reviewNotes}`,
                     attachmentUrl: reviewAttachmentUrl,
                 };
@@ -249,9 +277,10 @@ export async function PATCH(request: NextRequest) {
                     authorRole: threadComment.authorRole,
                     message: threadComment.message,
                     attachmentUrl: threadComment.attachmentUrl,
+                }).then(() => {
+                    appendedComments.push(threadComment);
                 }).catch(err => {
                     console.error('[Admin Proposals API] Failed to append threaded comment:', err);
-                    threadComment = null;
                 });
             }
 
@@ -283,7 +312,7 @@ export async function PATCH(request: NextRequest) {
             reviewNotes: parsed.data.reviewNotes,
             updatedBy: actor,
             updatedAt: nowPht,
-            comment: threadComment,
+            comments: appendedComments,
         }));
     } catch (error) {
         console.error('[Admin Proposals API] PATCH failed:', redactErrorForLog(error));

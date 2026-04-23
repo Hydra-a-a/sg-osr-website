@@ -287,11 +287,15 @@ export default function AdminProposalsPage() {
                 })
             );
 
-            if (data.comment) {
-                setComments((current) => current.some((comment) => comment.commentId === data.comment.commentId)
-                    ? current
-                    : [...current, data.comment]
-                );
+            const incomingComments = Array.isArray(data.comments) ? data.comments : [];
+            if (incomingComments.length > 0) {
+                setComments((current) => {
+                    const existingIds = new Set(current.map((comment) => comment.commentId));
+                    return [
+                        ...current,
+                        ...incomingComments.filter((comment: ProposalCommentItem) => !existingIds.has(comment.commentId)),
+                    ];
+                });
             }
 
             setReviewAttachment(null);
