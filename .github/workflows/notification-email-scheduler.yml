@@ -39,36 +39,48 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          response_file="$(mktemp)"
           curl --silent --show-error --fail-with-body \
             --retry 3 --retry-all-errors --retry-delay 5 \
             --request GET \
             --url "${BASE_URL}/api/tickets/queue/process?limit=50" \
             --header "Authorization: Bearer ${CRON_BEARER_TOKEN}" \
             --header "x-ticket-sync-secret: ${CRON_BEARER_TOKEN}" \
-            --header "Accept: application/json"
+            --header "Accept: application/json" \
+            --output "${response_file}"
+          echo "Ticket queue response:"
+          cat "${response_file}"
 
       - name: Process ticket sync updates
         shell: bash
         run: |
           set -euo pipefail
           sleep 15
+          response_file="$(mktemp)"
           curl --silent --show-error --fail-with-body \
             --retry 3 --retry-all-errors --retry-delay 5 \
             --request GET \
             --url "${BASE_URL}/api/tickets/sync-updates" \
             --header "Authorization: Bearer ${CRON_BEARER_TOKEN}" \
             --header "x-ticket-sync-secret: ${CRON_BEARER_TOKEN}" \
-            --header "Accept: application/json"
+            --header "Accept: application/json" \
+            --output "${response_file}"
+          echo "Ticket sync response:"
+          cat "${response_file}"
 
       - name: Process proposal notification queue
         shell: bash
         run: |
           set -euo pipefail
           sleep 15
+          response_file="$(mktemp)"
           curl --silent --show-error --fail-with-body \
             --retry 3 --retry-all-errors --retry-delay 5 \
             --request GET \
             --url "${BASE_URL}/api/proposals/queue/process?limit=50" \
             --header "Authorization: Bearer ${PROPOSAL_SYNC_TOKEN}" \
             --header "x-proposal-sync-secret: ${PROPOSAL_SYNC_TOKEN}" \
-            --header "Accept: application/json"
+            --header "Accept: application/json" \
+            --output "${response_file}"
+          echo "Proposal queue response:"
+          cat "${response_file}"

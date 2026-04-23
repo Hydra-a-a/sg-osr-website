@@ -685,7 +685,7 @@ export default function DirectoryPage() {
             <section className="portal-section-slate pt-14 pb-8 md:pt-18 md:pb-10">
                 <div className="portal-noise-overlay" aria-hidden="true" />
                 <div className="container-main relative z-10">
-                    <div className="max-w-7xl">
+                    <div className="mx-auto w-full max-w-7xl">
                         <BackLink href="/" label="Back to Home" className="mb-6 text-slate-200 hover:text-white transition-colors" />
 
                         <div className="directory-hero-shell grid gap-7 lg:grid-cols-[minmax(0,1.15fr)_320px] lg:items-end">
@@ -837,7 +837,7 @@ export default function DirectoryPage() {
             <section className="portal-section-dark pt-6 pb-12 md:pt-8 md:pb-14">
                 <div className="portal-noise-overlay" aria-hidden="true" />
                 <div className="container-main relative z-10">
-                    <div className="max-w-7xl">
+                    <div className="mx-auto w-full max-w-7xl">
                     <div className="portal-panel directory-summary-panel px-4 py-3 md:px-5">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
