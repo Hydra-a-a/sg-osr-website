@@ -199,6 +199,17 @@ export async function PATCH(request: NextRequest) {
             { range: `Project_Proposals!L${parsed.data.rowNumber}:L${parsed.data.rowNumber}`, values: [[nowPht]] },
         ]);
 
+        let threadComment: {
+            commentId: string;
+            proposalId: string;
+            timestamp: string;
+            authorEmail: string;
+            authorRole: string;
+            authorName: string;
+            message: string;
+            attachmentUrl: string;
+        } | null = null;
+
         if ((statusChanged || reviewNotesChanged) && currentProposal.submitterEmail) {
             // Append review notes as a threaded comment if changed
             if (reviewNotesChanged && parsed.data.reviewNotes) {
@@ -219,16 +230,28 @@ export async function PATCH(request: NextRequest) {
                     }
                 }
 
-                await appendProposalComment({
+                threadComment = {
                     commentId: generateProposalCommentId(),
                     proposalId: currentProposal.proposalId,
                     timestamp: nowPht,
                     authorEmail: actor,
                     authorRole: 'OFFICER',
+                    authorName: 'OSR Officer',
                     message: `[Official Review Note]: ${parsed.data.reviewNotes}`,
                     attachmentUrl: reviewAttachmentUrl,
+                };
+
+                await appendProposalComment({
+                    commentId: threadComment.commentId,
+                    proposalId: threadComment.proposalId,
+                    timestamp: threadComment.timestamp,
+                    authorEmail: threadComment.authorEmail,
+                    authorRole: threadComment.authorRole,
+                    message: threadComment.message,
+                    attachmentUrl: threadComment.attachmentUrl,
                 }).catch(err => {
                     console.error('[Admin Proposals API] Failed to append threaded comment:', err);
+                    threadComment = null;
                 });
             }
 
@@ -260,6 +283,7 @@ export async function PATCH(request: NextRequest) {
             reviewNotes: parsed.data.reviewNotes,
             updatedBy: actor,
             updatedAt: nowPht,
+            comment: threadComment,
         }));
     } catch (error) {
         console.error('[Admin Proposals API] PATCH failed:', redactErrorForLog(error));

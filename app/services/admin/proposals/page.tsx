@@ -287,6 +287,13 @@ export default function AdminProposalsPage() {
                 })
             );
 
+            if (data.comment) {
+                setComments((current) => current.some((comment) => comment.commentId === data.comment.commentId)
+                    ? current
+                    : [...current, data.comment]
+                );
+            }
+
             setReviewAttachment(null);
             setReviewAttachmentError('');
             if (reviewAttachmentInputRef.current) reviewAttachmentInputRef.current.value = '';
