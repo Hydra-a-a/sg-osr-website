@@ -104,6 +104,16 @@ const TRACKER_BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://osr.rtu.edu.ph'
 const TICKET_ID_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const deliverableEmailSchema = z.string().trim().email();
 
+function firstConfiguredEmail(...candidates: Array<string | undefined>): string {
+    for (const candidate of candidates) {
+        const normalized = String(candidate || '').trim().toLowerCase();
+        if (normalized) {
+            return normalized;
+        }
+    }
+    return '';
+}
+
 const canonicalPayloadSchema = z.object({
     eventId: z.string().trim().min(1),
     occurredAtIso: z.string().trim().min(1),
@@ -194,31 +204,67 @@ export function resolveGrievanceSubmitterEmail(input: {
 
 function resolveOfficeRoute(eventName: GrievanceEventName, category: string): RouteEnvelope {
     const normalizedCategory = normalizeCategory(category);
+    const osrMailbox = firstConfiguredEmail(
+        process.env.EMAIL_OSR_CASEWORK,
+        process.env.REGENT_EMAIL,
+        process.env.EMAIL_USER,
+    );
+    const sscMailbox = firstConfiguredEmail(
+        process.env.EMAIL_SSC_CASEWORK,
+        process.env.REGENT_EMAIL,
+        process.env.EMAIL_USER,
+    );
+    const osrObserver = firstConfiguredEmail(
+        process.env.EMAIL_OSR_OBSERVER,
+        process.env.REGENT_EMAIL,
+    );
+    const sscObserver = firstConfiguredEmail(
+        process.env.EMAIL_SSC_OBSERVER,
+        process.env.REGENT_EMAIL,
+    );
+    const osrReplyTo = firstConfiguredEmail(
+        process.env.EMAIL_OSR_REPLY_TO,
+        process.env.REGENT_EMAIL,
+        process.env.EMAIL_USER,
+    );
+    const sscReplyTo = firstConfiguredEmail(
+        process.env.EMAIL_SSC_REPLY_TO,
+        process.env.REGENT_EMAIL,
+        process.env.EMAIL_USER,
+    );
+    const appealMailbox = firstConfiguredEmail(
+        process.env.EMAIL_OSR_APPEALS,
+        osrMailbox,
+    );
+    const appealReplyTo = firstConfiguredEmail(
+        process.env.EMAIL_OSR_APPEALS_REPLY_TO,
+        osrReplyTo,
+    );
 
     if (eventName === 'grievance.appeal.submitted.v1') {
         return {
             routeId: 'GRT-APPEAL',
-            to: String(process.env.EMAIL_OSR_APPEALS || '').trim().toLowerCase(),
-            cc: String(process.env.EMAIL_SSC_APPEALS || '').trim().toLowerCase(),
-            replyTo: String(process.env.EMAIL_OSR_APPEALS_REPLY_TO || process.env.EMAIL_OSR_REPLY_TO || '').trim().toLowerCase(),
+            to: appealMailbox,
+            cc: firstConfiguredEmail(process.env.EMAIL_SSC_APPEALS, sscMailbox),
+            replyTo: appealReplyTo,
         };
     }
 
     if (normalizedCategory === 'Student Organizations' || normalizedCategory === 'Financial Concerns') {
         return {
             routeId: 'GRT-SSC-ORG-FIN',
-            to: String(process.env.EMAIL_SSC_CASEWORK || '').trim().toLowerCase(),
-            cc: String(process.env.EMAIL_OSR_OBSERVER || '').trim().toLowerCase(),
-            replyTo: String(process.env.EMAIL_SSC_REPLY_TO || '').trim().toLowerCase(),
+            to: sscMailbox,
+            cc: osrObserver,
+            replyTo: sscReplyTo,
         };
     }
 
     if (normalizedCategory === 'Academics' || normalizedCategory === 'Faculty Conduct') {
         return {
             routeId: 'GRT-OSR-ACADEMIC',
-            to: String(process.env.EMAIL_OSR_CASEWORK || '').trim().toLowerCase(),
-            cc: String(process.env.EMAIL_SSC_OBSERVER || '').trim().toLowerCase(),
-            replyTo: String(process.env.EMAIL_OSR_REPLY_TO || '').trim().toLowerCase(),
+            to: osrMailbox,
+            cc: sscObserver,
+            replyTo: osrReplyTo,
         };
     }
 
@@ -229,26 +275,26 @@ function resolveOfficeRoute(eventName: GrievanceEventName, category: string): Ro
     ) {
         return {
             routeId: 'GRT-OSR-OPS',
-            to: String(process.env.EMAIL_OSR_CASEWORK || '').trim().toLowerCase(),
-            cc: String(process.env.EMAIL_SSC_OBSERVER || '').trim().toLowerCase(),
-            replyTo: String(process.env.EMAIL_OSR_REPLY_TO || '').trim().toLowerCase(),
+            to: osrMailbox,
+            cc: sscObserver,
+            replyTo: osrReplyTo,
         };
     }
 
     if (normalizedCategory === 'Other') {
         return {
             routeId: 'GRT-DUAL-OTHER',
-            to: String(process.env.EMAIL_OSR_CASEWORK || '').trim().toLowerCase(),
-            cc: String(process.env.EMAIL_SSC_CASEWORK || '').trim().toLowerCase(),
-            replyTo: String(process.env.EMAIL_OSR_REPLY_TO || '').trim().toLowerCase(),
+            to: osrMailbox,
+            cc: sscMailbox,
+            replyTo: osrReplyTo,
         };
     }
 
     return {
         routeId: 'GRT-FALLBACK',
-        to: String(process.env.EMAIL_OSR_CASEWORK || '').trim().toLowerCase(),
-        cc: String(process.env.EMAIL_SSC_CASEWORK || '').trim().toLowerCase(),
-        replyTo: String(process.env.EMAIL_OSR_REPLY_TO || '').trim().toLowerCase(),
+        to: osrMailbox,
+        cc: sscMailbox,
+        replyTo: osrReplyTo,
     };
 }
 

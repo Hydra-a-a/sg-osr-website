@@ -128,6 +128,7 @@ function formatDateTime(value: string | undefined): string {
     }
 
     return new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
@@ -143,6 +144,7 @@ function formatShortDate(value: string | undefined): string {
     }
 
     return new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila',
         month: 'short',
         day: 'numeric',
     }).format(date);

@@ -116,6 +116,16 @@ function buildTrackingUrl(proposalId: string): string {
     return `${TRACKER_BASE}/services/proposals/track?${query.toString()}`;
 }
 
+function firstConfiguredEmail(...candidates: Array<string | undefined>): string {
+    for (const candidate of candidates) {
+        const normalized = String(candidate || '').trim().toLowerCase();
+        if (normalized) {
+            return normalized;
+        }
+    }
+    return '';
+}
+
 function isDeliverableEmail(value: string | undefined): boolean {
     return z.string().trim().email().safeParse(String(value || '').trim().toLowerCase()).success;
 }
@@ -134,21 +144,40 @@ function normalizeTextHash(value: string): string {
 
 function resolveProposalRoute(eventName: ProposalEventName, authorRole?: string): RouteEnvelope {
     const normalizedAuthorRole = String(authorRole || '').trim().toUpperCase();
+    const reviewMailbox = firstConfiguredEmail(
+        process.env.EMAIL_PROPOSALS_REVIEW,
+        process.env.NEW_PROPOSAL_NOTIFICATION_EMAILS,
+        process.env.REGENT_EMAIL,
+        process.env.EMAIL_USER,
+    );
+    const observerMailbox = firstConfiguredEmail(
+        process.env.EMAIL_OSR_OBSERVER,
+        process.env.REGENT_EMAIL,
+    );
+    const sscObserverMailbox = firstConfiguredEmail(
+        process.env.EMAIL_SSC_OBSERVER,
+        process.env.REGENT_EMAIL,
+    );
+    const replyToMailbox = firstConfiguredEmail(
+        process.env.EMAIL_PROPOSALS_REPLY_TO,
+        process.env.REGENT_EMAIL,
+        process.env.EMAIL_USER,
+    );
 
     if (eventName === 'proposal.comment.added.v1' && normalizedAuthorRole !== 'OFFICER') {
         return {
             routeId: 'PRT-COMMENT-FROM-SUBMITTER',
-            to: String(process.env.EMAIL_PROPOSALS_REVIEW || '').trim().toLowerCase(),
-            cc: String(process.env.EMAIL_SSC_OBSERVER || '').trim().toLowerCase(),
-            replyTo: String(process.env.EMAIL_PROPOSALS_REPLY_TO || '').trim().toLowerCase(),
+            to: reviewMailbox,
+            cc: sscObserverMailbox,
+            replyTo: replyToMailbox,
         };
     }
 
     return {
         routeId: 'PRT-DEFAULT',
-        to: String(process.env.EMAIL_PROPOSALS_REVIEW || '').trim().toLowerCase(),
-        cc: String(process.env.EMAIL_OSR_OBSERVER || '').trim().toLowerCase(),
-        replyTo: String(process.env.EMAIL_PROPOSALS_REPLY_TO || '').trim().toLowerCase(),
+        to: reviewMailbox,
+        cc: observerMailbox,
+        replyTo: replyToMailbox,
     };
 }
 

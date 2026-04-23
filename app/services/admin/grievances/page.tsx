@@ -381,6 +381,17 @@ export default function AdminGrievancesPage() {
             })
         );
 
+        const incomingComments = Array.isArray(data.comments) ? data.comments : [];
+        if (incomingComments.length > 0) {
+            setTicketComments((current) => {
+                const existingIds = new Set(current.map((comment) => comment.commentId));
+                return [
+                    ...current,
+                    ...incomingComments.filter((comment: TicketCommentItem) => !existingIds.has(comment.commentId)),
+                ];
+            });
+        }
+
         return data;
     }
 

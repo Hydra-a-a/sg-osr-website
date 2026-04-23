@@ -13,6 +13,7 @@ import {
 import type { TicketStatus } from '@/lib/ticket-constants';
 
 const submittedDateTimeFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -21,6 +22,7 @@ const submittedDateTimeFormatter = new Intl.DateTimeFormat('en-US', {
 });
 
 const submittedShortDateFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila',
     month: 'short',
     day: 'numeric',
 });
@@ -409,7 +411,7 @@ function AppealsThread({ ticketId, detailsRedacted }: { ticketId: string; detail
                                         </span>
                                     )}
                                 </div>
-                                <span className="text-xs text-subtle">{c.timestamp}</span>
+                                <span className="text-xs text-subtle">{formatSubmittedDate(c.timestamp)}</span>
                             </div>
                             {c.isAppeal && (
                                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 mb-2">

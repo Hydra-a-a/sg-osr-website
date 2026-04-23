@@ -86,6 +86,7 @@ export interface StudentTicketListItem {
 }
 
 const TICKET_ID_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const OFFICIAL_STATUS_UPDATE_PREFIX = '[Official Status Update]:';
 
 function randomBase36(length: number): string {
     const bytes = randomBytes(length);
@@ -820,6 +821,21 @@ export async function processTicketNotificationQueue(options: ProcessTicketNotif
         updatedTicketRows: 0,
         dryRun: summary.dryRun,
     };
+}
+
+export function buildTicketStatusHistoryMessage(
+    status: TicketStatus,
+    previousStatus?: TicketStatus | null,
+): string {
+    if (previousStatus && previousStatus !== status) {
+        return `${OFFICIAL_STATUS_UPDATE_PREFIX} Ticket status changed from "${previousStatus}" to "${status}".`;
+    }
+
+    return `${OFFICIAL_STATUS_UPDATE_PREFIX} Ticket status changed to "${status}".`;
+}
+
+export function isTicketStatusHistoryMessage(message: string): boolean {
+    return String(message || '').trim().startsWith(OFFICIAL_STATUS_UPDATE_PREFIX);
 }
 
 interface TicketUpdateNotificationSyncResult {

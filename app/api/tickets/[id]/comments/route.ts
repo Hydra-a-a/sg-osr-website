@@ -3,11 +3,12 @@ import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { getAuthorizedUsers } from '@/lib/auth';
 import { appendSheetData, getSheetData, updateSheetCell } from '@/lib/sheets';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
-import { lookupTicketByIdForOwner, TICKET_COLS } from '@/lib/tickets';
+import { buildTicketStatusHistoryMessage, isTicketStatusHistoryMessage, lookupTicketByIdForOwner, TICKET_COLS } from '@/lib/tickets';
 import { deriveEffectivePortalRole, hasLeaderPrivilege } from '@/lib/portal-mode';
 import { uploadTicketAttachmentToDrive } from '@/lib/google-drive';
 import { emitGrievanceCommentNotifications, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
@@ -94,6 +95,44 @@ function toPHTString(isoUtc: string): string {
     const byType = (type: Intl.DateTimeFormatPartTypes): string => parts.find((part) => part.type === type)?.value || '';
 
     return `${byType('year')}-${byType('month')}-${byType('day')} ${byType('hour')}:${byType('minute')}:${byType('second')} PHT`;
+}
+
+function parseCommentTimestamp(value: string): number {
+    const raw = String(value || '').trim();
+    if (!raw) return 0;
+
+    const isoLikePht = raw.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\s+PHT$/i);
+    if (isoLikePht) {
+        const [, y, m, d, hh, mm, ss] = isoLikePht;
+        return Date.UTC(Number(y), Number(m) - 1, Number(d), Number(hh) - 8, Number(mm), Number(ss));
+    }
+
+    const localePht = raw.replace(',', '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)(?:\s+PHT)?$/i);
+    if (localePht) {
+        const [, mm, dd, yyyy, hh12, min, sec = '00', meridiem] = localePht;
+        let hour = Number(hh12) % 12;
+        if (meridiem.toUpperCase() === 'PM') hour += 12;
+        return Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), hour - 8, Number(min), Number(sec));
+    }
+
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function resolveOfficerDisplayName(authorEmail: string, fallback = 'OSR Officer'): Promise<string> {
+    const normalizedEmail = String(authorEmail || '').trim().toLowerCase();
+    if (!normalizedEmail) return fallback;
+
+    try {
+        const users = await getAuthorizedUsers();
+        const user = users.get(normalizedEmail);
+        if (user?.name?.trim()) return user.name.trim();
+        if (user?.council?.trim()) return user.council.trim();
+    } catch (error) {
+        console.warn('[Ticket Comments API] Failed to resolve officer display name:', redactErrorForLog(error));
+    }
+
+    return fallback;
 }
 
 const COMMENT_ID_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -186,6 +225,25 @@ async function lookupTicketNotificationRow(spreadsheetId: string, ticketId: stri
     return null;
 }
 
+async function buildSyntheticStatusHistoryComment(ticketId: string, trackingToken: string, ownerEmail?: string | null) {
+    const ticket = await lookupTicketByIdForOwner(ticketId, { trackingToken, ownerEmail });
+    if (!ticket?.status || !ticket.submittedAt) {
+        return null;
+    }
+
+    return {
+        commentId: `STATUS-${ticket.ticketId}-${ticket.submittedAt}`,
+        ticketId: ticket.ticketId,
+        timestamp: ticket.submittedAt,
+        authorEmail: '',
+        author: 'OSR Officer',
+        authorRole: 'OFFICER',
+        message: buildTicketStatusHistoryMessage(ticket.status),
+        attachmentUrl: '',
+        isAppeal: false,
+    };
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const ip = getClientIp(request);
     const { id } = await params;
@@ -214,21 +272,55 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             return withNoStore(response);
         }
 
-        const rows = await getSheetData(getTicketSpreadsheetId(), COMMENTS_RANGE);
+        const spreadsheetId = getTicketSpreadsheetId();
+        const rows = await getSheetData(spreadsheetId, COMMENTS_RANGE);
+        const ticketRow = await lookupTicketNotificationRow(spreadsheetId, ticketId);
+        const studentDisplayName = String(ticketRow?.[TICKET_COLS.NAME] || '').trim() || 'Student';
         const comments = (rows || [])
             .filter((row: unknown[]) => String(row[1] || '').trim().toUpperCase() === ticketId)
             .map((row: unknown[]) => ({
                 commentId: String(row[0] || '').trim(),
                 ticketId: String(row[1] || '').trim(),
                 timestamp: String(row[2] || '').trim(),
-                author: String(row[3] || '').trim() || 'Student',
+                authorEmail: String(row[3] || '').trim().toLowerCase(),
                 authorRole: String(row[4] || '').trim() || 'STUDENT',
                 message: String(row[5] || '').trim(),
                 attachmentUrl: String(row[6] || '').trim(),
                 isAppeal: String(row[7] || '').trim().toUpperCase() === 'TRUE',
             }));
 
-        return withNoStore(NextResponse.json({ comments }));
+        const hasStatusHistoryEntry = comments.some((comment) => isTicketStatusHistoryMessage(comment.message));
+        const syntheticStatusComment = hasStatusHistoryEntry ? null : await buildSyntheticStatusHistoryComment(
+            ticketId,
+            trackingToken,
+            access.session?.user?.email,
+        );
+        const commentItems = syntheticStatusComment ? [...comments, syntheticStatusComment] : comments;
+
+        const officerNames = new Map<string, string>();
+        await Promise.all(commentItems.map(async (comment) => {
+            if (comment.authorRole !== 'OFFICER' && comment.authorRole !== 'LEADER') return;
+            const key = String(comment.authorEmail || '').trim().toLowerCase();
+            if (!key || officerNames.has(key)) return;
+            officerNames.set(key, await resolveOfficerDisplayName(comment.authorEmail, 'OSR Officer'));
+        }));
+
+        commentItems.sort((left, right) => parseCommentTimestamp(left.timestamp) - parseCommentTimestamp(right.timestamp));
+
+        return withNoStore(NextResponse.json({
+            comments: commentItems.map((comment) => ({
+                commentId: comment.commentId,
+                ticketId: comment.ticketId,
+                timestamp: comment.timestamp,
+                author: (comment.authorRole === 'OFFICER' || comment.authorRole === 'LEADER')
+                    ? (officerNames.get(String(comment.authorEmail || '').trim().toLowerCase()) || 'OSR Officer')
+                    : studentDisplayName,
+                authorRole: comment.authorRole,
+                message: comment.message,
+                attachmentUrl: comment.attachmentUrl,
+                isAppeal: comment.isAppeal,
+            })),
+        }));
     } catch (error) {
         console.error('[Ticket Comments API] GET error:', redactErrorForLog(error));
         return withNoStore(toApiResponse(error));
@@ -295,7 +387,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (access.privileged) {
             const privilegedRole = String(access.effectiveRole || 'leader').toUpperCase();
             authorRole = privilegedRole;
-            author = `${access.session?.user?.name || 'Officer'} (${String(access.effectiveRole || 'leader')})`;
+            author = String(access.session?.user?.name || '').trim() || await resolveOfficerDisplayName(authorEmail, 'Officer');
         } else {
             authorEmail = authorEmail || 'anonymous@rtu.edu.ph';
             authorRole = 'STUDENT';

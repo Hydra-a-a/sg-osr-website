@@ -7,7 +7,7 @@ import { ApiError, toApiResponse } from '@/lib/api-errors';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { PORTAL_MODE_COOKIE, deriveEffectivePortalRole } from '@/lib/portal-mode';
-import { TICKET_COLS, appendGrievanceComment, generateGrievanceCommentId } from '@/lib/tickets';
+import { TICKET_COLS, appendGrievanceComment, buildTicketStatusHistoryMessage, generateGrievanceCommentId } from '@/lib/tickets';
 import type { TicketStatus } from '@/lib/ticket-constants';
 import { emitGrievanceAdminUpdateNotifications, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
 import { triggerTicketQueueInBackground } from '@/lib/queue-trigger';
@@ -280,7 +280,46 @@ export async function PATCH(request: NextRequest) {
             optionalUpdateDestinationStatus: String(currentRow[TICKET_COLS.OPTIONAL_UPDATE_DESTINATION_STATUS] || '').trim(),
         });
 
+        const appendedComments: Array<{
+            commentId: string;
+            ticketId: string;
+            timestamp: string;
+            author: string;
+            authorRole: string;
+            message: string;
+            attachmentUrl: string;
+            isAppeal: boolean;
+        }> = [];
+
         if (statusChanged || resolutionNotesChanged || update.publish) {
+            if (statusChanged) {
+                const statusHistoryComment = {
+                    commentId: generateGrievanceCommentId(),
+                    ticketId: normalizedTargetId,
+                    timestamp: nowPht,
+                    author: String(session.user.name || '').trim() || 'OSR Officer',
+                    authorRole: 'OFFICER',
+                    message: buildTicketStatusHistoryMessage(currentStatus, update.status),
+                    attachmentUrl: '',
+                    isAppeal: false,
+                };
+
+                await appendGrievanceComment({
+                    commentId: statusHistoryComment.commentId,
+                    ticketId: statusHistoryComment.ticketId,
+                    timestamp: statusHistoryComment.timestamp,
+                    authorEmail: actor,
+                    authorRole: statusHistoryComment.authorRole,
+                    message: statusHistoryComment.message,
+                    attachmentUrl: statusHistoryComment.attachmentUrl,
+                    isAppeal: false,
+                }).then(() => {
+                    appendedComments.push(statusHistoryComment);
+                }).catch(err => {
+                    console.error('[Admin Tickets API] Failed to append status-history comment:', err);
+                });
+            }
+
             // Append resolution notes as a threaded comment if published and changed
             if (update.publish && resolutionNotesChanged && update.resolutionNotes) {
                 // Upload officer attachment to Drive if one was provided
@@ -299,14 +338,28 @@ export async function PATCH(request: NextRequest) {
                     }
                 }
 
-                await appendGrievanceComment({
+                const resolutionComment = {
                     commentId: generateGrievanceCommentId(),
                     ticketId: normalizedTargetId,
                     timestamp: nowPht,
-                    authorEmail: actor,
+                    author: String(session.user.name || '').trim() || 'OSR Officer',
                     authorRole: 'OFFICER',
                     message: `[Official Resolution Note]: ${update.resolutionNotes}`,
                     attachmentUrl: resolutionAttachmentUrl,
+                    isAppeal: false,
+                };
+
+                await appendGrievanceComment({
+                    commentId: resolutionComment.commentId,
+                    ticketId: resolutionComment.ticketId,
+                    timestamp: resolutionComment.timestamp,
+                    authorEmail: actor,
+                    authorRole: resolutionComment.authorRole,
+                    message: resolutionComment.message,
+                    attachmentUrl: resolutionComment.attachmentUrl,
+                    isAppeal: false,
+                }).then(() => {
+                    appendedComments.push(resolutionComment);
                 }).catch(err => {
                     console.error('[Admin Tickets API] Failed to append threaded comment:', err);
                 });
@@ -344,6 +397,7 @@ export async function PATCH(request: NextRequest) {
             published: update.publish,
             updatedAt: nowPht,
             updatedBy: actor,
+            comments: appendedComments,
         }));
     } catch (error) {
         console.error('[Admin Tickets API] PATCH failed:', redactErrorForLog(error));

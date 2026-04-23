@@ -34,7 +34,9 @@ function resolveProposalSecret(): string {
 
 function resolveAppUrl(): string {
     return (
-        process.env.NEXT_PUBLIC_APP_URL
+        process.env.SCHEDULER_BASE_URL
+        || process.env.URL
+        || process.env.NEXT_PUBLIC_APP_URL
         || process.env.NEXTAUTH_URL
         || ''
     ).replace(/\/$/, '').trim();
