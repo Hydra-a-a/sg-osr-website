@@ -1,8 +1,12 @@
 import nodemailer from 'nodemailer';
+import { redactErrorForLog } from '@/lib/security';
 
 // Standard Nodemailer transporter using Gmail SMTP
 export const transporter = nodemailer.createTransport({
     service: 'gmail',
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 10000,
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_APP_PASSWORD,
@@ -44,7 +48,7 @@ export async function sendEmail({
         console.log(`[Email Success] Sent to ${to}. Message ID: ${info.messageId}`);
         return true;
     } catch (error) {
-        console.error('[Email Error] Failed to send email:', error);
+        console.error('[Email Error] Failed to send email:', redactErrorForLog(error));
         return false;
     }
 }

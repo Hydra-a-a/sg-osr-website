@@ -317,7 +317,6 @@ export async function GET(request: Request) {
                 canEmbed: resolved.canEmbed,
                 mimeType: 'application/pdf',
                 sortOrder: parseSortOrder(sortOrderCell, index),
-                updatedAt: new Date().toISOString(),
             };
 
             const validation = TransparencyGuideSchema.safeParse(candidateGuide);

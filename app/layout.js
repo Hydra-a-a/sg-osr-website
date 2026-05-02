@@ -6,6 +6,7 @@ import AuthProvider from "@/components/AuthProvider";
 import PageTransition from "@/components/PageTransition";
 import { CspNonceProvider } from "@/components/CspNonceProvider";
 import ViewportModeGuard from "@/components/ViewportModeGuard";
+import AnnouncementPopup from "@/components/AnnouncementPopup";
 import { getSiteConfig } from "@/lib/slideConfig";
 import { headers } from "next/headers";
 
@@ -52,6 +53,7 @@ export default async function RootLayout({ children }) {
               </PageTransition>
             </main>
             <Footer />
+            <AnnouncementPopup />
           </AuthProvider>
         </CspNonceProvider>
       </body>

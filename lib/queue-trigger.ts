@@ -6,15 +6,14 @@
  * instead of waiting up to 5 minutes for the GitHub Actions scheduler.
  *
  * Safety contract:
- * - Never throws or rejects — all errors are swallowed and logged.
- * - Never blocks the caller — do NOT await this function.
+ * - Never throws or rejects; all errors are swallowed and logged.
+ * - Never blocks the caller; do NOT await this function.
  * - The GitHub Actions scheduler remains the authoritative safety net.
- * - A short startup delay lets the Google Sheet append settle before we read it.
  * - limit=10 prevents a burst of submissions from hammering the Sheets API.
  */
 
-const TRIGGER_DELAY_MS = 300; // let the append settle before we read the queue
-const TRIGGER_LIMIT = 10;     // max notifications to process per trigger call
+const TRIGGER_LIMIT = 10;
+const TRIGGER_TIMEOUT_MS = 20_000;
 
 function resolveTicketSecret(): string {
     return (
@@ -34,17 +33,54 @@ function resolveProposalSecret(): string {
 
 function resolveAppUrl(): string {
     return (
-        process.env.SCHEDULER_BASE_URL
-        || process.env.URL
-        || process.env.NEXT_PUBLIC_APP_URL
-        || process.env.NEXTAUTH_URL
-        || ''
+        process.env.SCHEDULER_BASE_URL ||
+        process.env.URL ||
+        process.env.AUTH_URL ||
+        process.env.NEXTAUTH_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        ''
     ).replace(/\/$/, '').trim();
 }
 
+function logMissingConfig(queueName: 'Ticket' | 'Proposal', secretEnvName: string): void {
+    console.warn(
+        `[QueueTrigger] Skipping background trigger for ${queueName.toLowerCase()} queue - missing app URL or ${secretEnvName}.`,
+    );
+}
+
+function triggerQueueRequest(input: {
+    queueName: 'Ticket' | 'Proposal';
+    url: string;
+    headers: Record<string, string>;
+}): void {
+    void fetch(input.url, {
+        method: 'GET',
+        headers: input.headers,
+        signal: AbortSignal.timeout(TRIGGER_TIMEOUT_MS),
+    })
+        .then(async (res) => {
+            const responseBody = (await res.text()).trim();
+            if (!res.ok) {
+                const suffix = responseBody ? ` - ${responseBody.slice(0, 300)}` : '';
+                console.warn(
+                    `[QueueTrigger] ${input.queueName} queue trigger returned HTTP ${res.status}${suffix}`,
+                );
+                return;
+            }
+
+            console.log(
+                `[QueueTrigger] ${input.queueName} queue triggered successfully.${responseBody ? ` ${responseBody}` : ''}`,
+            );
+        })
+        .catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn(`[QueueTrigger] ${input.queueName} queue trigger failed (non-blocking): ${message}`);
+        });
+}
+
 /**
- * Schedules a background HTTP call to process the ticket notification queue.
- * Must be called WITHOUT await — it is intentionally non-blocking.
+ * Starts a background HTTP call to process the ticket notification queue.
+ * Must be called WITHOUT await; it is intentionally non-blocking.
  *
  * Example:
  *   await emitGrievanceSubmissionNotifications({ ... });
@@ -55,79 +91,41 @@ export function triggerTicketQueueInBackground(): void {
     const secret = resolveTicketSecret();
 
     if (!appUrl || !secret) {
-        console.warn(
-            '[QueueTrigger] Skipping background trigger — NEXT_PUBLIC_APP_URL or ' +
-            'TICKET_STATUS_SYNC_SECRET is not configured.',
-        );
+        logMissingConfig('Ticket', 'TICKET_STATUS_SYNC_SECRET');
         return;
     }
 
-    const url = `${appUrl}/api/tickets/queue/process?limit=${TRIGGER_LIMIT}`;
-
-    setTimeout(() => {
-        fetch(url, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${secret}`,
-                'x-ticket-sync-secret': secret,
-                'Accept': 'application/json',
-            },
-            // Tell Vercel/Node not to keep the process alive for this request
-            signal: AbortSignal.timeout(15_000),
-        })
-            .then((res) => {
-                if (!res.ok) {
-                    console.warn(`[QueueTrigger] Ticket queue trigger returned HTTP ${res.status}`);
-                } else {
-                    console.log('[QueueTrigger] Ticket queue triggered successfully.');
-                }
-            })
-            .catch((err: unknown) => {
-                // Swallow — the scheduler is the safety net. This must never crash the caller.
-                const message = err instanceof Error ? err.message : String(err);
-                console.warn(`[QueueTrigger] Ticket queue trigger failed (non-blocking): ${message}`);
-            });
-    }, TRIGGER_DELAY_MS);
+    triggerQueueRequest({
+        queueName: 'Ticket',
+        url: `${appUrl}/api/tickets/queue/process?limit=${TRIGGER_LIMIT}`,
+        headers: {
+            Authorization: `Bearer ${secret}`,
+            'x-ticket-sync-secret': secret,
+            Accept: 'application/json',
+        },
+    });
 }
 
 /**
- * Schedules a background HTTP call to process the proposal notification queue.
- * Must be called WITHOUT await — it is intentionally non-blocking.
+ * Starts a background HTTP call to process the proposal notification queue.
+ * Must be called WITHOUT await; it is intentionally non-blocking.
  */
 export function triggerProposalQueueInBackground(): void {
     const appUrl = resolveAppUrl();
     const secret = resolveProposalSecret();
 
     if (!appUrl || !secret) {
-        console.warn(
-            '[QueueTrigger] Skipping background trigger — NEXT_PUBLIC_APP_URL or ' +
-            'PROPOSAL_STATUS_SYNC_SECRET is not configured.',
-        );
+        logMissingConfig('Proposal', 'PROPOSAL_STATUS_SYNC_SECRET');
         return;
     }
 
-    const url = `${appUrl}/api/proposals/queue/process?limit=${TRIGGER_LIMIT}`;
-
-    setTimeout(() => {
-        fetch(url, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${secret}`,
-                'x-proposal-sync-secret': secret,
-                'Accept': 'application/json',
-            },
-            signal: AbortSignal.timeout(15_000),
-        })
-            .then((res) => {
-                if (!res.ok) {
-                    console.warn(`[QueueTrigger] Proposal queue trigger returned HTTP ${res.status}`);
-                } else {
-                    console.log('[QueueTrigger] Proposal queue triggered successfully.');
-                }
-            })
-            .catch((err: unknown) => {
-                const message = err instanceof Error ? err.message : String(err);
-                console.warn(`[QueueTrigger] Proposal queue trigger failed (non-blocking): ${message}`);
-            });
-    }, TRIGGER_DELAY_MS);
+    triggerQueueRequest({
+        queueName: 'Proposal',
+        url: `${appUrl}/api/proposals/queue/process?limit=${TRIGGER_LIMIT}`,
+        headers: {
+            Authorization: `Bearer ${secret}`,
+            'x-proposal-sync-secret': secret,
+            Accept: 'application/json',
+        },
+    });
 }

@@ -130,6 +130,7 @@ export default auth((req) => {
         '/services/track',
         '/transparency',
         '/hub',
+        '/hub/commute',
         '/osr',
         '/about',
         '/student-government',

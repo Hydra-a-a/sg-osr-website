@@ -539,18 +539,24 @@ function parseWorkbookOffices(rows: string[][]) {
 }
 
 export async function GET(request: Request) {
-    const ip = getClientIp(request);
-    const limit = await checkRateLimit(`dir_api_${ip}`, 30, 60000); // 30 requests per minute per IP
+    const shouldRateLimitDirectory = process.env.NODE_ENV === 'production';
 
-    if (!limit.success) {
-        const response = toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests'));
-        if (limit.retryAfter) {
-            response.headers.set('Retry-After', String(limit.retryAfter));
+    if (shouldRateLimitDirectory) {
+        const ip = getClientIp(request);
+        const limit = await checkRateLimit(`dir_api_${ip}`, 30, 60000); // 30 requests per minute per IP
+
+        if (!limit.success) {
+            const response = toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests'));
+            if (limit.retryAfter) {
+                response.headers.set('Retry-After', String(limit.retryAfter));
+            }
+            return response;
         }
-        return response;
     }
 
     try {
+        // local Next.js requests often resolve to anonymous, which can make shared
+        // dev traffic trip the limiter even when the directory integration is healthy.
         const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_DIRECTORY_ID || process.env.GOOGLE_SHEETS_INFO_ID;
         const LEGACY_OFFICERS_RANGE_CANDIDATES = ['Officers!A2:J', 'OFFICERS!A2:J'];
         const LEGACY_OFFICES_RANGE_CANDIDATES = ['Offices!A2:G', 'OFFICES!A2:G'];

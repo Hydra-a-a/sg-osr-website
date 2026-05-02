@@ -28,6 +28,7 @@ type TicketTemplateId =
     | 'ticket.appeal.office.alert.v1'
     | 'ticket.appeal.confirmation.v1'
     | 'ticket.comment.reply.v1'
+    | 'ticket.comment.office.reply.v1'
     | 'ticket.comment.student.update.v1';
 
 type TicketRecipientRole = 'submitter' | 'office';
@@ -195,7 +196,7 @@ export function resolveGrievanceSubmitterEmail(input: {
     const optionalStatus = String(input.optionalUpdateDestinationStatus || '').trim().toLowerCase();
     const optionalDestination = String(input.optionalUpdateDestination || '').trim().toLowerCase();
 
-    if (optionalChannel === 'email' && optionalStatus === 'verified' && isDeliverableEmail(optionalDestination)) {
+    if (optionalChannel === 'email' && optionalStatus !== 'revoked' && isDeliverableEmail(optionalDestination)) {
         return optionalDestination;
     }
 
@@ -333,7 +334,17 @@ async function enqueueGrievanceEvent(input: {
     });
 }
 
-export async function emitGrievanceSubmissionNotifications(input: GrievanceSubmissionInput): Promise<void> {
+function collectQueuedNotificationId(
+    sink: string[],
+    result: Awaited<ReturnType<typeof enqueueGrievanceEvent>>,
+) {
+    if (result.notificationId) {
+        sink.push(result.notificationId);
+    }
+}
+
+export async function emitGrievanceSubmissionNotifications(input: GrievanceSubmissionInput): Promise<string[]> {
+    const notificationIds: string[] = [];
     const occurredAtIso = input.submittedAt;
     const trackingUrl = buildTrackingUrl(input.ticketId);
     const submitterEmail = resolveGrievanceSubmitterEmail({
@@ -345,7 +356,7 @@ export async function emitGrievanceSubmissionNotifications(input: GrievanceSubmi
     const officeRoute = resolveOfficeRoute('grievance.submitted.v1', input.category);
 
     if (submitterEmail) {
-        await enqueueGrievanceEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueGrievanceEvent({
             queue: input.queue,
             eventName: 'grievance.submitted.v1',
             entityId: input.ticketId,
@@ -373,11 +384,11 @@ export async function emitGrievanceSubmissionNotifications(input: GrievanceSubmi
                 cc: '',
                 replyTo: '',
             },
-        });
+        }));
     }
 
     if (officeRoute.to) {
-        await enqueueGrievanceEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueGrievanceEvent({
             queue: input.queue,
             eventName: 'grievance.submitted.v1',
             entityId: input.ticketId,
@@ -406,11 +417,14 @@ export async function emitGrievanceSubmissionNotifications(input: GrievanceSubmi
                 cc: officeRoute.cc || '',
                 replyTo: officeRoute.replyTo || '',
             },
-        });
+        }));
     }
+
+    return notificationIds;
 }
 
-export async function emitGrievanceAdminUpdateNotifications(input: GrievanceAdminUpdateInput): Promise<void> {
+export async function emitGrievanceAdminUpdateNotifications(input: GrievanceAdminUpdateInput): Promise<string[]> {
+    const notificationIds: string[] = [];
     const trackingUrl = buildTrackingUrl(input.ticketId);
     const recipientEmail = String(input.recipientEmail || '').trim().toLowerCase();
     const basePayload = {
@@ -428,7 +442,7 @@ export async function emitGrievanceAdminUpdateNotifications(input: GrievanceAdmi
     };
 
     if (recipientEmail && input.status) {
-        await enqueueGrievanceEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueGrievanceEvent({
             queue: input.queue,
             eventName: 'grievance.status.changed.v1',
             entityId: input.ticketId,
@@ -442,11 +456,11 @@ export async function emitGrievanceAdminUpdateNotifications(input: GrievanceAdmi
                 status: input.status,
                 updatedAt: input.updatedAt,
             },
-        });
+        }));
     }
 
     if (recipientEmail && input.resolutionNotes && input.resolutionNotes.trim()) {
-        await enqueueGrievanceEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueGrievanceEvent({
             queue: input.queue,
             eventName: 'grievance.resolution.updated.v1',
             entityId: input.ticketId,
@@ -460,11 +474,11 @@ export async function emitGrievanceAdminUpdateNotifications(input: GrievanceAdmi
                 resolutionNotes: input.resolutionNotes,
                 updatedAt: input.updatedAt,
             },
-        });
+        }));
     }
 
     if (recipientEmail && input.published && input.publishedAt && input.publishedBy) {
-        await enqueueGrievanceEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueGrievanceEvent({
             queue: input.queue,
             eventName: 'grievance.published.v1',
             entityId: input.ticketId,
@@ -481,11 +495,14 @@ export async function emitGrievanceAdminUpdateNotifications(input: GrievanceAdmi
                 publishedAt: input.publishedAt,
                 publishedBy: input.publishedBy,
             },
-        });
+        }));
     }
+
+    return notificationIds;
 }
 
-export async function emitGrievanceCommentNotifications(input: GrievanceCommentInput): Promise<void> {
+export async function emitGrievanceCommentNotifications(input: GrievanceCommentInput): Promise<string[]> {
+    const notificationIds: string[] = [];
     const trackingUrl = buildTrackingUrl(input.ticketId);
     const submitterEmail = String(input.recipientEmail || '').trim().toLowerCase();
     const officeRoute = resolveOfficeRoute(
@@ -498,7 +515,7 @@ export async function emitGrievanceCommentNotifications(input: GrievanceCommentI
 
     if (input.isAppeal && fromStudent) {
         if (officeRoute.to) {
-            await enqueueGrievanceEvent({
+            collectQueuedNotificationId(notificationIds, await enqueueGrievanceEvent({
                 queue: input.queue,
                 eventName: 'grievance.appeal.submitted.v1',
                 entityId: input.ticketId,
@@ -524,11 +541,11 @@ export async function emitGrievanceCommentNotifications(input: GrievanceCommentI
                     cc: officeRoute.cc || '',
                     replyTo: officeRoute.replyTo || '',
                 },
-            });
+            }));
         }
 
         if (submitterEmail) {
-            await enqueueGrievanceEvent({
+            collectQueuedNotificationId(notificationIds, await enqueueGrievanceEvent({
                 queue: input.queue,
                 eventName: 'grievance.appeal.submitted.v1',
                 entityId: input.ticketId,
@@ -553,12 +570,12 @@ export async function emitGrievanceCommentNotifications(input: GrievanceCommentI
                     cc: '',
                     replyTo: '',
                 },
-            });
+            }));
         }
     }
 
     if (fromOfficer && submitterEmail) {
-        await enqueueGrievanceEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueGrievanceEvent({
             queue: input.queue,
             eventName: 'grievance.comment.added.v1',
             entityId: input.ticketId,
@@ -585,11 +602,11 @@ export async function emitGrievanceCommentNotifications(input: GrievanceCommentI
                 cc: '',
                 replyTo: '',
             },
-        });
+        }));
     }
 
     if (fromStudent && officeRoute.to) {
-        await enqueueGrievanceEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueGrievanceEvent({
             queue: input.queue,
             eventName: 'grievance.comment.added.v1',
             entityId: input.ticketId,
@@ -615,8 +632,10 @@ export async function emitGrievanceCommentNotifications(input: GrievanceCommentI
                 cc: officeRoute.cc || '',
                 replyTo: officeRoute.replyTo || '',
             },
-        });
+        }));
     }
+
+    return notificationIds;
 }
 
 function statusBadge(value: string, tone: 'blue' | 'gold' = 'blue'): string {
@@ -838,6 +857,34 @@ function renderCommentReply(payload: Record<string, unknown>): string {
     });
 }
 
+function renderOfficeCommentReply(payload: Record<string, unknown>): string {
+    const studentEmail = toInfoValue(payload.studentEmail);
+    const emailDisplay = studentEmail
+        ? `<a href="${escapeHtml(safeMailto(studentEmail))}" style="color:#8B1A1A;">${escapeHtml(studentEmail)}</a>`
+        : '<em style="color:#888;">No email available</em>';
+
+    return buildNotificationEmail({
+        title: 'Officer Reply Posted',
+        eyebrow: 'Office Alert',
+        intro: 'An officer posted a new reply on an active grievance ticket.',
+        heroLabel: 'Ticket ID',
+        heroValue: toInfoValue(payload.ticketId),
+        infoRows: [
+            { label: 'Student', value: toInfoValue(payload.name) || 'Student' },
+            { label: 'Email', value: emailDisplay, allowHtml: true },
+            { label: 'Officer', value: toInfoValue(payload.authorName) || 'Officer' },
+            { label: 'Role', value: statusBadge(toInfoValue(payload.authorRole) || 'OFFICER'), allowHtml: true },
+            { label: 'Posted', value: toInfoValue(payload.createdAt) || toInfoValue(payload.occurredAtIso) },
+        ],
+        bodyLabel: 'Reply',
+        bodyHtml: htmlQuote(toInfoValue(payload.message)),
+        actions: [
+            { href: toInfoValue(payload.trackingUrl), label: 'Open Ticket Tracker', tone: 'primary' },
+        ],
+        footerNote: 'This copy is sent to the routed office so the interaction trail is preserved even after later case updates.',
+    });
+}
+
 function renderStudentUpdate(payload: Record<string, unknown>): string {
     const studentEmail = toInfoValue(payload.studentEmail);
     const emailDisplay = studentEmail
@@ -894,11 +941,15 @@ export function buildGrievanceNotificationMessage(
         case 'ticket.appeal.office.alert.v1':
             html = renderAppealOfficeAlert(parsedPayload);
             break;
+
         case 'ticket.appeal.confirmation.v1':
             html = renderAppealConfirmation(parsedPayload);
             break;
         case 'ticket.comment.reply.v1':
             html = renderCommentReply(parsedPayload);
+            break;
+        case 'ticket.comment.office.reply.v1':
+            html = renderOfficeCommentReply(parsedPayload);
             break;
         case 'ticket.comment.student.update.v1':
             html = renderStudentUpdate(parsedPayload);

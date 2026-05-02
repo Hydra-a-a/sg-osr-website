@@ -57,6 +57,7 @@ export interface NotificationMessage {
 export interface ProcessNotificationQueueOptions {
     dryRun?: boolean;
     limit?: number;
+    notificationIds?: string[];
 }
 
 export interface ProcessNotificationQueueResult {
@@ -224,12 +225,20 @@ export async function processNotificationQueue(
 ): Promise<ProcessNotificationQueueResult> {
     const dryRun = Boolean(options.dryRun);
     const limit = Math.max(1, Math.min(200, Number(options.limit || 25)));
+    const targetNotificationIds = new Set(
+        Array.isArray(options.notificationIds)
+            ? options.notificationIds
+                .map((value) => String(value || '').trim())
+                .filter(Boolean)
+            : [],
+    );
     const queueRows = await getSheetData(config.spreadsheetId, config.queueRange);
     const parsedRows = queueRows
         .map((row, index) => parseNotificationQueueRow(row, index + 2))
         .filter((row): row is NotificationQueueRecord => Boolean(row));
     const nowMs = Date.now();
     const candidates = parsedRows
+        .filter((row) => targetNotificationIds.size === 0 || targetNotificationIds.has(row.notificationId))
         .filter((row) => shouldProcessRetry(row, nowMs))
         .slice(0, limit);
 

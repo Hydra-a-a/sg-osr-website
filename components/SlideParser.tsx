@@ -1,27 +1,44 @@
 'use client';
 
+import { useRef } from 'react';
 import { SlideData, PageElement } from '../lib/google';
 import { extractYouTubeId, extractDriveFileId } from '../lib/smartLinks';
 import { sanitizeRichText } from '../lib/security';
-import Image from 'next/image';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface SlideParserProps {
     slides: SlideData[];
+    variant?: 'light' | 'dark';
+    layout?: 'vertical' | 'horizontal';
 }
 
-export default function SlideParser({ slides }: SlideParserProps) {
+export default function SlideParser({ slides, variant = 'light', layout = 'vertical' }: SlideParserProps) {
+    const dark = variant === 'dark';
+    const horizontal = layout === 'horizontal';
+    const rowRef = useRef<HTMLDivElement>(null);
+
+    const scrollRow = (direction: 'prev' | 'next') => {
+        if (!rowRef.current) return;
+        const amount = Math.max(240, Math.round(rowRef.current.clientWidth * 0.85));
+        rowRef.current.scrollBy({
+            left: direction === 'next' ? amount : -amount,
+            behavior: 'smooth',
+        });
+    };
 
     // huge switch statement disguised as ifs because i gave up on typescript
     const renderElement = (el: PageElement, index: number) => {
         if (el.image?.contentUrl) {
             return (
-                <div key={`img-${index}`} className="relative w-full aspect-video rounded-xl overflow-hidden mb-6 bg-gray-100 shadow-md">
-                    <Image
+                <div key={`img-${index}`} className="slide-media-wrap w-full rounded-xl overflow-hidden mb-6 shadow-md">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
                         src={el.image.contentUrl}
                         alt="Slide Image"
-                        fill
-                        className="object-contain"
-                        sizes="(max-width: 768px) 100vw, 800px"
+                        className="slide-media-image w-full h-auto block"
+                        loading="lazy"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
                     />
                 </div>
             );
@@ -112,7 +129,7 @@ export default function SlideParser({ slides }: SlideParserProps) {
                 return (
                     <p
                         key={`txt-${index}-${pIndex}`}
-                        className="text-lg leading-relaxed mb-4 text-gray-800 break-words"
+                        className={`text-lg leading-relaxed mb-4 break-words ${dark ? 'text-slate-200' : 'text-gray-800'}`}
                         dangerouslySetInnerHTML={{ __html: sanitizeRichText(cleanText) }}
                     />
                 );
@@ -123,8 +140,19 @@ export default function SlideParser({ slides }: SlideParserProps) {
     };
 
     return (
-        <div className="space-y-8">
-            {slides.map((slide, sIndex) => {
+        <div className={horizontal ? 'slide-parser-shell' : ''}>
+            {horizontal && slides.length > 3 && (
+                <div className="slide-row-controls" aria-label="Slide controls">
+                    <button type="button" className="slide-row-control-btn" onClick={() => scrollRow('prev')} aria-label="Previous slide">
+                        <ChevronLeft size={16} />
+                    </button>
+                    <button type="button" className="slide-row-control-btn" onClick={() => scrollRow('next')} aria-label="Next slide">
+                        <ChevronRight size={16} />
+                    </button>
+                </div>
+            )}
+            <div ref={rowRef} className={horizontal ? 'slide-parser-row' : 'space-y-8'}>
+                {slides.map((slide, sIndex) => {
                 let isDraft = false;
                 let isEmpty = true;
 
@@ -147,11 +175,19 @@ export default function SlideParser({ slides }: SlideParserProps) {
                 if (isDraft || isEmpty) return null;
 
                 return (
-                    <article key={slide.objectId || sIndex} className="bg-white p-6 md:p-8 rounded-2xl shadow-lg border border-gray-100 flex flex-col gap-2">
+                    <article
+                        key={slide.objectId || sIndex}
+                        className={
+                            dark
+                                ? `osr-announcement-card p-6 md:p-8 rounded-2xl flex flex-col gap-2 ${horizontal ? 'slide-row-card' : ''}`
+                                : `bg-white p-6 md:p-8 rounded-2xl shadow-lg border border-gray-100 flex flex-col gap-2 ${horizontal ? 'slide-row-card' : ''}`
+                        }
+                    >
                         {slide.pageElements?.map((el, elIndex) => renderElement(el, elIndex))}
                     </article>
                 );
-            })}
+                })}
+            </div>
         </div>
     );
 }

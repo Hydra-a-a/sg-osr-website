@@ -136,8 +136,8 @@ export async function POST(request: Request) {
 
         await appendSheetData(
             SPREADSHEET_ID,
-            'News!A:F',
-            [[rowId, rowSource, rowCaption, rowImageUrl, rowPublishedAt, rowFbLink]]
+            'News!A:I',
+            [[rowId, rowSource, rowCaption, rowImageUrl, rowPublishedAt, rowFbLink, 'yes', '', 'legacy']]
         );
 
         logAuditAction('WEBHOOK_PROCESSED', { ip, sourcePage: rowSource });

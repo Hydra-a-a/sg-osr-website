@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { NoncedStyle } from '@/components/CspNonceProvider';
+import { formatManilaDateTime, formatManilaShortDate } from '@/lib/date-time';
 import {
     AlertCircle,
     ArrowLeft,
@@ -93,61 +94,6 @@ const TIMELINE_STEPS: Array<{
 function getFileExtension(fileName: string): string {
     const lowered = fileName.toLowerCase();
     return lowered.includes('.') ? lowered.slice(lowered.lastIndexOf('.')) : '';
-}
-
-function parseSafeDate(value: string | undefined): Date {
-    if (!value) {
-        return new Date(NaN);
-    }
-
-    const raw = value.trim();
-    const isoLikePht = raw.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\s+PHT$/i);
-    if (isoLikePht) {
-        const [, y, m, d, hh, mm, ss] = isoLikePht;
-        const utcMillis = Date.UTC(Number(y), Number(m) - 1, Number(d), Number(hh) - 8, Number(mm), Number(ss));
-        return new Date(utcMillis);
-    }
-
-    const slashFormat = raw.replace(',', '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(AM|PM)$/i);
-    if (slashFormat) {
-        const [, m, d, y, hh, mm, ss, meridiem] = slashFormat;
-        let hour = Number(hh);
-        if (meridiem.toUpperCase() === 'PM' && hour !== 12) hour += 12;
-        if (meridiem.toUpperCase() === 'AM' && hour === 12) hour = 0;
-        const utcMillis = Date.UTC(Number(y), Number(m) - 1, Number(d), hour - 8, Number(mm), Number(ss));
-        return new Date(utcMillis);
-    }
-
-    return new Date(raw);
-}
-
-function formatDateTime(value: string | undefined): string {
-    const date = parseSafeDate(value);
-    if (Number.isNaN(date.getTime())) {
-        return 'Date unavailable';
-    }
-
-    return new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Manila',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-    }).format(date);
-}
-
-function formatShortDate(value: string | undefined): string {
-    const date = parseSafeDate(value);
-    if (Number.isNaN(date.getTime())) {
-        return 'N/A';
-    }
-
-    return new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Manila',
-        month: 'short',
-        day: 'numeric',
-    }).format(date);
 }
 
 function normalizeProposalId(value: string): string {
@@ -435,7 +381,7 @@ export default function ProposalTrackingPage() {
         <div className="proposal-shell relative overflow-hidden min-h-screen">
             <div className="proposal-noise" aria-hidden="true" />
             <section className="relative z-10 pt-20 pb-12 md:pt-28 md:pb-16">
-                <div className="container-main max-w-7xl">
+                <div className="container-main mx-auto w-full max-w-7xl">
                     <Link
                         href="/services/proposals"
                         className="inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white transition-colors mb-8"
@@ -534,7 +480,7 @@ export default function ProposalTrackingPage() {
                                                 </div>
                                                 <div className="flex items-center justify-between gap-3 mt-3 text-xs text-slate-400">
                                                     <span>{item.projectType || 'Project'}</span>
-                                                    <span>{formatShortDate(item.submittedAt)}</span>
+                                                    <span>{formatManilaShortDate(item.submittedAt)}</span>
                                                 </div>
                                             </button>
                                         );
@@ -589,7 +535,7 @@ export default function ProposalTrackingPage() {
                                             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 text-sm">
                                                 <div className="min-w-0 rounded-xl border border-white/10 bg-black/15 px-4 py-3">
                                                     <p className="text-xs uppercase tracking-[0.12em] text-slate-400 mb-1">Submitted</p>
-                                                    <p className="min-w-0 break-words [overflow-wrap:anywhere] text-white font-medium">{formatDateTime(proposal.submittedAt)}</p>
+                                                    <p className="min-w-0 break-words [overflow-wrap:anywhere] text-white font-medium">{formatManilaDateTime(proposal.submittedAt)}</p>
                                                 </div>
                                                 <div className="min-w-0 rounded-xl border border-white/10 bg-black/15 px-4 py-3">
                                                     <p className="text-xs uppercase tracking-[0.12em] text-slate-400 mb-1">Type</p>
@@ -670,7 +616,7 @@ export default function ProposalTrackingPage() {
                                                                         </span>
                                                                     ) : null}
                                                                 </div>
-                                                                <span className="text-xs text-slate-400">{formatDateTime(comment.timestamp)}</span>
+                                                                <span className="text-xs text-slate-400">{formatManilaDateTime(comment.timestamp)}</span>
                                                             </div>
                                                             <p className="text-sm text-slate-100 whitespace-pre-wrap leading-relaxed">{comment.message}</p>
                                                             {comment.attachmentUrl ? (

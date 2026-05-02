@@ -26,9 +26,9 @@ export default function Footer() {
 
     return (
         <footer className="portal-footer-shell mt-auto">
-            <div className="container-main portal-footer-grid relative z-10 pt-10 pb-8 md:pt-12 md:pb-9">
-                <div className="grid gap-8 md:grid-cols-[1.1fr_0.95fr_0.95fr] md:gap-10">
-                    <div className="max-w-md">
+            <div className="container-main portal-footer-grid relative z-10 flex min-h-[18rem] flex-col justify-start pt-20 pb-10 md:justify-center md:py-12">
+                <div className="portal-footer-stack mt-8 grid gap-8 md:mt-0 md:grid-cols-[1.1fr_0.95fr_0.95fr] md:items-center md:gap-10">
+                    <div className="portal-footer-brand">
                         <div className="mb-4 flex items-center gap-3">
                             <div className="relative h-11 w-11 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
                                 <Image
@@ -45,12 +45,12 @@ export default function Footer() {
                             </div>
                         </div>
                         <p className="text-sm leading-6 text-slate-300">
-                            A unified portal for grievances, project proposals, transparency, directory access, and the evolving
-                            student-government information architecture.
+                            A unified portal for grievances, project proposals, transparency records, directory access, and official
+                            student-government information.
                         </p>
                     </div>
 
-                    <div>
+                    <div className="portal-footer-column">
                         <h4 className="eyebrow-label mb-4 text-[var(--rtu-gold-light)]">Explore</h4>
                         <div className="flex flex-col gap-2">
                             {exploreLinks.map((link) => (
@@ -61,7 +61,7 @@ export default function Footer() {
                         </div>
                     </div>
 
-                    <div>
+                    <div className="portal-footer-column">
                         <h4 className="eyebrow-label mb-4 text-[var(--rtu-gold-light)]">Actions</h4>
                         <div className="flex flex-col gap-2">
                             {actionLinks.map((link) => (

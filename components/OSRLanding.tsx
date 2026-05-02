@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Scale, Megaphone, Heart, Users, ArrowRight } from 'lucide-react';
-import SlideParser from '@/components/SlideParser';
 import BackLink from '@/components/BackLink';
-import { getSlidesData } from '@/lib/google';
+import OSRAnnouncementsSection from '@/components/OSRAnnouncementsSection';
+import { getOSRAnnouncementSlides } from '@/lib/osr-announcements';
 
 const pillars = [
     {
@@ -24,25 +24,7 @@ const pillars = [
 ];
 
 export async function OSRLanding() {
-    const allSlides = await getSlidesData();
-
-    const contentSlides = allSlides.filter((slide) => {
-        let isStructural = false;
-        slide.pageElements?.forEach((element) => {
-            element.shape?.text?.textElements?.forEach((textElement) => {
-                const content = textElement.textRun?.content?.trim() || '';
-                if (
-                    content.startsWith('CONFIG:') ||
-                    content.startsWith('NEWS:') ||
-                    content.startsWith('GALLERY:') ||
-                    content.startsWith('LINK:')
-                ) {
-                    isStructural = true;
-                }
-            });
-        });
-        return !isStructural;
-    });
+    const contentSlides = await getOSRAnnouncementSlides();
 
     return (
         <>
@@ -159,13 +141,7 @@ export async function OSRLanding() {
                 </div>
             </section>
 
-            <section className="section bg-surface-soft">
-                <div className="container-main">
-                    <h2 className="mb-2 text-center text-3xl font-bold section-heading text-brand">OSR Announcements</h2>
-                    <p className="mb-10 text-center text-subtle">Official updates from the Office of the Student Regent</p>
-                    <SlideParser slides={contentSlides} />
-                </div>
-            </section>
+            <OSRAnnouncementsSection slides={contentSlides} />
         </>
     );
 }

@@ -13,8 +13,9 @@ import {
     hashTicketTrackingToken,
     writeTicketToSheet,
 } from '@/lib/tickets';
-import { emitGrievanceSubmissionNotifications } from '@/lib/grievance-notifications';
+import { emitGrievanceSubmissionNotifications, processGrievanceNotificationQueue } from '@/lib/grievance-notifications';
 import { triggerTicketQueueInBackground } from '@/lib/queue-trigger';
+import { safeProcessImmediateNotifications } from '@/lib/immediate-notification-processing';
 
 const TICKET_NOTIFICATION_QUEUE_SHEET_TAB = process.env.TICKET_NOTIFICATION_QUEUE_SHEET_TAB || 'Ticket_Notification_Queue';
 const TICKET_NOTIFICATION_QUEUE_RANGE = `${TICKET_NOTIFICATION_QUEUE_SHEET_TAB}!A2:N`;
@@ -407,17 +408,19 @@ export async function POST(request: Request) {
             optionalUpdateOptIn: optionalUpdatesOptIn,
             optionalUpdateChannel: optionalUpdatesChannel,
             optionalUpdateDestination: optionalUpdatesDestination,
-            optionalUpdateDestinationStatus: 'Unverified',
+            optionalUpdateDestinationStatus: optionalUpdatesOptIn ? 'Verified' : 'Unverified',
             optionalUpdateNotes,
         });
 
-        await emitGrievanceSubmissionNotifications({
-            queue: {
-                spreadsheetId: getTicketSpreadsheetId(),
-                queueTab: TICKET_NOTIFICATION_QUEUE_SHEET_TAB,
-                queueRange: TICKET_NOTIFICATION_QUEUE_RANGE,
-                queueAppendRange: TICKET_NOTIFICATION_QUEUE_APPEND_RANGE,
-            },
+        const grievanceNotificationQueue = {
+            spreadsheetId: getTicketSpreadsheetId(),
+            queueTab: TICKET_NOTIFICATION_QUEUE_SHEET_TAB,
+            queueRange: TICKET_NOTIFICATION_QUEUE_RANGE,
+            queueAppendRange: TICKET_NOTIFICATION_QUEUE_APPEND_RANGE,
+        };
+
+        const notificationIds = await emitGrievanceSubmissionNotifications({
+            queue: grievanceNotificationQueue,
             ticketId,
             studentId: data.studentId,
             name: studentName,
@@ -432,12 +435,15 @@ export async function POST(request: Request) {
             recipientEmail: confirmationEmail || studentEmail,
             optionalUpdateDestination: optionalUpdatesDestination,
             optionalUpdateChannel: optionalUpdatesChannel,
-            optionalUpdateDestinationStatus: 'Unverified',
+            optionalUpdateDestinationStatus: optionalUpdatesOptIn ? 'Verified' : 'Unverified',
         });
 
-        // Kick off queue processing immediately in the background (fire-and-forget).
-        // The GitHub Actions scheduler is the safety net if this fails.
-        triggerTicketQueueInBackground();
+        await safeProcessImmediateNotifications({
+            queueName: 'ticket',
+            notificationIds,
+            processQueue: (options) => processGrievanceNotificationQueue(grievanceNotificationQueue, options),
+            triggerFallback: triggerTicketQueueInBackground,
+        });
 
         // Still log the success
         logAuditAction('TICKET_SUBMITTED', {

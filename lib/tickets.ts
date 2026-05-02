@@ -18,6 +18,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { appendSheetData, batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { sendEmail } from '@/lib/email';
 import { buildRegentAlertEmail, buildStudentConfirmationEmail, buildTicketUpdateEmail } from '@/lib/email-templates';
+import { formatPhtStorageTimestamp } from '@/lib/date-time';
 import { redactErrorForLog } from '@/lib/security';
 import type { Campus, CollegeInstitute, TicketStatus } from '@/lib/ticket-constants';
 import { processGrievanceNotificationQueue } from '@/lib/grievance-notifications';
@@ -166,33 +167,6 @@ const TICKET_NOTIFICATION_QUEUE_APPEND_RANGE = `${TICKET_NOTIFICATION_QUEUE_SHEE
 type OptionalUpdateChannel = 'None' | 'Email';
 type OptionalUpdateDestinationStatus = 'Unverified' | 'Verified' | 'Revoked';
 
-function toPHTString(isoUtc: string): string {
-    const date = new Date(isoUtc);
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Manila',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
-
-    const parts = formatter.formatToParts(date);
-    const byType = (type: Intl.DateTimeFormatPartTypes): string =>
-        parts.find((part) => part.type === type)?.value || '';
-
-    const year = byType('year');
-    const month = byType('month');
-    const day = byType('day');
-    const hour = byType('hour');
-    const minute = byType('minute');
-    const second = byType('second');
-
-    return `${year}-${month}-${day} ${hour}:${minute}:${second} PHT`;
-}
-
 export async function writeTicketToSheet(ticket: {
     ticketId: string;
     timestamp: string;
@@ -221,7 +195,7 @@ export async function writeTicketToSheet(ticket: {
 
     const row = [
         ticket.ticketId,
-        toPHTString(ticket.timestamp),
+        formatPhtStorageTimestamp(ticket.timestamp),
         'Open',
         ticket.studentId,
         ticket.name,
@@ -651,7 +625,7 @@ function resolveOptionalUpdateRecipient(row: string[]): OptionalUpdateRecipientR
         };
     }
 
-    if (destinationStatus !== 'Verified') {
+    if (destinationStatus === 'Revoked') {
         return {
             recipientEmail: '',
             awaitingVerification: true,

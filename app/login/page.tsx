@@ -235,7 +235,7 @@ function LoginContent() {
                                     className="object-cover rounded-full shadow-lg ring-1 ring-white/10"
                                 />
                             </div>
-                            <h1 className="portal-title mb-4">
+                            <h1 className="portal-title portal-title-fluid mb-4">
                                 RTU Account <span className="portal-title-accent">Sign In</span>
                             </h1>
                             <p className="portal-lead mx-auto">

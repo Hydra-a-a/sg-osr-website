@@ -216,12 +216,22 @@ async function enqueueProposalEvent(input: {
     });
 }
 
-export async function emitProposalSubmissionNotifications(input: ProposalSubmissionInput): Promise<void> {
+function collectQueuedNotificationId(
+    sink: string[],
+    result: Awaited<ReturnType<typeof enqueueProposalEvent>>,
+) {
+    if (result.notificationId) {
+        sink.push(result.notificationId);
+    }
+}
+
+export async function emitProposalSubmissionNotifications(input: ProposalSubmissionInput): Promise<string[]> {
+    const notificationIds: string[] = [];
     const trackingUrl = buildTrackingUrl(input.proposalId);
     const officeRoute = resolveProposalRoute('proposal.submitted.v1');
 
     if (isDeliverableEmail(input.submitterEmail)) {
-        await enqueueProposalEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueProposalEvent({
             queue: input.queue,
             eventName: 'proposal.submitted.v1',
             entityId: input.proposalId,
@@ -247,11 +257,11 @@ export async function emitProposalSubmissionNotifications(input: ProposalSubmiss
                 cc: '',
                 replyTo: '',
             },
-        });
+        }));
     }
 
     if (officeRoute.to) {
-        await enqueueProposalEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueProposalEvent({
             queue: input.queue,
             eventName: 'proposal.submitted.v1',
             entityId: input.proposalId,
@@ -278,11 +288,14 @@ export async function emitProposalSubmissionNotifications(input: ProposalSubmiss
                 cc: officeRoute.cc || '',
                 replyTo: officeRoute.replyTo || '',
             },
-        });
+        }));
     }
+
+    return notificationIds;
 }
 
-export async function emitProposalAdminUpdateNotifications(input: ProposalAdminUpdateInput): Promise<void> {
+export async function emitProposalAdminUpdateNotifications(input: ProposalAdminUpdateInput): Promise<string[]> {
+    const notificationIds: string[] = [];
     const recipientEmail = input.submitterEmail.trim().toLowerCase();
     const trackingUrl = buildTrackingUrl(input.proposalId);
     const basePayload = {
@@ -299,7 +312,7 @@ export async function emitProposalAdminUpdateNotifications(input: ProposalAdminU
     };
 
     if (isDeliverableEmail(recipientEmail) && input.status) {
-        await enqueueProposalEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueProposalEvent({
             queue: input.queue,
             eventName: 'proposal.status.changed.v1',
             entityId: input.proposalId,
@@ -314,11 +327,11 @@ export async function emitProposalAdminUpdateNotifications(input: ProposalAdminU
                 updatedAt: input.updatedAt,
                 updatedBy: input.updatedBy,
             },
-        });
+        }));
     }
 
     if (isDeliverableEmail(recipientEmail) && input.reviewNotes && input.reviewNotes.trim()) {
-        await enqueueProposalEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueProposalEvent({
             queue: input.queue,
             eventName: 'proposal.review.note.added.v1',
             entityId: input.proposalId,
@@ -333,16 +346,19 @@ export async function emitProposalAdminUpdateNotifications(input: ProposalAdminU
                 updatedAt: input.updatedAt,
                 updatedBy: input.updatedBy,
             },
-        });
+        }));
     }
+
+    return notificationIds;
 }
 
-export async function emitProposalCommentNotifications(input: ProposalCommentInput): Promise<void> {
+export async function emitProposalCommentNotifications(input: ProposalCommentInput): Promise<string[]> {
+    const notificationIds: string[] = [];
     const normalizedAuthorRole = String(input.authorRole || '').trim().toUpperCase();
     const trackingUrl = buildTrackingUrl(input.proposalId);
 
     if (normalizedAuthorRole === 'OFFICER' && isDeliverableEmail(input.submitterEmail)) {
-        await enqueueProposalEvent({
+        collectQueuedNotificationId(notificationIds, await enqueueProposalEvent({
             queue: input.queue,
             eventName: 'proposal.comment.added.v1',
             entityId: input.proposalId,
@@ -368,13 +384,13 @@ export async function emitProposalCommentNotifications(input: ProposalCommentInp
                 cc: '',
                 replyTo: '',
             },
-        });
+        }));
     }
 
     if (normalizedAuthorRole !== 'OFFICER') {
         const officeRoute = resolveProposalRoute('proposal.comment.added.v1', normalizedAuthorRole);
         if (officeRoute.to) {
-            await enqueueProposalEvent({
+            collectQueuedNotificationId(notificationIds, await enqueueProposalEvent({
                 queue: input.queue,
                 eventName: 'proposal.comment.added.v1',
                 entityId: input.proposalId,
@@ -402,9 +418,11 @@ export async function emitProposalCommentNotifications(input: ProposalCommentInp
                     cc: officeRoute.cc || '',
                     replyTo: officeRoute.replyTo || '',
                 },
-            });
+            }));
         }
     }
+
+    return notificationIds;
 }
 
 function statusBadge(value: string): string {

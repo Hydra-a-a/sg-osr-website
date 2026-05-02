@@ -6,6 +6,7 @@ import { getAuthorizedUsers } from '@/lib/auth';
 import { uploadProposalAttachmentToDrive } from '@/lib/google-drive';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { formatPhtStorageTimestamp } from '@/lib/date-time';
 import { deriveEffectivePortalRole, hasOfficerPrivilege } from '@/lib/portal-mode';
 import { getClientIp, redactErrorForLog, sanitizeText } from '@/lib/security';
 import {
@@ -18,8 +19,9 @@ import {
     parseProposalId,
     resolveProposalsSpreadsheetId,
 } from '@/lib/proposals';
-import { emitProposalCommentNotifications } from '@/lib/proposal-notifications';
+import { emitProposalCommentNotifications, processProposalNotifications } from '@/lib/proposal-notifications';
 import { triggerProposalQueueInBackground } from '@/lib/queue-trigger';
+import { safeProcessImmediateNotifications } from '@/lib/immediate-notification-processing';
 
 // enqueueProposalNotificationEvent is superseded by emitProposalCommentNotifications.
 const PROPOSAL_NOTIFICATION_QUEUE_TAB = process.env.PROPOSAL_NOTIFICATION_QUEUE_SHEET_TAB || 'Project_Proposal_Notification_Queue';
@@ -44,26 +46,6 @@ const ProposalCommentSchema = z.object({
 function withNoStore(response: NextResponse): NextResponse {
     response.headers.set('Cache-Control', 'no-store');
     return response;
-}
-
-function toPHTString(isoUtc: string): string {
-    const date = new Date(isoUtc);
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Manila',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
-
-    const parts = formatter.formatToParts(date);
-    const byType = (type: Intl.DateTimeFormatPartTypes): string =>
-        parts.find((part) => part.type === type)?.value || '';
-
-    return `${byType('year')}-${byType('month')}-${byType('day')} ${byType('hour')}:${byType('minute')}:${byType('second')} PHT`;
 }
 
 function parseCommentTimestamp(value: string): number {
@@ -315,7 +297,7 @@ export async function POST(
         const authorName = access.isOfficer
             ? (String(access.session?.user?.name || '').trim() || await resolveOfficerDisplayName(authorEmail, 'OSR Officer'))
             : (access.session?.user?.name || access.proposal.submitterName || 'Leader');
-        const timestamp = toPHTString(new Date().toISOString());
+        const timestamp = formatPhtStorageTimestamp(new Date());
 
         const comment = {
             commentId: generateProposalCommentId(),
@@ -331,13 +313,15 @@ export async function POST(
 
         const { spreadsheetId } = resolveProposalsSpreadsheetId();
 
-        await emitProposalCommentNotifications({
-            queue: {
-                spreadsheetId,
-                queueTab: PROPOSAL_NOTIFICATION_QUEUE_TAB,
-                queueRange: PROPOSAL_NOTIFICATION_QUEUE_RANGE,
-                queueAppendRange: PROPOSAL_NOTIFICATION_QUEUE_APPEND_RANGE,
-            },
+        const proposalNotificationQueue = {
+            spreadsheetId,
+            queueTab: PROPOSAL_NOTIFICATION_QUEUE_TAB,
+            queueRange: PROPOSAL_NOTIFICATION_QUEUE_RANGE,
+            queueAppendRange: PROPOSAL_NOTIFICATION_QUEUE_APPEND_RANGE,
+        };
+
+        const notificationIds = await emitProposalCommentNotifications({
+            queue: proposalNotificationQueue,
             proposalId,
             submitterName: access.proposal.submitterName || 'Leader',
             submitterEmail: access.proposal.submitterEmail,
@@ -351,8 +335,12 @@ export async function POST(
             createdAt: new Date().toISOString(),
         });
 
-        // Trigger background processing for near-live emails
-        triggerProposalQueueInBackground();
+        await safeProcessImmediateNotifications({
+            queueName: 'proposal comment',
+            notificationIds,
+            processQueue: (options) => processProposalNotifications(proposalNotificationQueue, options),
+            triggerFallback: triggerProposalQueueInBackground,
+        });
 
         return withNoStore(NextResponse.json({
             success: true,

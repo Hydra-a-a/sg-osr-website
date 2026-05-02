@@ -1,0 +1,64 @@
+name: Facebook News Sync
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Run sync in dry-run mode
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: facebook-news-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-news:
+    name: Sync Facebook Page News
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_URL: ${{ secrets.SCHEDULER_BASE_URL }}
+      NEWS_SYNC_SECRET: ${{ secrets.NEWS_SYNC_SECRET || secrets.SCHEDULER_CRON_SECRET }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+    steps:
+      - name: Validate scheduler secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${BASE_URL:-}" ]]; then
+            echo "Missing secret: SCHEDULER_BASE_URL"
+            exit 1
+          fi
+          if [[ -z "${NEWS_SYNC_SECRET:-}" ]]; then
+            echo "Missing secret: NEWS_SYNC_SECRET or SCHEDULER_CRON_SECRET"
+            exit 1
+          fi
+
+      - name: Trigger website news sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="${BASE_URL%/}/api/news/sync"
+          if [[ "${DRY_RUN}" == "1" ]]; then
+            url="${url}?dryRun=1"
+          fi
+
+          response_file="$(mktemp)"
+          curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-all-errors --retry-delay 5 \
+            --request POST \
+            --url "${url}" \
+            --header "Authorization: Bearer ${NEWS_SYNC_SECRET}" \
+            --header "x-news-sync-secret: ${NEWS_SYNC_SECRET}" \
+            --header "Accept: application/json" \
+            --output "${response_file}"
+
+          echo "News sync response:"
+          cat "${response_file}"

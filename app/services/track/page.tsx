@@ -5,27 +5,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import { formatManilaDateTime, formatManilaShortDate } from '@/lib/date-time';
 import {
     Search, Loader2, ArrowLeft, FileText,
     Clock, ShieldCheck, CheckCircle2, XCircle,
     Ticket, ChevronRight, BookOpen, MessageSquare, Send, UploadCloud, AlertTriangle
 } from 'lucide-react';
 import type { TicketStatus } from '@/lib/ticket-constants';
-
-const submittedDateTimeFormatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Manila',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-});
-
-const submittedShortDateFormatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Manila',
-    month: 'short',
-    day: 'numeric',
-});
 
 const MAX_FOLLOW_UP_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const FOLLOW_UP_ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.pdf', '.doc', '.docx']);
@@ -57,52 +43,12 @@ function normalizeStatus(raw: string): TicketStatus {
 
 // ── Safari-safe date parser ────────────────────────────────────────────────────
 // "2026-04-02 17:47:12 PHT" -> valid browser Date object
-function parseSafeDate(dStr: string | undefined): Date {
-    if (!dStr) return new Date(NaN);
-
-    const raw = dStr.trim();
-
-    // Handles stable format: "YYYY-MM-DD HH:mm:ss PHT".
-    const isoLikePht = raw.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\s+PHT$/i);
-    if (isoLikePht) {
-        const [, y, m, d, hh, mm, ss] = isoLikePht;
-        const utcMillis = Date.UTC(Number(y), Number(m) - 1, Number(d), Number(hh) - 8, Number(mm), Number(ss));
-        return new Date(utcMillis);
-    }
-
-    // Handles locale format often returned by toLocaleString:
-    // "MM/DD/YYYY, HH:mm:ss AM/PM PHT".
-    const localePht = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}),\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)\s+PHT$/i);
-    if (localePht) {
-        const [, mm, dd, yyyy, hh12, min, sec = '00', meridiem] = localePht;
-        let hour = Number(hh12) % 12;
-        if (meridiem.toUpperCase() === 'PM') {
-            hour += 12;
-        }
-        const utcMillis = Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), hour - 8, Number(min), Number(sec));
-        return new Date(utcMillis);
-    }
-
-    // Fallback for ISO and other browser-supported strings.
-    return new Date(raw);
-}
-
 function formatSubmittedDate(dStr: string | undefined): string {
-    const parsed = parseSafeDate(dStr);
-    if (Number.isNaN(parsed.getTime())) {
-        return 'Date unavailable';
-    }
-
-    return submittedDateTimeFormatter.format(parsed);
+    return formatManilaDateTime(dStr);
 }
 
 function formatShortSubmittedDate(dStr: string | undefined): string {
-    const parsed = parseSafeDate(dStr);
-    if (Number.isNaN(parsed.getTime())) {
-        return 'N/A';
-    }
-
-    return submittedShortDateFormatter.format(parsed);
+    return formatManilaShortDate(dStr);
 }
 
 // ── localStorage helpers ───────────────────────────────────────────────────────

@@ -3,16 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import useSWR from 'swr';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Building2, ChevronLeft, ChevronRight, Landmark, Scale, Users } from 'lucide-react';
 import BackLink from '@/components/BackLink';
-import { applyCouncilLogoOverrides, type DirectoryLogoSource } from '@/lib/council-logos';
 import {
-    fetchStudentGovernmentDirectoryPayload,
-    isRuntimeLogoSource,
     studentGovernmentCouncils,
-    STUDENT_GOVERNMENT_DIRECTORY_SWR_OPTIONS,
 } from '@/lib/student-government';
 
 const structureCards = [
@@ -58,19 +53,7 @@ const actionCards = [
 ];
 
 export default function StudentGovernmentPage() {
-    const { data: directoryResponse } = useSWR(
-        '/api/directory',
-        fetchStudentGovernmentDirectoryPayload,
-        STUDENT_GOVERNMENT_DIRECTORY_SWR_OPTIONS
-    );
-    const directoryLeaders = useMemo(
-        () => (directoryResponse?.leaders || []) as DirectoryLogoSource[],
-        [directoryResponse?.leaders]
-    );
-    const featuredCouncils = useMemo(
-        () => applyCouncilLogoOverrides(studentGovernmentCouncils, directoryLeaders),
-        [directoryLeaders]
-    );
+    const featuredCouncils = useMemo(() => studentGovernmentCouncils, []);
 
     const [activeCouncilIndex, setActiveCouncilIndex] = useState(0);
     const lastInteraction = useRef(0);
@@ -189,7 +172,6 @@ export default function StudentGovernmentPage() {
                                                 alt={activeCouncil.name}
                                                 fill
                                                 sizes="(max-width: 768px) 160px, 176px"
-                                                unoptimized={isRuntimeLogoSource(activeCouncil.src)}
                                                 className="object-contain rounded-full"
                                             />
                                         </motion.div>

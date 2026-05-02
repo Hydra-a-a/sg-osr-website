@@ -18,12 +18,32 @@
     "test:ticket-update-notification-sync": "node tests/test-ticket-update-notification-sync.js",
     "test:proposal-feedback-tracking": "node tests/test-proposal-feedback-tracking.js",
     "test:unified-notification-system": "node tests/test-unified-notification-system.js",
+    "test:notification-queue-trigger": "node tests/test-notification-queue-trigger.js",
+    "test:email-live-processing": "node tests/test-email-live-processing.js",
+    "test:facebook-news-sync": "node tests/test-facebook-news-sync.js",
+    "test:manila-date-formatting": "node tests/test-manila-date-formatting.js",
     "test:portal-mode-auth": "node tests/test-portal-mode-auth.js",
     "test:hub-guides-pdf-gating": "node tests/test-hub-guides-pdf-gating.js",
+    "test:hub-dashboard-redesign": "node tests/test-hub-dashboard-redesign.js",
+    "test:hub-date-added": "node tests/test-hub-date-added.js",
+    "test:pdf-embed-shells": "node tests/test-pdf-embed-shells.js",
+    "test:home-editorial-refresh": "node tests/test-home-editorial-refresh.js",
+    "test:title-measure": "node tests/test-title-measure.js",
+    "test:directory-mobile-layout": "node tests/test-directory-mobile-layout.js",
+    "test:directory-dev-rate-limit": "node tests/test-directory-dev-rate-limit.js",
     "test:directory-logo-pipeline": "node tests/test-directory-logo-pipeline.js",
     "test:directory-portal-theme": "node tests/test-directory-portal-theme.js",
     "test:login-portal-theme": "node tests/test-login-portal-theme.js",
+    "test:home-professional-language": "node tests/test-home-professional-language.js",
+    "test:transparency-portal-theme": "node tests/test-transparency-portal-theme.js",
     "test:mobile-desktop-mode": "node tests/test-mobile-desktop-mode.js",
+    "test:announcements-implementation": "node tests/test-announcements-implementation.js",
+    "test:announcement-popup-e2e": "node tests/announcement-popup.spec.js",
+    "test:accessibility-audit-pipeline": "node tests/test-accessibility-audit-pipeline.js",
+    "audit:a11y": "node scripts/audit-accessibility.mjs",
+    "audit:lighthouse": "lhci autorun --config=./lighthouserc.cjs",
+    "preflight:integrations": "node scripts/preflight-integrations.mjs",
+    "test:integration-preflight": "node tests/test-integration-preflight.js",
     "test:security": "npm run test:inline-style-scan && npm run test:forms-auth-guard && npm run test:api-error-envelope && npm run test:csp-policy && npm run test:redacted-logging && npm run test:ticket-security-hardening && npm run test:ticket-owner-access && npm run test:ticket-comments-appeals && npm run test:ticket-update-notification-sync && npm run test:portal-mode-auth && npm run test:hub-guides-pdf-gating && npm run test:directory-logo-pipeline"
   },
   "overrides": {
@@ -32,8 +52,11 @@
     }
   },
   "dependencies": {
+    "@googlemaps/google-maps-services-js": "^3.4.2",
     "@sentry/nextjs": "^10.45.0",
     "@types/nodemailer": "^7.0.11",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
     "framer-motion": "^12.35.0",
     "googleapis": "^171.4.0",
     "isomorphic-dompurify": "^3.3.0",
@@ -47,7 +70,9 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.2",
     "@google/gemini-cli": "^0.34.0",
+    "@lhci/cli": "^0.15.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^25.3.3",
     "@types/react": "^19.2.14",
@@ -55,7 +80,9 @@
     "eslint": "^9",
     "eslint-config-next": "^16.2.2",
     "eslint-plugin-security": "^4.0.0",
+    "playwright": "^1.59.1",
     "tailwindcss": "^4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wait-on": "^9.0.5"
   }
 }

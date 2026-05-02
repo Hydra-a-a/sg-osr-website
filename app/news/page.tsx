@@ -3,26 +3,31 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import Image from 'next/image';
-import { Newspaper, Globe, ThumbsUp, MessageSquare, Share2 } from 'lucide-react';
+import { ExternalLink, Globe, Newspaper } from 'lucide-react';
 import { NewsPost } from '@/schemas/news';
 
+const PAGE_STEP = 12;
 
-function timeAgo(dateStr: string): string {
-    const now = new Date();
-    const then = new Date(dateStr);
-    const diffMs = now.getTime() - then.getTime();
-    const diffMin = Math.floor(diffMs / (1000 * 60));
-    if (diffMin < 1) return 'Just now';
-    if (diffMin < 60) return `${diffMin}m`;
-    const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return `${diffH}h`;
-    const diffD = Math.floor(diffH / 24);
-    if (diffD === 1) return 'Yesterday';
-    if (diffD < 7) return `${diffD}d`;
-    return then.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+interface NewsResponse {
+    data?: NewsPost[];
+    pagination?: {
+        page: number;
+        limit: number;
+        total: number;
+        hasMore: boolean;
+    };
 }
 
-// pick a finite avatar variant so it stays interesting without runtime styles
+function formatDate(dateStr: string): string {
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return 'Recently';
+    return date.toLocaleDateString('en-PH', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+    });
+}
+
 function sourceVariant(source: string): string {
     const variants = ['facebook', 'brand', 'azure', 'gold', 'green', 'violet'];
     let hash = 0;
@@ -30,64 +35,41 @@ function sourceVariant(source: string): string {
     return variants[Math.abs(hash) % variants.length];
 }
 
-// stop facebook essays from ruining the layout
-const MAX_CAPTION_LENGTH = 280;
-
-function CaptionText({ text }: { text: string }) {
-    const [expanded, setExpanded] = useState(false);
-    const isLong = text.length > MAX_CAPTION_LENGTH;
-
-    if (!isLong || expanded) {
-        return (
-            <div className="fb-card-body">
-                {text}
-                {isLong && (
-                    <button className="fb-see-more" onClick={() => setExpanded(false)}>
-                        See less
-                    </button>
-                )}
-            </div>
-        );
-    }
-
-    return (
-        <div className="fb-card-body">
-            {text.slice(0, MAX_CAPTION_LENGTH).trimEnd()}…
-            <button className="fb-see-more" onClick={() => setExpanded(true)}>
-                See more
-            </button>
-        </div>
-    );
+function excerpt(text: string, maxLength = 360): string {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (clean.length <= maxLength) return clean;
+    return `${clean.slice(0, maxLength).trimEnd()}...`;
 }
 
 export default function NewsPage() {
-    const { data: response, error, isLoading } = useSWR('/api/news', (url: string) => fetch(url).then(res => res.json()));
-    const posts: NewsPost[] = response?.data || [];
+    const [limit, setLimit] = useState(PAGE_STEP);
+    const { data: response, error, isLoading } = useSWR<NewsResponse>(
+        `/api/news?limit=${limit}`,
+        (url: string) => fetch(url).then((res) => res.json()),
+    );
+    const posts = response?.data || [];
+    const hasMore = Boolean(response?.pagination?.hasMore);
 
     return (
         <>
-            {/* Header */}
             <section className="bg-gradient-rtu page-header">
                 <div className="container-main text-center">
-                    <Newspaper className="mx-auto mb-4 text-white/80" size={40} />
+                    <Newspaper className="mx-auto mb-4 text-white/80" size={40} aria-hidden="true" />
                     <h1 className="font-bold text-white mb-3">
                         News & <span className="text-gradient-gold">Updates</span>
                     </h1>
                     <p className="page-header-subtitle max-w-lg mx-auto">
-                        Live from our official Facebook pages — automatically aggregated.
+                        Article-style updates from official student government Facebook pages.
                     </p>
                 </div>
             </section>
 
-            {/* Feed */}
             <section className="section-tight">
-                <div className="container-main max-w-2xl">
+                <div className="container-main max-w-4xl">
                     {isLoading ? (
-                        /* loading state nobody looks at */
-                        <div className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-4" aria-label="Loading news updates">
                             {Array.from({ length: 3 }).map((_, i) => (
-                                <div key={i} className="fb-card">
-                                    {/* Skeleton header */}
+                                <div key={i} className="fb-card" aria-hidden="true">
                                     <div className="fb-card-header">
                                         <div className="skeleton skeleton-avatar" />
                                         <div className="flex-1">
@@ -95,101 +77,108 @@ export default function NewsPage() {
                                             <div className="skeleton skeleton-meta-line" />
                                         </div>
                                     </div>
-                                    {/* Skeleton body */}
                                     <div className="news-skeleton-body">
                                         <div className="skeleton skeleton-body-line skeleton-body-line-wide" />
                                         <div className="skeleton skeleton-body-line skeleton-body-line-medium" />
                                         <div className="skeleton skeleton-body-line skeleton-body-line-short" />
                                     </div>
-                                    {/* Skeleton image */}
                                     <div className="skeleton skeleton-media" />
-                                    {/* Skeleton actions */}
-                                    <div className="news-skeleton-actions">
-                                        <div className="skeleton skeleton-action-chip" />
-                                        <div className="skeleton skeleton-action-chip" />
-                                        <div className="skeleton skeleton-action-chip" />
-                                    </div>
                                 </div>
                             ))}
                         </div>
-                    ) : posts.length === 0 ? (
-                        <div className="text-center py-20 text-white/50">No news updates yet.</div>
-                    ) : (
-                        <div className="flex flex-col gap-4">
-                            {posts.map((post) => (
-                                <article key={post.id} className="fb-card fade-in-up content-visibility-auto">
-
-                                    {/* ── Header ── */}
-                                    <div className="fb-card-header">
-                                        <div
-                                            className={`fb-avatar fb-avatar--${sourceVariant(post.source)}`}
-                                        >
-                                            {post.source.charAt(0).toUpperCase()}
-                                        </div>
-                                        <div className="fb-header-copy">
-                                            <div className="fb-card-name">{post.source}</div>
-                                            <div className="fb-card-meta">
-                                                <span>{timeAgo(post.publishedAt)}</span>
-                                                <span>·</span>
-                                                <Globe size={12} />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* ── Caption ── */}
-                                    <CaptionText text={post.caption} />
-
-                                    {/* ── Image (edge-to-edge) ── */}
-                                    {post.imageUrl && post.imageUrl !== '' && (
-                                        <div className="fb-card-media">
-                                            <Image
-                                                src={post.imageUrl}
-                                                alt=""
-                                                width={800}
-                                                height={450}
-                                                className="fb-media-image"
-                                                unoptimized
-                                            />
-                                        </div>
-                                    )}
-
-                                    {/* ── Action Bar ── */}
-                                    <div className="fb-card-actions">
-                                        <a
-                                            href={post.fbLink}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="fb-action-btn"
-                                        >
-                                            <ThumbsUp size={16} /> Like
-                                        </a>
-                                        <a
-                                            href={post.fbLink}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="fb-action-btn"
-                                        >
-                                            <MessageSquare size={16} /> Comment
-                                        </a>
-                                        <a
-                                            href={post.fbLink}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="fb-action-btn"
-                                        >
-                                            <Share2 size={16} /> Go to Post
-                                        </a>
-                                    </div>
-                                </article>
-                            ))}
+                    ) : error ? (
+                        <div className="text-center py-20 text-white/70" role="status">
+                            News updates could not be loaded right now. Please try again later.
                         </div>
-                    )}
+                    ) : posts.length === 0 ? (
+                        <div className="text-center py-20 text-white/60" role="status">
+                            No visible news updates are available yet.
+                        </div>
+                    ) : (
+                        <>
+                            <div className="flex flex-col gap-5">
+                                {posts.map((post, index) => {
+                                    const title = post.displayTitle || post.manualTitle || post.articleTitle || 'Student government update';
+                                    const body = post.displayBody || post.manualBody || post.articleBody || post.caption;
+                                    const source = post.sourcePageName || post.source || 'Student Government';
 
-                    <p className="text-center mt-10 text-xs text-subtle">
-                        This feed updates automatically whenever a new Facebook post is detected.
-                    </p>
+                                    return (
+                                        <article key={post.id || post.articleSlug || `news-post-${index}`} className="fb-card fade-in-up content-visibility-auto">
+                                            <div className="fb-card-header">
+                                                <div className={`fb-avatar fb-avatar--${sourceVariant(source)}`} aria-hidden="true">
+                                                    {source.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div className="fb-header-copy">
+                                                    <p className="fb-card-name">{source}</p>
+                                                    <div className="fb-card-meta">
+                                                        <time dateTime={post.publishedAt}>{formatDate(post.publishedAt)}</time>
+                                                        <span aria-hidden="true">.</span>
+                                                        <Globe size={12} aria-hidden="true" />
+                                                        {post.primaryTag && <span>{post.primaryTag}</span>}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="px-5 pb-4">
+                                                <h2 className="text-xl md:text-2xl font-semibold text-white leading-tight">
+                                                    {title}
+                                                </h2>
+                                                {body && (
+                                                    <p className="mt-3 text-sm md:text-base leading-7 text-slate-200">
+                                                        {excerpt(body)}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            {post.imageUrl && (
+                                                <div className="fb-card-media">
+                                                    <Image
+                                                        src={post.imageUrl}
+                                                        alt={post.imageAlt || title}
+                                                        width={900}
+                                                        height={506}
+                                                        className="fb-media-image"
+                                                        sizes="(max-width: 768px) 100vw, 896px"
+                                                        unoptimized
+                                                    />
+                                                </div>
+                                            )}
+
+                                            <div className="fb-card-actions">
+                                                {post.fbLink && (
+                                                    <a
+                                                        href={post.fbLink}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        aria-label={`View original Facebook post from ${source}`}
+                                                        className="fb-action-btn focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300"
+                                                    >
+                                                        <ExternalLink size={16} aria-hidden="true" />
+                                                        View on Facebook
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </article>
+                                    );
+                                })}
+                            </div>
+
+                            {hasMore && (
+                                <div className="mt-8 text-center">
+                                    <button
+                                        type="button"
+                                        onClick={() => setLimit((current) => current + PAGE_STEP)}
+                                        className="btn-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300"
+                                        aria-label="Load more news updates"
+                                    >
+                                        Load more
+                                    </button>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </div>
-            </section >
+            </section>
         </>
     );
 }

@@ -7,12 +7,14 @@ import { getAuthorizedUsers } from '@/lib/auth';
 import { appendSheetData, getSheetData, updateSheetCell } from '@/lib/sheets';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
+import { formatPhtStorageTimestamp } from '@/lib/date-time';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { buildTicketStatusHistoryMessage, isTicketStatusHistoryMessage, lookupTicketByIdForOwner, TICKET_COLS } from '@/lib/tickets';
 import { deriveEffectivePortalRole, hasLeaderPrivilege } from '@/lib/portal-mode';
 import { uploadTicketAttachmentToDrive } from '@/lib/google-drive';
-import { emitGrievanceCommentNotifications, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
+import { emitGrievanceCommentNotifications, processGrievanceNotificationQueue, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
 import { triggerTicketQueueInBackground } from '@/lib/queue-trigger';
+import { safeProcessImmediateNotifications } from '@/lib/immediate-notification-processing';
 
 const COMMENTS_TAB = 'Ticket_Comments_Appeals';
 const COMMENTS_RANGE = `${COMMENTS_TAB}!A2:H`;
@@ -76,25 +78,6 @@ function getTicketSpreadsheetId(): string {
 function isTerminalAppealStatus(value: unknown): boolean {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized === 'closed' || normalized === 'rejected' || normalized === 'resolved';
-}
-
-function toPHTString(isoUtc: string): string {
-    const date = new Date(isoUtc);
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Manila',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
-
-    const parts = formatter.formatToParts(date);
-    const byType = (type: Intl.DateTimeFormatPartTypes): string => parts.find((part) => part.type === type)?.value || '';
-
-    return `${byType('year')}-${byType('month')}-${byType('day')} ${byType('hour')}:${byType('minute')}:${byType('second')} PHT`;
 }
 
 function parseCommentTimestamp(value: string): number {
@@ -409,7 +392,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const spreadsheetId = getTicketSpreadsheetId();
         const statusTransitioned = await transitionTicketToAppealedIfNeeded(spreadsheetId, ticketId, parsed.data.isAppeal);
 
-        const timestamp = toPHTString(new Date().toISOString());
+        const timestamp = formatPhtStorageTimestamp(new Date());
         const comment = {
             commentId: generateCommentId(),
             ticketId,
@@ -441,13 +424,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 optionalUpdateDestinationStatus: String(ticketRow[TICKET_COLS.OPTIONAL_UPDATE_DESTINATION_STATUS] || '').trim(),
             });
 
-            await emitGrievanceCommentNotifications({
-                queue: {
-                    spreadsheetId,
-                    queueTab: TICKET_NOTIFICATION_QUEUE_SHEET_TAB,
-                    queueRange: TICKET_NOTIFICATION_QUEUE_RANGE,
-                    queueAppendRange: TICKET_NOTIFICATION_QUEUE_APPEND_RANGE,
-                },
+            const grievanceNotificationQueue = {
+                spreadsheetId,
+                queueTab: TICKET_NOTIFICATION_QUEUE_SHEET_TAB,
+                queueRange: TICKET_NOTIFICATION_QUEUE_RANGE,
+                queueAppendRange: TICKET_NOTIFICATION_QUEUE_APPEND_RANGE,
+            };
+
+            const notificationIds = await emitGrievanceCommentNotifications({
+                queue: grievanceNotificationQueue,
                 ticketId,
                 category: String(ticketRow[TICKET_COLS.CATEGORY] || '').trim(),
                 subject: String(ticketRow[TICKET_COLS.SUBJECT] || '').trim(),
@@ -463,10 +448,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 authorRole,
                 isAppeal: comment.isAppeal,
             });
-        }
 
-        // Kick off queue processing immediately in the background (fire-and-forget).
-        triggerTicketQueueInBackground();
+            await safeProcessImmediateNotifications({
+                queueName: 'ticket comment',
+                notificationIds,
+                processQueue: (options) => processGrievanceNotificationQueue(grievanceNotificationQueue, options),
+                triggerFallback: triggerTicketQueueInBackground,
+            });
+        }
 
         return withNoStore(NextResponse.json({
             success: true,

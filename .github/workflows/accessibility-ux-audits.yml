@@ -1,0 +1,88 @@
+name: Accessibility and UX Audits
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      audit_base_url:
+        description: Optional deployed base URL to audit instead of the local CI build
+        required: false
+        type: string
+      audit_routes:
+        description: Comma-separated route list, such as /,/transparency,/services
+        required: false
+        default: /,/services,/services/grievance,/services/proposals,/transparency,/hub,/directory
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+  NEXTAUTH_URL: http://127.0.0.1:3000
+  NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+  AUTH_SECRET: ci-accessibility-audit-secret
+  NEXTAUTH_SECRET: ci-accessibility-audit-secret
+  AUDIT_A11Y_IMPACT: serious
+
+jobs:
+  audits:
+    name: WCAG + Lighthouse Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      AUDIT_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.audit_base_url || '' }}
+      AUDIT_ROUTES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.audit_routes || '/,/services,/services/grievance,/services/proposals,/transparency,/hub,/directory' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build local app
+        if: ${{ env.AUDIT_BASE_URL == '' }}
+        run: npm run build
+
+      - name: Lighthouse CI
+        run: npm run audit:lighthouse
+
+      - name: Start local app for axe scan
+        if: ${{ env.AUDIT_BASE_URL == '' }}
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3000 > next-audit.log 2>&1 &
+          echo $! > next-audit.pid
+          npx wait-on http://127.0.0.1:3000
+
+      - name: axe WCAG route scan
+        run: npm run audit:a11y
+
+      - name: Stop local app
+        if: ${{ always() && env.AUDIT_BASE_URL == '' }}
+        run: |
+          if [ -f next-audit.pid ]; then
+            kill "$(cat next-audit.pid)" || true
+          fi
+
+      - name: Upload audit artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: accessibility-ux-audit-artifacts
+          path: |
+            artifacts/
+            next-audit.log
+          if-no-files-found: ignore

@@ -360,7 +360,7 @@ export default function GrievancePage() {
                                         <span className="text-sm font-medium text-white">Receive optional updates anonymously</span>
                                     </label>
                                     <p className="mt-2 text-xs text-slate-400">
-                                        This contact channel is separate from your identity and requires officer verification before updates can be delivered.
+                                        This contact channel is separate from your identity and will be used for case updates without exposing your institutional account.
                                     </p>
 
                                     {wantsAnonymousUpdates && (
@@ -554,6 +554,12 @@ export default function GrievancePage() {
                     {/* Section 3: Supporting Documents */}
                     <div className="space-y-4 pt-6 border-t border-white/10">
                         <h3 className="portal-eyebrow text-rtu-gold">3. Supporting Evidence</h3>
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-100/90">
+                            <p className="font-semibold text-amber-200 mb-2">Submit evidence whenever possible.</p>
+                            <p className="leading-relaxed">
+                                A grievance is easier to assess when it can establish a prima facie case, meaning there is enough initial evidence to show the complaint is credible on its face. Without evidence, the council may need to rely on similar submissions from other students, witness accounts, or later corroboration before it can formally acknowledge and act on the matter.
+                            </p>
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-medium mb-1 text-slate-400">Reference Format</label>

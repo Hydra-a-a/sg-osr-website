@@ -96,6 +96,9 @@ testing-rtu-osr-website-*.json
 
 # Local/internal artifacts
 .audit/
+/artifacts/
+/scratch/
+/.anti-ai-design/
 
 # Local release scratch artifacts
 cmp-*.txt
@@ -104,6 +107,7 @@ temp-proposal.pdf
 portal_mode_auth_test.log
 launch_final_check.md
 email_system_technical.md
+implementation_plan*.md
 
 # Sensitive credential files
 *.key

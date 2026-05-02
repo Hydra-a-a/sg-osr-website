@@ -37,6 +37,21 @@ function parseAuthOriginFromEnv(): URL | null {
     }
 }
 
+function parseProductionAuthOrigin(): URL | null {
+    const vercelUrl = String(process.env.VERCEL_URL || '').trim();
+    if (vercelUrl) {
+        const normalized = vercelUrl.startsWith('http') ? vercelUrl : `https://${vercelUrl}`;
+
+        try {
+            return new URL(normalized);
+        } catch {
+            // Fall through to the explicit env values below.
+        }
+    }
+
+    return parseAuthOriginFromEnv();
+}
+
 function getAuthSecret(): string | undefined {
     const rawSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
     const normalized = rawSecret?.trim();
@@ -48,7 +63,7 @@ function getConfiguredAuthOriginValidationError(): string | null {
         return null;
     }
 
-    const parsedUrl = parseAuthOriginFromEnv();
+    const parsedUrl = parseProductionAuthOrigin();
     if (!parsedUrl) {
         return 'NEXTAUTH_URL or AUTH_URL';
     }
@@ -92,7 +107,14 @@ function getMissingGoogleAuthConfig(): string[] {
 function validateAuthUrlSafety() {
     if (process.env.NODE_ENV !== 'production') return;
 
-    const parsedUrl = parseAuthOriginFromEnv();
+    // Next.js evaluates route modules during the production build. A hard throw
+    // here would break CI/CD builds before the runtime environment is actually
+    // available, so keep the strict enforcement for live startup only.
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+        return;
+    }
+
+    const parsedUrl = parseProductionAuthOrigin();
     if (!parsedUrl) {
         console.warn('[Auth] NEXTAUTH_URL/AUTH_URL is not set in production. Falling back to trusted request host resolution.');
         return;

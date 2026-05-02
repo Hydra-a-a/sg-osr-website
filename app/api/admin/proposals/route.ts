@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
+import { formatPhtStorageTimestamp } from '@/lib/date-time';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { PORTAL_MODE_COOKIE, deriveEffectivePortalRole } from '@/lib/portal-mode';
@@ -15,8 +16,9 @@ import {
     mapProposalRow,
     resolveProposalsSpreadsheetId,
 } from '@/lib/proposals';
-import { emitProposalAdminUpdateNotifications } from '@/lib/proposal-notifications';
+import { emitProposalAdminUpdateNotifications, processProposalNotifications } from '@/lib/proposal-notifications';
 import { triggerProposalQueueInBackground } from '@/lib/queue-trigger';
+import { safeProcessImmediateNotifications } from '@/lib/immediate-notification-processing';
 import { uploadProposalAttachmentToDrive } from '@/lib/google-drive';
 
 // enqueueProposalNotificationEvent is superseded by emitProposalAdminUpdateNotifications.
@@ -61,26 +63,6 @@ interface ProposalRow {
 function withNoStore(response: NextResponse): NextResponse {
     response.headers.set('Cache-Control', 'no-store');
     return response;
-}
-
-function toPHTString(isoUtc: string): string {
-    const date = new Date(isoUtc);
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Manila',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
-
-    const parts = formatter.formatToParts(date);
-    const byType = (type: Intl.DateTimeFormatPartTypes): string =>
-        parts.find((part) => part.type === type)?.value || '';
-
-    return `${byType('year')}-${byType('month')}-${byType('day')} ${byType('hour')}:${byType('minute')}:${byType('second')} PHT`;
 }
 
 async function requireLeaderOrOfficerSession(request: NextRequest) {
@@ -183,7 +165,7 @@ export async function PATCH(request: NextRequest) {
 
         const { spreadsheetId } = resolveProposalsSpreadsheetId();
         const actor = String(session.user.email || '').trim().toLowerCase();
-        const nowPht = toPHTString(new Date().toISOString());
+        const nowPht = formatPhtStorageTimestamp(new Date());
         const currentProposal = await lookupProposalByRowNumber(parsed.data.rowNumber);
 
         if (!currentProposal) {
@@ -284,13 +266,15 @@ export async function PATCH(request: NextRequest) {
                 });
             }
 
-            await emitProposalAdminUpdateNotifications({
-                queue: {
-                    spreadsheetId,
-                    queueTab: PROPOSAL_NOTIFICATION_QUEUE_TAB,
-                    queueRange: PROPOSAL_NOTIFICATION_QUEUE_RANGE,
-                    queueAppendRange: PROPOSAL_NOTIFICATION_QUEUE_APPEND_RANGE,
-                },
+            const proposalNotificationQueue = {
+                spreadsheetId,
+                queueTab: PROPOSAL_NOTIFICATION_QUEUE_TAB,
+                queueRange: PROPOSAL_NOTIFICATION_QUEUE_RANGE,
+                queueAppendRange: PROPOSAL_NOTIFICATION_QUEUE_APPEND_RANGE,
+            };
+
+            const notificationIds = await emitProposalAdminUpdateNotifications({
+                queue: proposalNotificationQueue,
                 proposalId: currentProposal.proposalId,
                 submitterName: currentProposal.submitterName,
                 submitterEmail: currentProposal.submitterEmail,
@@ -301,8 +285,12 @@ export async function PATCH(request: NextRequest) {
                 updatedBy: actor,
             });
 
-            // Trigger background processing for near-live emails
-            triggerProposalQueueInBackground();
+            await safeProcessImmediateNotifications({
+                queueName: 'proposal admin update',
+                notificationIds,
+                processQueue: (options) => processProposalNotifications(proposalNotificationQueue, options),
+                triggerFallback: triggerProposalQueueInBackground,
+            });
         }
 
         return withNoStore(NextResponse.json({

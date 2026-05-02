@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { ArrowRight, FileText, FolderKanban, Landmark, Search, ShieldCheck, Users } from 'lucide-react';
 import Hero from '@/components/Hero';
+import AnnouncementsPanel from '@/components/AnnouncementsPanel';
+import { fetchActiveAnnouncements } from '@/lib/announcements-server';
+import OSRAnnouncementsSection from '@/components/OSRAnnouncementsSection';
+import { getOSRAnnouncementSlides } from '@/lib/osr-announcements';
 
 const primaryActions = [
     {
@@ -29,13 +33,13 @@ const primaryActions = [
 const structureActions = [
     {
         title: 'Student Government',
-        description: 'Open the new route tree for councils, commissions, and the Office of the Student Regent.',
+        description: 'Review councils, commissions, and the Office of the Student Regent from one organized section.',
         href: '/student-government',
         icon: Landmark,
     },
     {
         title: 'Directory',
-        description: 'Find the correct office, council, or student-government contact before you file a request.',
+        description: 'Find the correct office, council, or student-government contact before starting a request.',
         href: '/directory',
         icon: Search,
     },
@@ -47,7 +51,10 @@ const structureActions = [
     },
 ];
 
-export default function Home() {
+export default async function Home() {
+    const announcements = await fetchActiveAnnouncements(4).catch(() => []);
+    const osrSlides = await getOSRAnnouncementSlides(3).catch(() => []);
+
     return (
         <>
             <Hero />
@@ -55,29 +62,34 @@ export default function Home() {
             <section className="portal-section-dark section">
                 <div className="portal-noise-overlay" aria-hidden="true" />
                 <div className="container-main relative z-10">
-                    <div className="max-w-3xl">
+                    <div>
                         <span className="portal-kicker">Core Actions</span>
-                        <h2 className="mt-4 text-3xl font-bold text-white md:text-4xl">Start with the actual task.</h2>
-                        <p className="mt-4 portal-lead">
-                            The landing page now stays aligned with the services visual system and keeps the three highest-value paths in front:
-                            casework, proposals, and transparency.
+                        <h2 className="home-section-title mt-4">
+                            Start with <span className="home-section-title-accent">the actual task.</span>
+                        </h2>
+                        <p className="home-section-lead mt-4">
+                            Open the main service paths first: casework, proposals, and transparency records.
                         </p>
                     </div>
 
-                    <div className="mt-10 grid gap-6 lg:grid-cols-3">
-                        {primaryActions.map((card) => {
+                    <div className="home-actions-layout mt-10">
+                        {primaryActions.map((card, index) => {
                             const Icon = card.icon;
+                            const articleClass = index === 0 ? 'home-feature-primary' : 'home-feature-secondary';
 
                             return (
-                                <article key={card.title} className="portal-panel portal-accent-card p-7 md:p-8" data-accent={card.accent}>
-                                    <div className="portal-accent-chip mb-6 flex h-14 w-14 items-center justify-center rounded-2xl" data-accent={card.accent}>
-                                        <Icon size={28} />
+                                <article key={card.title} className={articleClass} data-accent={card.accent}>
+                                    <div className="home-feature-icon">
+                                        <Icon size={24} />
                                     </div>
-                                    <h3 className="text-2xl font-bold text-white">{card.title}</h3>
-                                    <p className="mt-4 text-sm leading-7 text-slate-300">{card.description}</p>
-                                    <Link href={card.href} className="portal-accent-link mt-6 inline-flex items-center gap-2 text-sm font-semibold no-underline" data-accent={card.accent}>
-                                        Open module <ArrowRight size={16} />
-                                    </Link>
+                                    <div>
+                                        <p className="home-feature-kicker">{index === 0 ? 'Priority Path' : 'Service Path'}</p>
+                                        <h3 className="home-feature-title">{card.title}</h3>
+                                        <p className="home-feature-copy">{card.description}</p>
+                                        <Link href={card.href} className="home-feature-link inline-flex items-center gap-2 no-underline">
+                                            Open module <ArrowRight size={16} />
+                                        </Link>
+                                    </div>
                                 </article>
                             );
                         })}
@@ -87,15 +99,17 @@ export default function Home() {
 
             <section className="portal-section-slate section">
                 <div className="portal-noise-overlay" aria-hidden="true" />
-                <div className="container-main relative z-10 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-                    <div className="portal-panel p-7 md:p-10">
-                        <span className="portal-kicker">New Information Architecture</span>
-                        <h2 className="mt-4 text-3xl font-bold text-white md:text-4xl">Student Government is now a first-class section.</h2>
-                        <p className="mt-4 portal-lead">
-                            Councils, constitutional commissions, and the OSR now have a dedicated route tree instead of being buried in a
-                            catch-all page. The home route keeps that structure visible while still prioritizing services.
+                <div className="container-main relative z-10 grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+                    <div className="home-editorial-panel">
+                        <span className="portal-kicker">Student Government Navigation</span>
+                        <h2 className="home-section-title mt-4">
+                            Access <span className="home-section-title-accent">official student-government sections.</span>
+                        </h2>
+                        <p className="home-section-lead mt-4">
+                            Use this area to open council pages, constitutional commission information, and the Office of the Student Regent
+                            without leaving the main portal structure.
                         </p>
-                        <div className="mt-8 flex flex-wrap gap-4">
+                        <div className="home-editorial-actions mt-8 flex flex-wrap gap-4">
                             <Link href="/student-government" className="btn-primary no-underline">
                                 Open Student Government
                             </Link>
@@ -105,19 +119,19 @@ export default function Home() {
                         </div>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="home-nav-list">
                         {structureActions.map((card) => {
                             const Icon = card.icon;
 
                             return (
-                                <Link key={card.title} href={card.href} className="portal-link-card p-6">
+                                <Link key={card.title} href={card.href} className="home-nav-row no-underline">
                                     <div className="flex items-start gap-4">
-                                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-[var(--rtu-gold-light)]">
-                                            <Icon size={22} />
+                                        <div className="home-nav-icon-wrap">
+                                            <Icon className="h-5 w-5" aria-hidden="true" />
                                         </div>
                                         <div>
-                                            <h3 className="text-lg font-semibold text-white">{card.title}</h3>
-                                            <p className="mt-2 text-sm leading-7 text-slate-300">{card.description}</p>
+                                            <h3 className="home-nav-title">{card.title}</h3>
+                                            <p className="home-nav-copy">{card.description}</p>
                                         </div>
                                     </div>
                                 </Link>
@@ -126,6 +140,8 @@ export default function Home() {
                     </div>
                 </div>
             </section>
+            <AnnouncementsPanel announcements={announcements} />
+            <OSRAnnouncementsSection slides={osrSlides} compact />
         </>
     );
 }

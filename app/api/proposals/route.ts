@@ -5,6 +5,7 @@ import { getSpreadsheetSheetTitles, appendSheetData } from '@/lib/sheets';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { deriveEffectivePortalRole } from '@/lib/portal-mode';
+import { formatPhtStorageTimestamp } from '@/lib/date-time';
 import { getClientIp, redactErrorForLog, sanitizeText } from '@/lib/security';
 import {
     PROPOSALS_APPEND_RANGE,
@@ -16,12 +17,24 @@ import {
     listProposalsBySubmitterEmail,
     resolveProposalsSpreadsheetId,
 } from '@/lib/proposals';
-import { emitProposalSubmissionNotifications } from '@/lib/proposal-notifications';
+import { emitProposalSubmissionNotifications, processProposalNotifications } from '@/lib/proposal-notifications';
 import { triggerProposalQueueInBackground } from '@/lib/queue-trigger';
+import { safeProcessImmediateNotifications } from '@/lib/immediate-notification-processing';
+import path from 'path';
 
 const PROPOSAL_NOTIFICATION_QUEUE_TAB = process.env.PROPOSAL_NOTIFICATION_QUEUE_SHEET_TAB || 'Project_Proposal_Notification_Queue';
 const PROPOSAL_NOTIFICATION_QUEUE_RANGE = `${PROPOSAL_NOTIFICATION_QUEUE_TAB}!A2:N`;
 const PROPOSAL_NOTIFICATION_QUEUE_APPEND_RANGE = `${PROPOSAL_NOTIFICATION_QUEUE_TAB}!A1`;
+
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.pdf', '.doc', '.docx']);
+const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
+    'image/png',
+    'image/jpeg',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
 
 function withNoStore(response: NextResponse): NextResponse {
     response.headers.set('Cache-Control', 'no-store');
@@ -32,6 +45,21 @@ function maskId(value: string): string {
     const raw = String(value || '').trim();
     if (raw.length < 10) return raw;
     return `${raw.slice(0, 5)}...${raw.slice(-5)}`;
+}
+
+function validateAttachment(file: File): void {
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+        throw new ApiError(400, 'ATTACHMENT_TOO_LARGE', 'Attachment must be 10MB or smaller.');
+    }
+
+    const extension = path.extname(file.name || '').toLowerCase();
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.has(extension)) {
+        throw new ApiError(400, 'ATTACHMENT_TYPE_NOT_ALLOWED', 'Only PNG, JPG, PDF, DOC, and DOCX files are allowed.');
+    }
+
+    if (file.type && !ALLOWED_ATTACHMENT_MIME_TYPES.has(file.type)) {
+        throw new ApiError(400, 'ATTACHMENT_MIME_NOT_ALLOWED', 'Unsupported attachment MIME type.');
+    }
 }
 
 async function requireLeaderOrOfficerSession(request: NextRequest) {
@@ -105,9 +133,7 @@ export async function POST(request: NextRequest) {
             return withNoStore(toApiResponse(new ApiError(400, 'INVALID_PAYLOAD', 'Missing required fields or attachment.')));
         }
 
-        if (attachment.size > 10 * 1024 * 1024) {
-            return withNoStore(toApiResponse(new ApiError(400, 'ATTACHMENT_TOO_LARGE', 'Attachment exceeds the 10MB limit.')));
-        }
+        validateAttachment(attachment);
 
         const buffer = Buffer.from(await attachment.arrayBuffer());
         const submitterEmail = session.user.email || '';
@@ -142,7 +168,7 @@ export async function POST(request: NextRequest) {
             )));
         }
 
-        const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' });
+        const timestamp = formatPhtStorageTimestamp(new Date());
         const trackingToken = generateProposalTrackingToken();
         const rowData = [
             timestamp,
@@ -166,13 +192,14 @@ export async function POST(request: NextRequest) {
         const proposalId = rowNumber ? formatProposalId(rowNumber) : '';
 
         if (proposalId) {
-            await emitProposalSubmissionNotifications({
-                queue: {
-                    spreadsheetId,
-                    queueTab: PROPOSAL_NOTIFICATION_QUEUE_TAB,
-                    queueRange: PROPOSAL_NOTIFICATION_QUEUE_RANGE,
-                    queueAppendRange: PROPOSAL_NOTIFICATION_QUEUE_APPEND_RANGE,
-                },
+            const proposalNotificationQueue = {
+                spreadsheetId,
+                queueTab: PROPOSAL_NOTIFICATION_QUEUE_TAB,
+                queueRange: PROPOSAL_NOTIFICATION_QUEUE_RANGE,
+                queueAppendRange: PROPOSAL_NOTIFICATION_QUEUE_APPEND_RANGE,
+            };
+            const notificationIds = await emitProposalSubmissionNotifications({
+                queue: proposalNotificationQueue,
                 proposalId,
                 submitterName,
                 submitterEmail,
@@ -184,8 +211,12 @@ export async function POST(request: NextRequest) {
                 submittedAt: new Date().toISOString(),
             });
 
-            // Trigger background processing for near-live emails
-            triggerProposalQueueInBackground();
+            await safeProcessImmediateNotifications({
+                queueName: 'proposal',
+                notificationIds,
+                processQueue: (options) => processProposalNotifications(proposalNotificationQueue, options),
+                triggerFallback: triggerProposalQueueInBackground,
+            });
         }
 
         return withNoStore(NextResponse.json({

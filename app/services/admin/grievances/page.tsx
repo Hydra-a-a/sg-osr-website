@@ -631,11 +631,11 @@ export default function AdminGrievancesPage() {
 
                                         {selectedAttachmentUrl ? (
                                             <>
-                                                <div className="rounded-lg overflow-hidden border border-white/10 bg-[#0a1a31]">
+                                                <div className="pdf-embed-shell h-52">
                                                     <iframe
                                                         title="Attachment preview"
                                                         src={toGooglePreviewUrl(selectedAttachmentUrl)}
-                                                        className="w-full h-52"
+                                                        className="h-52"
                                                     />
                                                 </div>
                                                 <a

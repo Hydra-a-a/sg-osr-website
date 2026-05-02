@@ -19,7 +19,6 @@ export const TransparencyGuideSchema = z.object({
     canEmbed: z.boolean().default(false),
     mimeType: z.literal('application/pdf'),
     sortOrder: z.number().int().min(0),
-    updatedAt: z.string(),
 });
 
 export type TransparencyGuide = z.infer<typeof TransparencyGuideSchema>;

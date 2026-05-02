@@ -434,6 +434,26 @@ export default function DirectoryPage() {
     const [sortMode, setSortMode] = useState<SortMode>('relevance');
     const [prefsLoaded, setPrefsLoaded] = useState(false);
     const [showRestoredHint, setShowRestoredHint] = useState(false);
+    const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
+    const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+
+    const handleImageLoad = (imageId: string) => {
+        setLoadedImages((prev) => {
+            if (prev.has(imageId)) return prev;
+            const next = new Set(prev);
+            next.add(imageId);
+            return next;
+        });
+    };
+
+    const handleImageError = (imageId: string) => {
+        setFailedImages((prev) => {
+            if (prev.has(imageId)) return prev;
+            const next = new Set(prev);
+            next.add(imageId);
+            return next;
+        });
+    };
 
     useEffect(() => {
         try {
@@ -769,8 +789,8 @@ export default function DirectoryPage() {
                                                             : { type: 'spring', stiffness: 420, damping: 34, mass: 0.55 }}
                                                     />
                                                 )}
-                                                <span className="relative z-10 md:hidden">{modeButton.shortLabel}</span>
-                                                <span className="relative z-10 hidden md:inline">{modeButton.label}</span>
+                                                <span className="directory-mode-label-short relative z-10 md:hidden">{modeButton.shortLabel}</span>
+                                                <span className="directory-mode-label-full relative z-10 hidden md:inline">{modeButton.label}</span>
                                             </button>
                                         );
                                     })}
@@ -921,8 +941,11 @@ export default function DirectoryPage() {
                                         <div
                                             className={`directory-avatar-gradient ${viewMode === 'list' ? 'mb-0 h-12 w-12 shrink-0' : 'mb-5 h-[4.5rem] w-[4.5rem]'} rounded-full flex items-center justify-center text-white font-bold text-xl`}
                                         >
-                                            {getSafeExternalHref(officer.logoUrl) ? (
-                                                <div className="relative w-full h-full rounded-full overflow-hidden bg-white skeleton">
+                                            {getSafeExternalHref(officer.logoUrl) && !failedImages.has(officer.id) ? (
+                                                <div className="relative w-full h-full rounded-full overflow-hidden bg-white">
+                                                    {!loadedImages.has(officer.id) && (
+                                                        <div className="absolute inset-0 skeleton" />
+                                                    )}
                                                     <Image
                                                         src={getSafeExternalHref(officer.logoUrl) as string}
                                                         alt={`${officer.name} logo`}
@@ -930,6 +953,8 @@ export default function DirectoryPage() {
                                                         sizes={viewMode === 'list' ? '48px' : '64px'}
                                                         unoptimized
                                                         className="object-contain p-1"
+                                                        onLoad={() => handleImageLoad(officer.id)}
+                                                        onError={() => handleImageError(officer.id)}
                                                     />
                                                 </div>
                                             ) : (
@@ -956,7 +981,7 @@ export default function DirectoryPage() {
                                             )}
                                         </div>
 
-                                        <div className={`flex flex-wrap gap-2 ${viewMode === 'grid' ? 'mt-6' : 'ml-0 shrink-0 self-start sm:ml-4 sm:self-auto'}`}>
+                                        <div className={`directory-result-actions flex flex-wrap gap-2 ${viewMode === 'grid' ? 'mt-6' : 'ml-0 w-full self-start sm:ml-4 sm:w-auto sm:shrink-0 sm:self-auto'}`}>
                                             {officer.email && (
                                                 <a
                                                     href={`mailto:${officer.email}`}
@@ -1003,8 +1028,11 @@ export default function DirectoryPage() {
                                         <div
                                             className={`directory-avatar-gradient ${viewMode === 'list' ? 'mb-0 h-12 w-12 shrink-0' : 'mb-5 h-[4.5rem] w-[4.5rem]'} rounded-full flex items-center justify-center text-white`}
                                         >
-                                            {getSafeExternalHref(office.logoUrl) ? (
-                                                <div className="relative w-full h-full rounded-full overflow-hidden bg-white skeleton">
+                                            {getSafeExternalHref(office.logoUrl) && !failedImages.has(office.id) ? (
+                                                <div className="relative w-full h-full rounded-full overflow-hidden bg-white">
+                                                    {!loadedImages.has(office.id) && (
+                                                        <div className="absolute inset-0 skeleton" />
+                                                    )}
                                                     <Image
                                                         src={getSafeExternalHref(office.logoUrl) as string}
                                                         alt={`${office.officeName} logo`}
@@ -1012,6 +1040,8 @@ export default function DirectoryPage() {
                                                         sizes={viewMode === 'list' ? '48px' : '64px'}
                                                         unoptimized
                                                         className="object-contain p-1"
+                                                        onLoad={() => handleImageLoad(office.id)}
+                                                        onError={() => handleImageError(office.id)}
                                                     />
                                                 </div>
                                             ) : (

@@ -4,13 +4,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
+import { formatPhtStorageTimestamp } from '@/lib/date-time';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { PORTAL_MODE_COOKIE, deriveEffectivePortalRole } from '@/lib/portal-mode';
 import { TICKET_COLS, appendGrievanceComment, buildTicketStatusHistoryMessage, generateGrievanceCommentId } from '@/lib/tickets';
 import type { TicketStatus } from '@/lib/ticket-constants';
-import { emitGrievanceAdminUpdateNotifications, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
+import { emitGrievanceAdminUpdateNotifications, processGrievanceNotificationQueue, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
 import { triggerTicketQueueInBackground } from '@/lib/queue-trigger';
+import { safeProcessImmediateNotifications } from '@/lib/immediate-notification-processing';
 import { uploadTicketAttachmentToDrive } from '@/lib/google-drive';
 
 const TICKET_RANGE = 'Tickets!A2:AF';
@@ -68,26 +70,6 @@ interface AdminTicketRow {
 function withNoStore(response: NextResponse): NextResponse {
     response.headers.set('Cache-Control', 'no-store');
     return response;
-}
-
-function toPHTString(isoUtc: string): string {
-    const date = new Date(isoUtc);
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Manila',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
-
-    const parts = formatter.formatToParts(date);
-    const byType = (type: Intl.DateTimeFormatPartTypes): string =>
-        parts.find((part) => part.type === type)?.value || '';
-
-    return `${byType('year')}-${byType('month')}-${byType('day')} ${byType('hour')}:${byType('minute')}:${byType('second')} PHT`;
 }
 
 function getTicketSpreadsheetId(): string {
@@ -242,7 +224,7 @@ export async function PATCH(request: NextRequest) {
         const sheetRowNumber = rowIndex + 2;
         const actor = String(session.user.email || '').trim().toLowerCase();
         const nowIso = new Date().toISOString();
-        const nowPht = toPHTString(nowIso);
+        const nowPht = formatPhtStorageTimestamp(nowIso);
         const updates: Array<{ range: string; values: string[][] }> = [];
         const currentStatus = String(currentRow[TICKET_COLS.STATUS] || '').trim() as TicketStatus;
         const currentResolutionNotes = String(currentRow[TICKET_COLS.RESOLUTION_NOTES] || '').trim();
@@ -365,13 +347,15 @@ export async function PATCH(request: NextRequest) {
                 });
             }
 
-            await emitGrievanceAdminUpdateNotifications({
-                queue: {
-                    spreadsheetId,
-                    queueTab: TICKET_NOTIFICATION_QUEUE_SHEET_TAB,
-                    queueRange: TICKET_NOTIFICATION_QUEUE_RANGE,
-                    queueAppendRange: TICKET_NOTIFICATION_QUEUE_APPEND_RANGE,
-                },
+            const grievanceNotificationQueue = {
+                spreadsheetId,
+                queueTab: TICKET_NOTIFICATION_QUEUE_SHEET_TAB,
+                queueRange: TICKET_NOTIFICATION_QUEUE_RANGE,
+                queueAppendRange: TICKET_NOTIFICATION_QUEUE_APPEND_RANGE,
+            };
+
+            const notificationIds = await emitGrievanceAdminUpdateNotifications({
+                queue: grievanceNotificationQueue,
                 ticketId: normalizedTargetId,
                 recipientEmail,
                 actorId: actor,
@@ -386,10 +370,14 @@ export async function PATCH(request: NextRequest) {
                 publishNote: update.publishNote,
                 updatedAt: nowIso,
             });
-        }
 
-        // Kick off queue processing immediately in the background (fire-and-forget).
-        triggerTicketQueueInBackground();
+            await safeProcessImmediateNotifications({
+                queueName: 'ticket admin update',
+                notificationIds,
+                processQueue: (options) => processGrievanceNotificationQueue(grievanceNotificationQueue, options),
+                triggerFallback: triggerTicketQueueInBackground,
+            });
+        }
 
         return withNoStore(NextResponse.json({
             success: true,
