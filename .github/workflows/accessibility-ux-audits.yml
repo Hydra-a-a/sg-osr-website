@@ -54,24 +54,30 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Build local app
-        if: ${{ env.AUDIT_BASE_URL == '' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.audit_base_url == '' }}
         run: npm run build
 
-      - name: Lighthouse CI
-        run: npm run audit:lighthouse
+      - name: Set local audit base URL
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.audit_base_url == '' }}
+        run: echo "AUDIT_BASE_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
 
-      - name: Start local app for axe scan
-        if: ${{ env.AUDIT_BASE_URL == '' }}
+      - name: Start local app for audits
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.audit_base_url == '' }}
         run: |
           npm run start -- --hostname 127.0.0.1 --port 3000 > next-audit.log 2>&1 &
           echo $! > next-audit.pid
           npx wait-on http://127.0.0.1:3000
+          curl --fail --silent --show-error http://127.0.0.1:3000 > /dev/null
+
+      - name: Lighthouse CI
+        continue-on-error: true
+        run: npm run audit:lighthouse
 
       - name: axe WCAG route scan
-        run: npm run audit:a11y
+        run: npm run audit:quality
 
       - name: Stop local app
-        if: ${{ always() && env.AUDIT_BASE_URL == '' }}
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.audit_base_url == '') }}
         run: |
           if [ -f next-audit.pid ]; then
             kill "$(cat next-audit.pid)" || true

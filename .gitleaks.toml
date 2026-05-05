@@ -1,0 +1,5 @@
+[allowlist]
+description = "Allow documented placeholder values in example env files"
+regexes = [
+  '''(?m)^GOOGLE_MAPS_API_KEY=""$''',
+]
