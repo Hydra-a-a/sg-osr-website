@@ -22,8 +22,8 @@ permissions:
 
 env:
   NEXT_TELEMETRY_DISABLED: '1'
-  NEXTAUTH_URL: https://localhost:3000
-  NEXT_PUBLIC_APP_URL: https://localhost:3000
+  NEXTAUTH_URL: https://example.com
+  NEXT_PUBLIC_APP_URL: https://example.com
   AUTH_SECRET: ci-accessibility-audit-secret
   NEXTAUTH_SECRET: ci-accessibility-audit-secret
   AUDIT_A11Y_IMPACT: serious
