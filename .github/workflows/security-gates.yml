@@ -71,7 +71,8 @@ jobs:
             fi
           done
           if [[ "$found" -eq 0 ]]; then
-            echo "::warning::No security regression tests were found in tests/. This run validated lint, secret scanning, Trivy, and SBOM only."
+            echo "::error::No security regression tests were found in tests/. Add the expected test files or adjust the workflow list."
+            exit 1
           fi
 
       - name: Production dependency vulnerability gate
