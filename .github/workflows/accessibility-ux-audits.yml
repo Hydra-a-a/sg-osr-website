@@ -80,7 +80,12 @@ jobs:
         run: npm run audit:lighthouse
 
       - name: axe WCAG route scan
-        run: npm run audit:quality
+        run: |
+          if npm run | grep -q "audit:quality"; then
+            npm run audit:quality
+          else
+            npm run audit:a11y
+          fi
 
       - name: Stop local app
         if: ${{ always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.audit_base_url == '') }}
