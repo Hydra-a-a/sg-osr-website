@@ -936,7 +936,7 @@ export default function DirectoryPage() {
                                 {mode !== 'offices' && sortedDisplayedOfficers.map((officer, idx) => (
                                     <div
                                         key={officer.id || idx}
-                                        className={`portal-panel directory-result-card sg-hover-card ${viewMode === 'list' ? 'p-6 flex-row items-start gap-4 sm:items-center sm:gap-6' : 'directory-result-card-grid p-7 md:p-8 flex-col'} flex content-visibility-auto`}
+                                        className={`portal-panel directory-result-card sg-hover-card ${viewMode === 'list' ? 'p-6 flex-row flex-wrap items-start gap-4 sm:flex-nowrap sm:items-center sm:gap-6' : 'directory-result-card-grid p-7 md:p-8 flex-col'} flex content-visibility-auto`}
                                     >
                                         <div
                                             className={`directory-avatar-gradient ${viewMode === 'list' ? 'mb-0 h-12 w-12 shrink-0' : 'mb-5 h-[4.5rem] w-[4.5rem]'} rounded-full flex items-center justify-center text-white font-bold text-xl`}
@@ -966,7 +966,7 @@ export default function DirectoryPage() {
                                             <span className={`${directoryBadgeBaseClass} bg-sky-400/12 text-sky-200 border-white/10`}>
                                                 {officer.category || officerBadge}
                                             </span>
-                                            <h3 className="font-semibold text-white break-words leading-snug text-[1.15rem]">
+                                            <h3 className="font-semibold text-white break-normal leading-snug text-[1.15rem]">
                                                 {officer.name}
                                             </h3>
                                             {officer.email && (
@@ -1023,7 +1023,7 @@ export default function DirectoryPage() {
                                 {mode === 'offices' && sortedFilteredOffices.map((office, idx) => (
                                     <div
                                         key={office.id || idx}
-                                        className={`portal-panel directory-result-card sg-hover-card ${viewMode === 'list' ? 'p-6 flex-row items-start gap-4 sm:items-center sm:gap-6' : 'directory-result-card-grid p-7 md:p-8 flex-col'} flex content-visibility-auto`}
+                                        className={`portal-panel directory-result-card sg-hover-card ${viewMode === 'list' ? 'p-6 flex-row flex-wrap items-start gap-4 sm:flex-nowrap sm:items-center sm:gap-6' : 'directory-result-card-grid p-7 md:p-8 flex-col'} flex content-visibility-auto`}
                                     >
                                         <div
                                             className={`directory-avatar-gradient ${viewMode === 'list' ? 'mb-0 h-12 w-12 shrink-0' : 'mb-5 h-[4.5rem] w-[4.5rem]'} rounded-full flex items-center justify-center text-white`}
@@ -1053,7 +1053,7 @@ export default function DirectoryPage() {
                                             <span className={`${directoryBadgeBaseClass} bg-amber-300/12 text-amber-100 border-white/10`}>
                                                 University Office
                                             </span>
-                                            <h3 className="font-semibold text-white break-words leading-snug text-[1.15rem]">
+                                            <h3 className="font-semibold text-white break-normal leading-snug text-[1.15rem]">
                                                 {office.officeName}
                                             </h3>
 

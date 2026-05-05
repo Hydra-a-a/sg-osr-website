@@ -265,8 +265,8 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
             <nav className={`portal-nav-shell relative transition-[background,box-shadow] duration-300 ${scrolled ? 'portal-nav-shell-scrolled' : ''}`}>
                 <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[rgba(247,217,150,0.32)] to-transparent" />
 
-                <div className="container-main flex h-[4.75rem] items-center justify-between">
-                    <Link href="/" className="flex items-center gap-3 no-underline" onClick={() => { setMobileOpen(false); setProfileOpen(false); }}>
+                <div className="container-main flex h-[4.75rem] items-center justify-between gap-3">
+                    <Link href="/" className="flex min-w-0 flex-1 items-center gap-3 pr-1 no-underline" onClick={() => { setMobileOpen(false); setProfileOpen(false); }}>
                         <div className="relative h-11 w-11 overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-[0_14px_35px_-26px_rgba(247,217,150,0.65)]">
                             <Image
                                 src="/images/OSR_LOGO.jpg"
@@ -278,7 +278,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                         </div>
                         <div className="min-w-0">
                             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-slate-400">RTU</p>
-                            <span className="block truncate text-sm font-semibold text-white md:text-base">
+                            <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold text-white md:text-base">
                                 Student Government Portal
                             </span>
                         </div>
@@ -402,7 +402,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
 
                     <button
                         type="button"
-                        className={`${forceMobileLayout ? 'flex' : 'md:hidden flex'} h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white`}
+                        className={`${forceMobileLayout ? 'flex' : 'md:hidden flex'} h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white`}
                         onClick={() => setMobileOpen((open) => !open)}
                         aria-label="Toggle navigation"
                         aria-expanded={mobileOpen}
