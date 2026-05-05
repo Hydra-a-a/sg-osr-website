@@ -62,12 +62,8 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.audit_base_url == '' }}
         run: echo "AUDIT_BASE_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
 
-      - name: Lighthouse CI
-        continue-on-error: true
-        run: npm run audit:lighthouse
-
-      - name: Start local app for axe scan
-        if: ${{ always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.audit_base_url == '') }}
+      - name: Start local app for audits
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.audit_base_url == '' }}
         run: |
           npm run start -- --hostname 127.0.0.1 --port 3000 > next-audit.log 2>&1 &
           echo $! > next-audit.pid
@@ -79,6 +75,10 @@ jobs:
           fi
           npx wait-on --timeout 120000 http://127.0.0.1:3000
           curl --fail --silent --show-error http://127.0.0.1:3000 > /dev/null
+
+      - name: Lighthouse CI
+        continue-on-error: true
+        run: npm run audit:lighthouse
 
       - name: axe WCAG route scan
         if: ${{ always() }}
