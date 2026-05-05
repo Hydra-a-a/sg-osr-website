@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { FileText, Send, CheckCircle, AlertCircle, Search, ArrowRight, BookOpen, UploadCloud, ChevronLeft, ShieldCheck } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { FileText, Send, CheckCircle, AlertCircle, Search, ArrowRight, BookOpen, UploadCloud, ChevronLeft, ShieldCheck, X } from 'lucide-react';
 import {
     CAMPUSES,
     COLLEGE_INSTITUTES,
@@ -65,6 +66,7 @@ export default function GrievancePage() {
     const [attachment, setAttachment] = useState<File | null>(null);
     const [attachmentKind, setAttachmentKind] = useState<AttachmentKind>('document');
     const [attachmentError, setAttachmentError] = useState<string | null>(null);
+    const [pendingSubmitWithoutProof, setPendingSubmitWithoutProof] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [result, setResult] = useState<{
         success: boolean;
@@ -107,9 +109,7 @@ export default function GrievancePage() {
         setAttachmentError(null);
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
+    const submitGrievance = async (allowWithoutProof = false) => {
         if (!isAuthenticated) {
             setResult({ success: false, message: 'Please sign in with your @rtu.edu.ph account to submit this form.' });
             return;
@@ -130,14 +130,10 @@ export default function GrievancePage() {
                 return;
             }
 
-            if (!attachment) {
-                const proceedWithoutProof = window.confirm(
-                    'You are submitting without supporting proof. This may make it harder to establish a prima facie case quickly, and verification may depend on corroborating reports from other students. Do you want to continue?'
-                );
-                if (!proceedWithoutProof) {
-                    setSubmitting(false);
-                    return;
-                }
+            if (!attachment && !allowWithoutProof) {
+                setPendingSubmitWithoutProof(true);
+                setSubmitting(false);
+                return;
             }
 
             if (isAnonymous && wantsAnonymousUpdates) {
@@ -220,6 +216,7 @@ export default function GrievancePage() {
                 setAttachment(null);
                 setAttachmentKind('document');
                 setAttachmentError(null);
+                setPendingSubmitWithoutProof(false);
                 setIsAnonymous(false);
                 setWantsCopy(false);
                 setWantsAnonymousUpdates(false);
@@ -240,6 +237,11 @@ export default function GrievancePage() {
         }
 
         setSubmitting(false);
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        await submitGrievance(false);
     };
 
     return (
@@ -467,10 +469,12 @@ export default function GrievancePage() {
                             {!isAnonymous ? null : <div className="sm:col-span-2 hidden"></div>} {/* Spacer */}
 
                             <div>
-                                <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                <label htmlFor="grievance-campus" className="block text-sm font-medium mb-1.5 text-slate-200">
                                     Campus
                                 </label>
                                 <select
+                                    id="grievance-campus"
+                                    aria-label="Campus"
                                     required
                                     value={formData.campus}
                                     onChange={e => setFormData({ ...formData, campus: e.target.value as Campus })}
@@ -484,10 +488,12 @@ export default function GrievancePage() {
                             </div>
 
                             <div className="sm:col-span-2">
-                                <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                <label htmlFor="grievance-college" className="block text-sm font-medium mb-1.5 text-slate-200">
                                     College / Institute
                                 </label>
                                 <select
+                                    id="grievance-college"
+                                    aria-label="College or Institute"
                                     required
                                     value={formData.college}
                                     onChange={e => setFormData({ ...formData, college: e.target.value as CollegeInstitute })}
@@ -501,10 +507,12 @@ export default function GrievancePage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium mb-1.5 text-slate-200">
+                                <label htmlFor="grievance-category" className="block text-sm font-medium mb-1.5 text-slate-200">
                                     Category
                                 </label>
                                 <select
+                                    id="grievance-category"
+                                    aria-label="Category"
                                     required
                                     value={formData.category}
                                     onChange={e => setFormData({ ...formData, category: e.target.value as GrievanceCategory })}
@@ -562,8 +570,10 @@ export default function GrievancePage() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-xs font-medium mb-1 text-slate-400">Reference Format</label>
+                                <label htmlFor="grievance-reference-format" className="block text-xs font-medium mb-1 text-slate-400">Reference Format</label>
                                 <select
+                                    id="grievance-reference-format"
+                                    aria-label="Reference Format"
                                     value={attachmentKind}
                                     onChange={(e) => {
                                         const nextKind = e.target.value as AttachmentKind;
@@ -717,6 +727,79 @@ export default function GrievancePage() {
                     </div>
                 </motion.form>
             </div>
+            {typeof document !== 'undefined' && createPortal(
+                <AnimatePresence>
+                    {pendingSubmitWithoutProof && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[140] flex items-center justify-center px-4 py-6"
+                        >
+                            <div
+                                className="absolute inset-0 bg-slate-950/78 backdrop-blur-sm"
+                                onClick={() => setPendingSubmitWithoutProof(false)}
+                            />
+                            <motion.div
+                                initial={{ opacity: 0, y: 16, scale: 0.96 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                                transition={{ duration: 0.22, ease: 'easeOut' }}
+                                className="relative z-[141] max-h-[calc(100vh-3rem)] w-full max-w-xl overflow-y-auto rounded-[1.75rem] border border-white/10 bg-[linear-gradient(145deg,rgba(12,22,36,0.92),rgba(11,20,34,0.98))] p-6 shadow-[0_28px_80px_rgba(2,8,23,0.45)]"
+                            >
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-400/25 bg-amber-500/12 text-amber-200">
+                                            <AlertCircle size={18} />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-200/80">Evidence warning</p>
+                                            <h3 className="mt-2 text-xl font-semibold text-white">Submit without proof?</h3>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPendingSubmitWithoutProof(false)}
+                                        className="rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                                        aria-label="Close warning"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+
+                                <div className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+                                    You are submitting without supporting proof. This is allowed, but it may make it harder to establish a prima facie case quickly.
+                                </div>
+
+                                <p className="mt-4 text-sm leading-7 text-slate-300">
+                                    Without evidence, the council may need to rely on corroborating reports from other students, witness accounts, or later supporting records before it can formally acknowledge and act on the grievance.
+                                </p>
+
+                                <div className="mt-6 flex flex-wrap justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPendingSubmitWithoutProof(false)}
+                                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+                                    >
+                                        Go back
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            setPendingSubmitWithoutProof(false);
+                                            await submitGrievance(true);
+                                        }}
+                                        className="rounded-xl border border-amber-400/25 bg-amber-500/90 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
+                                    >
+                                        Continue without proof
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>,
+                document.body
+            )}
         </main>
     );
 }

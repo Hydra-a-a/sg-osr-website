@@ -120,6 +120,19 @@ function formatNavigationTarget(startUrl, finalUrl) {
   return finalUrl && finalUrl !== startUrl ? `${startUrl} -> ${finalUrl}` : startUrl;
 }
 
+function isAuthRedirectTarget(startUrl, finalUrl) {
+  if (!finalUrl || finalUrl === startUrl) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(finalUrl);
+    return parsed.pathname === '/login' && parsed.searchParams.has('callbackUrl');
+  } catch {
+    return false;
+  }
+}
+
 async function ensureOutputDir() {
   const outputDir = path.join(process.cwd(), 'artifacts', 'a11y');
   await fs.mkdir(outputDir, { recursive: true });
@@ -266,7 +279,14 @@ async function auditRoute({ context, viewport, route, baseUrl, impactThreshold }
 
     finalUrl = page.url();
     status = response?.status() || 0;
-    if (status >= 400 || status === 0) {
+    const redirectedToAuth = isAuthRedirectTarget(url, finalUrl);
+
+    if (redirectedToAuth) {
+      warnings.push({
+        type: 'auth-redirect',
+        text: `Skipped protected route: ${formatNavigationTarget(url, finalUrl)}`,
+      });
+    } else if (status >= 400 || status === 0) {
       pageLoadFailures.push({
         viewport: viewport.name,
         route,
@@ -277,7 +297,7 @@ async function auditRoute({ context, viewport, route, baseUrl, impactThreshold }
       });
     }
 
-    if (status > 0 && status < 400) {
+    if (status > 0 && status < 400 && !redirectedToAuth) {
       const axeResult = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
         .exclude('.pdf-embed-shell iframe')
