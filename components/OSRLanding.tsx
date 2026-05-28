@@ -28,14 +28,16 @@ export async function OSRLanding() {
 
     return (
         <>
-            <section className="bg-gradient-rtu relative overflow-hidden">
+            <section className="osr-hero-section">
+                <div className="osr-hero-photo" aria-hidden="true" />
+                <div className="osr-hero-texture" aria-hidden="true" />
                 <div className="absolute inset-0 pointer-events-none">
                     <div className="hero-dot-grid" />
                 </div>
                 <div className="container-main relative z-10 py-20 md:py-28">
                     <BackLink href="/student-government" label="Back to Student Government" className="mb-8 text-white/80 hover:text-white transition-colors" />
-                    <div className="flex flex-col items-center gap-10 md:flex-row">
-                        <div className="flex-1 text-center md:text-left">
+                    <div className="osr-hero-shell">
+                        <div className="osr-hero-copy text-center md:text-left">
                             <div
                                 className="badge-accent-gold inline-block rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-widest mb-6"
                             >
@@ -60,7 +62,7 @@ export async function OSRLanding() {
                                 </Link>
                             </div>
                         </div>
-                        <div className="flex-shrink-0">
+                        <div className="osr-hero-logo-wrap">
                             <div className="relative h-44 w-44 md:h-56 md:w-56">
                                 <div className="osr-logo-glow absolute inset-[-6px] rounded-full opacity-25 blur-xl pointer-events-none" />
                                 <Image
@@ -81,23 +83,23 @@ export async function OSRLanding() {
             <section className="portal-section-dark section">
                 <div className="portal-noise-overlay" aria-hidden="true" />
                 <div className="container-main relative z-10">
-                    <div className="grid gap-6 md:grid-cols-2 md:gap-8">
-                        <div className="portal-panel p-7 md:p-10">
+                    <div className="osr-principle-grid">
+                        <article className="osr-principle-card" data-tone="gold">
                             <span className="portal-kicker">Mission</span>
-                            <h2 className="mt-4 text-2xl font-bold text-white">Advocate student interests at the regent level.</h2>
-                            <p className="mt-4 text-body text-slate-300">
+                            <h2 className="osr-principle-title">Advocate student interests at the regent level.</h2>
+                            <p className="osr-principle-copy">
                                 The office brings student concerns into university governance, turns campus sentiment into formal policy input,
                                 and keeps representation connected to real student needs.
                             </p>
-                        </div>
-                        <div className="portal-panel p-7 md:p-10">
+                        </article>
+                        <article className="osr-principle-card" data-tone="sky">
                             <span className="portal-kicker">Vision</span>
-                            <h2 className="mt-4 text-2xl font-bold text-white">A responsive and accountable governance channel.</h2>
-                            <p className="mt-4 text-body text-slate-300">
+                            <h2 className="osr-principle-title">A responsive and accountable governance channel.</h2>
+                            <p className="osr-principle-copy">
                                 The goal is practical representation: visible advocacy, transparent updates, and a direct line between the
                                 student body and the university&apos;s highest governing board.
                             </p>
-                        </div>
+                        </article>
                     </div>
                 </div>
             </section>
@@ -109,14 +111,14 @@ export async function OSRLanding() {
                         <span className="portal-kicker">Core Mandate</span>
                         <h2 className="mt-4 text-3xl font-bold text-white md:text-4xl">What the office is expected to do</h2>
                     </div>
-                    <div className="mt-10 grid gap-5 md:grid-cols-3 md:gap-8">
+                    <div className="osr-mandate-grid">
                         {pillars.map((pillar) => (
-                            <article key={pillar.title} className="portal-panel p-6 md:p-8">
-                                <div className="icon-chip-gold mb-6">
+                            <article key={pillar.title} className="osr-mandate-card">
+                                <div className="osr-mandate-icon">
                                     <pillar.icon size={30} />
                                 </div>
-                                <h3 className="text-xl font-bold text-white">{pillar.title}</h3>
-                                <p className="mt-3 text-sm leading-7 text-slate-300">{pillar.desc}</p>
+                                <h3 className="osr-mandate-title">{pillar.title}</h3>
+                                <p className="osr-mandate-copy">{pillar.desc}</p>
                             </article>
                         ))}
                     </div>
@@ -128,13 +130,13 @@ export async function OSRLanding() {
                 <div className="container-main relative z-10 text-center">
                     <span className="portal-kicker">Directory</span>
                     <h2 className="mt-4 text-3xl font-bold text-white md:text-4xl">Meet the officers behind the office</h2>
-                    <div className="portal-panel mx-auto mt-10 flex max-w-2xl flex-col items-center p-8 md:p-10">
-                        <Users size={48} className="mb-4 text-slate-300" />
-                        <p className="text-lg font-semibold text-white">OSR Officers</p>
-                        <p className="mt-2 max-w-md text-sm text-slate-300">
+                    <div className="osr-directory-card mx-auto">
+                        <Users size={48} className="osr-directory-icon" />
+                        <p className="osr-directory-title">OSR Officers</p>
+                        <p className="osr-directory-copy">
                             View the current roster serving under the Office of the Student Regent.
                         </p>
-                        <Link href="/directory" className="btn-primary mt-6 no-underline inline-flex items-center gap-2">
+                        <Link href="/directory" className="btn-primary osr-directory-link no-underline inline-flex items-center gap-2">
                             View Directory <ArrowRight size={16} />
                         </Link>
                     </div>

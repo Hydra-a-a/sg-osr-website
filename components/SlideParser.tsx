@@ -151,7 +151,13 @@ export default function SlideParser({ slides, variant = 'light', layout = 'verti
                     </button>
                 </div>
             )}
-            <div ref={rowRef} className={horizontal ? 'slide-parser-row' : 'space-y-8'}>
+            <div
+                ref={rowRef}
+                className={horizontal ? 'slide-parser-row' : 'space-y-8'}
+                tabIndex={horizontal ? 0 : undefined}
+                role={horizontal ? 'region' : undefined}
+                aria-label={horizontal ? 'Announcement slides' : undefined}
+            >
                 {slides.map((slide, sIndex) => {
                 let isDraft = false;
                 let isEmpty = true;

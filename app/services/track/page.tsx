@@ -1,17 +1,35 @@
 'use client';
 
-import { useState, useEffect, Suspense, useCallback } from 'react';
+import { useCallback, useEffect, useState, Suspense } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { formatManilaDateTime, formatManilaShortDate } from '@/lib/date-time';
+import { useSession } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
-    Search, Loader2, ArrowLeft, FileText,
-    Clock, ShieldCheck, CheckCircle2, XCircle,
-    Ticket, ChevronRight, BookOpen, MessageSquare, Send, UploadCloud, AlertTriangle
+    ArrowLeft,
+    AlertTriangle,
+    BookOpen,
+    Loader2,
+    MessageSquare,
+    Search,
+    Send,
+    Ticket,
+    UploadCloud,
+    XCircle,
 } from 'lucide-react';
+import { formatManilaDateTime, formatManilaShortDate } from '@/lib/date-time';
 import type { TicketStatus } from '@/lib/ticket-constants';
+import { TrackActionWorkspace } from '@/components/track/TrackActionWorkspace';
+import { TrackCaseDetails } from '@/components/track/TrackCaseDetails';
+import { TrackCaseSummary } from '@/components/track/TrackCaseSummary';
+import { TrackEntryRail } from '@/components/track/TrackEntryRail';
+import { TrackProgressPanel } from '@/components/track/TrackProgressPanel';
+import { TrackRedactedShell } from '@/components/track/TrackRedactedShell';
+import type { StoredTicket, TrackStep, TrackTicket } from '@/components/track/types';
+
+const STORAGE_KEY = 'osr_submitted_tickets';
+const ACCESS_TOKEN_STORAGE_KEY = 'osr_ticket_access_tokens';
+const FAKE_TICKET_ID = 'TKT-0000-FAKE';
 
 const MAX_FOLLOW_UP_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const FOLLOW_UP_ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.pdf', '.doc', '.docx']);
@@ -23,44 +41,28 @@ const FOLLOW_UP_ALLOWED_MIME_TYPES = new Set([
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]);
 
-function getFileExtension(fileName: string): string {
-    const lowered = fileName.toLowerCase();
-    return lowered.includes('.') ? lowered.slice(lowered.lastIndexOf('.')) : '';
-}
-
-// ── Status normalizer ──────────────────────────────────────────────────────────
-// The Google Sheet might have emoji prefixes ("🔵 In Progress"), custom aliases
-// ("Under Review"), or extra whitespace. This maps all variations to our canonical enum.
-function normalizeStatus(raw: string): TicketStatus {
-    const s = raw.replace(/^[\p{Emoji}\s]+/u, '').trim().toLowerCase();
-    if (s === 'open') return 'Open';
-    if (s === 'in progress' || s === 'under review' || s === 'in-progress') return 'In Progress';
-    if (s === 'resolved' || s === 'closed' || s === 'done') return 'Resolved';
-    if (s === 'closed') return 'Closed';
-    if (s === 'appealed' || s === 'appeal submitted') return 'Appealed';
-    return 'Open'; // safe default
-}
-
-// ── Safari-safe date parser ────────────────────────────────────────────────────
-// "2026-04-02 17:47:12 PHT" -> valid browser Date object
-function formatSubmittedDate(dStr: string | undefined): string {
-    return formatManilaDateTime(dStr);
-}
-
-function formatShortSubmittedDate(dStr: string | undefined): string {
-    return formatManilaShortDate(dStr);
-}
-
-// ── localStorage helpers ───────────────────────────────────────────────────────
-const STORAGE_KEY = 'osr_submitted_tickets';
-const ACCESS_TOKEN_STORAGE_KEY = 'osr_ticket_access_tokens';
-
-interface StoredTicket {
-    id: string;
-    submittedAt: string; // ISO string
-    category: string;
-    subject: string;
-}
+const STEPS: TrackStep[] = [
+    {
+        label: 'Ticket received',
+        description: 'Your grievance was received and securely logged in the system.',
+        activeFor: ['Open', 'In Progress', 'Resolved', 'Closed', 'Appealed'],
+    },
+    {
+        label: 'Under review',
+        description: 'The Student Regent is actively reviewing or coordinating a resolution for your concern.',
+        activeFor: ['In Progress', 'Resolved', 'Closed', 'Appealed'],
+    },
+    {
+        label: 'Resolved or waiting for closure',
+        description: 'A resolution has been issued or the case is now waiting for final closure and any follow-up.',
+        activeFor: ['Resolved', 'Closed', 'Appealed'],
+    },
+    {
+        label: 'Appeal submitted',
+        description: 'A formal appeal or follow-up reply is now part of the official discussion thread.',
+        activeFor: ['Appealed'],
+    },
+];
 
 interface ServerTicketListItem {
     ticketId: string;
@@ -69,22 +71,71 @@ interface ServerTicketListItem {
     subject: string;
 }
 
-const FAKE_TICKET_ID = 'TKT-0000-FAKE';
+function getFileExtension(fileName: string): string {
+    const lowered = fileName.toLowerCase();
+    return lowered.includes('.') ? lowered.slice(lowered.lastIndexOf('.')) : '';
+}
+
+function normalizeStatus(raw: string): TicketStatus {
+    const normalized = raw.replace(/^[\p{Emoji}\s]+/u, '').trim().toLowerCase();
+    if (normalized === 'open') return 'Open';
+    if (normalized === 'in progress' || normalized === 'under review' || normalized === 'in-progress') return 'In Progress';
+    if (normalized === 'resolved' || normalized === 'done') return 'Resolved';
+    if (normalized === 'closed') return 'Closed';
+    if (normalized === 'appealed' || normalized === 'appeal submitted') return 'Appealed';
+    return 'Open';
+}
+
+function formatSubmittedDate(value: string | undefined): string {
+    return formatManilaDateTime(value);
+}
+
+function formatShortSubmittedDate(value: string | undefined): string {
+    return formatManilaShortDate(value);
+}
 
 function loadStoredTickets(): StoredTicket[] {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         const parsed = raw ? (JSON.parse(raw) as StoredTicket[]) : [];
         const sanitized = parsed.filter((ticket) => ticket.id.toUpperCase() !== FAKE_TICKET_ID);
-
         if (sanitized.length !== parsed.length) {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
         }
-
         return sanitized;
     } catch {
         return [];
     }
+}
+
+function loadStoredAccessTokens(): Record<string, string> {
+    try {
+        const raw = sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+        return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    } catch {
+        return {};
+    }
+}
+
+function saveStoredAccessToken(ticketId: string, accessToken: string): void {
+    const normalizedTicketId = ticketId.trim().toUpperCase();
+    const normalizedToken = accessToken.trim();
+    if (!normalizedTicketId || !normalizedToken) return;
+
+    try {
+        const existing = loadStoredAccessTokens();
+        existing[normalizedTicketId] = normalizedToken;
+        sessionStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, JSON.stringify(existing));
+    } catch {
+        // session storage unavailable
+    }
+}
+
+function getStoredAccessToken(ticketId: string): string {
+    const normalizedTicketId = ticketId.trim().toUpperCase();
+    if (!normalizedTicketId) return '';
+    const tokens = loadStoredAccessTokens();
+    return tokens[normalizedTicketId] || '';
 }
 
 function mergeTicketHistory(serverTickets: StoredTicket[], localTickets: StoredTicket[]): StoredTicket[] {
@@ -109,34 +160,42 @@ function mergeTicketHistory(serverTickets: StoredTicket[], localTickets: StoredT
     return Array.from(merged.values()).slice(0, 25);
 }
 
-function loadStoredAccessTokens(): Record<string, string> {
-    try {
-        const raw = sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-        return raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    } catch {
-        return {};
+function getLatestOfficialUpdate(ticket: TrackTicket): string {
+    if (ticket.resolutionNotes?.trim()) {
+        return ticket.resolutionNotes.trim();
+    }
+
+    switch (ticket.status) {
+        case 'Open':
+            return 'Your grievance has been received and queued for intake review.';
+        case 'In Progress':
+            return 'An OSR officer is actively reviewing the concern or coordinating the next resolution step.';
+        case 'Resolved':
+            return 'A resolution has been recorded. Review the case details and thread for the latest context.';
+        case 'Closed':
+            return 'The case has been closed. If the outcome needs to be revisited, use the follow-up workspace to submit an appeal.';
+        case 'Appealed':
+            return 'A formal appeal has been submitted and is now part of the official discussion thread.';
+        default:
+            return 'The case record has been updated.';
     }
 }
 
-function saveStoredAccessToken(ticketId: string, accessToken: string): void {
-    const normalizedTicketId = ticketId.trim().toUpperCase();
-    const normalizedToken = accessToken.trim();
-    if (!normalizedTicketId || !normalizedToken) return;
-
-    try {
-        const existing = loadStoredAccessTokens();
-        existing[normalizedTicketId] = normalizedToken;
-        sessionStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, JSON.stringify(existing));
-    } catch {
-        // sessionStorage unavailable
+function getNextStepGuidance(ticket: TrackTicket): string {
+    switch (ticket.status) {
+        case 'Open':
+            return 'Keep the ticket ID handy. The next visible change usually happens when OSR starts active review.';
+        case 'In Progress':
+            return 'Wait for the latest official response or add a focused follow-up only if new details materially change the case.';
+        case 'Resolved':
+            return 'Review the resolution notes first. If something important is missing, you can send a follow-up or formal appeal.';
+        case 'Closed':
+            return 'Closed cases stay on record. Use the action workspace only if you need to contest the outcome with new supporting context.';
+        case 'Appealed':
+            return 'Your appeal is already in motion. Add supporting files only when they strengthen the record instead of repeating earlier points.';
+        default:
+            return 'Keep monitoring the ticket here for official updates.';
     }
-}
-
-function getStoredAccessToken(ticketId: string): string {
-    const normalizedTicketId = ticketId.trim().toUpperCase();
-    if (!normalizedTicketId) return '';
-    const tokens = loadStoredAccessTokens();
-    return tokens[normalizedTicketId] || '';
 }
 
 export function saveTicketToHistory(ticket: StoredTicket, accessToken?: string) {
@@ -147,69 +206,15 @@ export function saveTicketToHistory(ticket: StoredTicket, accessToken?: string) 
         }
 
         const existing = loadStoredTickets();
-        // Avoid duplicates
-        if (existing.some(t => t.id === ticket.id)) return;
-        const updated = [ticket, ...existing].slice(0, 10); // Keep last 10
+        if (existing.some((current) => current.id === ticket.id)) return;
+        const updated = [ticket, ...existing].slice(0, 10);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch {/* localStorage unavailable */ }
+    } catch {
+        // local storage unavailable
+    }
 }
 
-// ── Status helpers ─────────────────────────────────────────────────────────────
-function StatusBadge({ status }: { status: string }) {
-    const map: Record<string, string> = {
-        'Open': 'bg-amber-100 text-amber-800 border-amber-200',
-        'In Progress': 'bg-blue-100 text-blue-800 border-blue-200',
-        'Resolved': 'bg-green-100 text-green-800 border-green-200',
-        'Closed': 'bg-neutral-100 text-neutral-600 border-neutral-200',
-        'Appealed': 'bg-orange-100 text-orange-800 border-orange-200',
-    };
-    const dot: Record<string, string> = {
-        'Open': 'bg-amber-500',
-        'In Progress': 'bg-blue-500',
-        'Resolved': 'bg-green-500',
-        'Closed': 'bg-neutral-400',
-        'Appealed': 'bg-orange-500',
-    };
-    const cls = map[status] ?? 'bg-neutral-100 text-neutral-600 border-neutral-200';
-    const dotCls = dot[status] ?? 'bg-neutral-400';
-    return (
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ${cls}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
-            {status}
-        </span>
-    );
-}
-
-// ── Timeline steps ─────────────────────────────────────────────────────────────
-const STEPS: Array<{
-    label: string;
-    description: string;
-    activeFor: TicketStatus[];
-}> = [
-        {
-            label: 'Ticket Received',
-            description: 'Your grievance was received and securely logged in the system.',
-            activeFor: ['Open', 'In Progress', 'Resolved', 'Closed'],
-        },
-        {
-            label: 'Under Review',
-            description: 'The Student Regent is actively reviewing or coordinating a resolution for your concern.',
-            activeFor: ['In Progress', 'Resolved', 'Closed'],
-        },
-        {
-            label: 'Resolved',
-            description: 'The grievance has been addressed. Check the resolution notes below.',
-            activeFor: ['Resolved', 'Closed'],
-        },
-        {
-            label: 'Appeal Submitted',
-            description: 'A formal appeal was filed with optional follow-up documents for re-evaluation.',
-            activeFor: ['Appealed'],
-        },
-    ];
-
-// ── Appeals component ────────────────────────────────────────────────────────
-function AppealsThread({ ticketId, detailsRedacted }: { ticketId: string; detailsRedacted: boolean }) {
+function FollowUpThread({ ticketId, detailsRedacted }: { ticketId: string; detailsRedacted: boolean }) {
     const [comments, setComments] = useState<Array<{
         commentId?: string;
         timestamp: string;
@@ -226,6 +231,35 @@ function AppealsThread({ ticketId, detailsRedacted }: { ticketId: string; detail
     const [attachment, setAttachment] = useState<File | null>(null);
     const [attachmentError, setAttachmentError] = useState<string | null>(null);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (detailsRedacted) {
+            setLoading(false);
+            return;
+        }
+
+        let mounted = true;
+        const fetchComments = async () => {
+            try {
+                const trackingToken = getStoredAccessToken(ticketId);
+                const query = trackingToken ? `?access=${encodeURIComponent(trackingToken)}` : '';
+                const response = await fetch(`/api/tickets/${ticketId}/comments${query}`, { cache: 'no-store' });
+                const data = await response.json();
+                if (mounted && response.ok) {
+                    setComments(data.comments || []);
+                }
+            } catch {
+                // ignore load errors for thread shell
+            } finally {
+                if (mounted) setLoading(false);
+            }
+        };
+
+        fetchComments();
+        return () => {
+            mounted = false;
+        };
+    }, [ticketId, detailsRedacted]);
 
     const handleAttachmentChange = (file: File | null) => {
         if (!file) {
@@ -257,30 +291,9 @@ function AppealsThread({ ticketId, detailsRedacted }: { ticketId: string; detail
         setAttachmentError(null);
     };
 
-    useEffect(() => {
-        let mounted = true;
-        const fetchComments = async () => {
-            try {
-                const trackingToken = getStoredAccessToken(ticketId);
-                const query = trackingToken ? `?access=${encodeURIComponent(trackingToken)}` : '';
-                const res = await fetch(`/api/tickets/${ticketId}/comments${query}`, { cache: 'no-store' });
-                const data = await res.json();
-                if (mounted && res.ok) {
-                    setComments(data.comments || []);
-                }
-            } catch {
-                // Ignore load errors for now
-            } finally {
-                if (mounted) setLoading(false);
-            }
-        };
-        fetchComments();
-        return () => { mounted = false; };
-    }, [ticketId]);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!message.trim() || posting) return;
+    const handleSubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!message.trim() || posting || detailsRedacted) return;
 
         if (attachmentError) {
             setError(attachmentError);
@@ -288,10 +301,10 @@ function AppealsThread({ ticketId, detailsRedacted }: { ticketId: string; detail
         }
 
         if (!attachment) {
-            const proceedWithoutDocument = window.confirm(
+            const proceed = window.confirm(
                 'You are submitting this follow-up without supporting documents. This is allowed, but evidence improves appeal review quality and turnaround. Do you want to continue?'
             );
-            if (!proceedWithoutDocument) {
+            if (!proceed) {
                 return;
             }
         }
@@ -309,140 +322,155 @@ function AppealsThread({ ticketId, detailsRedacted }: { ticketId: string; detail
                 payload.set('attachment', attachment);
             }
 
-            const res = await fetch(`/api/tickets/${ticketId}/comments`, {
+            const response = await fetch(`/api/tickets/${ticketId}/comments`, {
                 method: 'POST',
                 body: payload,
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to post appeal');
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to post follow-up reply');
+            }
 
-            setComments(prev => [...prev, data.comment]);
+            setComments((current) => [...current, data.comment]);
             setMessage('');
             setIsAppeal(false);
             setAttachment(null);
             setAttachmentError(null);
-        } catch (err: unknown) {
-            const messageFromError = err instanceof Error ? err.message : 'Failed to post follow-up reply';
-            setError(messageFromError);
+        } catch (submissionError: unknown) {
+            setError(submissionError instanceof Error ? submissionError.message : 'Failed to post follow-up reply');
         } finally {
             setPosting(false);
         }
     };
 
-    if (detailsRedacted) return null;
+    if (detailsRedacted) {
+        return null;
+    }
 
     return (
-        <div className="card p-6 mt-6">
-            <h3 className="text-sm font-semibold text-body mb-4 flex items-center gap-2">
-                <MessageSquare size={16} className="text-subtle" />
-                Appeals & Discussion
-            </h3>
-            
-            <div className="space-y-4 mb-6">
-                {loading ? (
-                    <div className="flex items-center gap-2 text-subtle text-sm">
-                        <Loader2 className="animate-spin" size={14} /> Loading thread...
-                    </div>
-                ) : comments.length === 0 ? (
-                    <p className="text-sm text-subtle italic">No comments or appeals yet.</p>
-                ) : (
-                    comments.map((c, i) => (
-                        <div key={c.commentId || i} className="bg-surface-muted/40 p-4 rounded-xl border border-soft">
-                            <div className="flex items-center justify-between gap-4 mb-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-sm text-body">{c.author}</span>
-                                    {c.authorRole === 'OFFICER' && (
-                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                            Official Action
-                                        </span>
-                                    )}
+        <div className="space-y-5">
+            <div className="rounded-xl border border-[rgba(35,72,116,0.14)] bg-white p-4">
+                <div className="flex items-center gap-2">
+                    <MessageSquare size={16} className="text-subtle" />
+                    <p className="text-sm font-semibold text-strong">Thread history</p>
+                </div>
+
+                <div className="mt-4 overflow-hidden rounded-xl border border-[rgba(35,72,116,0.14)] bg-white">
+                    {loading ? (
+                        <div className="flex items-center gap-2 text-sm text-subtle">
+                            <Loader2 className="animate-spin" size={14} />
+                            Loading discussion...
+                        </div>
+                    ) : comments.length === 0 ? (
+                        <p className="text-sm italic text-subtle">No comments or appeals yet.</p>
+                    ) : (
+                        comments.map((comment, index) => (
+                            <div key={comment.commentId || index} className="border-b border-[rgba(35,72,116,0.1)] p-4 last:border-b-0">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-semibold text-strong">{comment.author}</span>
+                                        {comment.authorRole === 'OFFICER' ? (
+                                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                                Official action
+                                            </span>
+                                        ) : null}
+                                        {comment.isAppeal ? (
+                                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                                                Formal appeal
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                    <span className="text-xs text-subtle">{formatSubmittedDate(comment.timestamp)}</span>
                                 </div>
-                                <span className="text-xs text-subtle">{formatSubmittedDate(c.timestamp)}</span>
-                            </div>
-                            {c.isAppeal && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 mb-2">
-                                    Formal Appeal
-                                </span>
-                            )}
-                            <p className="text-sm text-body whitespace-pre-wrap">{c.message}</p>
-                            {c.attachmentUrl && (
-                                <div className="mt-2">
+                                <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-body">{comment.message}</p>
+                                {comment.attachmentUrl ? (
                                     <a
-                                        href={c.attachmentUrl}
+                                        href={comment.attachmentUrl}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="text-xs font-medium text-brand hover:underline"
+                                        className="mt-3 inline-flex text-xs font-medium text-brand hover:underline"
                                     >
-                                        View Follow-up Document
+                                        View follow-up document
                                     </a>
-                                </div>
-                            )}
-                        </div>
-                    ))
-                )}
+                                ) : null}
+                            </div>
+                        ))
+                    )}
+                </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="relative space-y-3">
-                {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
+            <form onSubmit={handleSubmit} className="rounded-xl border border-[rgba(35,72,116,0.14)] bg-white p-4">
+                <div className="mb-4">
+                    <p className="text-sm font-semibold text-strong">Send a follow-up or formal appeal</p>
+                    <p className="mt-1 text-sm text-subtle">
+                        Keep replies factual and specific. Use the appeal toggle only when you want to formally contest the current outcome.
+                    </p>
+                </div>
+
+                {error ? <p className="mb-3 text-xs text-red-600">{error}</p> : null}
+
                 <textarea
                     value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Write your appeal or reply..."
-                    className="w-full min-h-[100px] p-3 text-sm bg-surface rounded-xl border border-soft focus:border-rtu-gold focus:ring-2 focus:ring-rtu-gold/20 outline-none resize-y transition-all"
+                    onChange={(event) => setMessage(event.target.value)}
+                    placeholder="Write your follow-up update, clarification, or appeal message..."
+                    className="min-h-[120px] w-full rounded-2xl border border-soft bg-surface-soft p-3 text-sm text-strong outline-none transition-all focus:border-[color:var(--accent-secondary)] focus:ring-2 focus:ring-[rgba(203,165,77,0.16)]"
                     disabled={posting}
                 />
 
-                <label className="flex items-center gap-3 cursor-pointer">
+                <label className="mt-4 flex items-center gap-3 text-sm text-body">
                     <input
                         type="checkbox"
                         checked={isAppeal}
-                        onChange={(e) => setIsAppeal(e.target.checked)}
+                        onChange={(event) => setIsAppeal(event.target.checked)}
                         className="h-4 w-4"
                         disabled={posting}
                     />
-                    <span className="text-sm text-body font-medium">Submit this as a formal appeal</span>
+                    Submit this reply as a formal appeal
                 </label>
 
-                <div className="rounded-xl border border-soft p-3 bg-surface-muted/30">
-                    <p className="text-xs font-medium text-body mb-2">Follow-up Documents (Optional)</p>
+                <div className="mt-4 rounded-xl border border-[rgba(35,72,116,0.14)] bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
+                        Optional attachment
+                    </p>
                     <input
-                        id="appeal-follow-up-attachment"
+                        id="track-follow-up-attachment"
                         type="file"
                         accept=".png,.jpg,.jpeg,.pdf,.doc,.docx,image/png,image/jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         disabled={posting}
-                        onChange={(e) => handleAttachmentChange(e.target.files?.[0] || null)}
+                        onChange={(event) => handleAttachmentChange(event.target.files?.[0] || null)}
                         className="sr-only"
                     />
                     <label
-                        htmlFor="appeal-follow-up-attachment"
-                        className="field-input text-sm min-h-[42px] flex items-center justify-center gap-2 cursor-pointer border-dashed"
+                        htmlFor="track-follow-up-attachment"
+                        className="mt-3 flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[rgba(35,72,116,0.2)] bg-[rgba(35,72,116,0.04)] px-4 text-sm text-strong"
                     >
                         <UploadCloud size={15} />
-                        <span>{attachment ? 'Replace selected file' : 'Attach follow-up document'}</span>
+                        <span>{attachment ? 'Replace selected file' : 'Attach supporting document'}</span>
                     </label>
 
-                    <p className="text-[11px] text-subtle mt-2">Allowed: .png, .jpg, .jpeg, .pdf, .doc, .docx (Max 10MB)</p>
-                    {attachmentError && <p className="text-[11px] text-red-600 mt-1">{attachmentError}</p>}
-                    {attachment && !attachmentError && <p className="text-[11px] text-green-700 mt-1">Selected: {attachment.name}</p>}
-
-                    {!attachment && !attachmentError && (
-                        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
-                            <p className="text-[11px] text-amber-900 inline-flex items-start gap-2">
+                    <p className="mt-2 text-[11px] text-subtle">Allowed: PNG, JPG, PDF, DOC, DOCX. Maximum 10MB.</p>
+                    {attachmentError ? <p className="mt-1 text-[11px] text-red-600">{attachmentError}</p> : null}
+                    {attachment && !attachmentError ? <p className="mt-1 text-[11px] text-green-700">Selected: {attachment.name}</p> : null}
+                    {!attachment && !attachmentError ? (
+                        <div className="mt-3 rounded-xl border border-[rgba(203,165,77,0.24)] bg-[rgba(203,165,77,0.08)] px-3 py-2">
+                            <p className="inline-flex items-start gap-2 text-[11px] leading-relaxed text-body">
                                 <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                                You may submit without follow-up documents, but supporting evidence helps establish a stronger basis for appeal review.
+                                You may continue without proof, but supporting documents make appeals easier to evaluate and faster to resolve.
                             </p>
                         </div>
-                    )}
+                    ) : null}
                 </div>
 
-                <div className="flex justify-end mt-2">
+                <div className="mt-4 flex justify-end">
                     <button
                         type="submit"
                         disabled={posting || !message.trim()}
-                        className="btn-primary py-2 px-5 text-sm flex items-center gap-2"
+                        className="btn-primary px-5 py-2 text-sm"
                     >
-                        {posting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
-                        Post Reply
+                        <span className="inline-flex items-center gap-2">
+                            {posting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
+                            {posting ? 'Posting...' : 'Post reply'}
+                        </span>
                     </button>
                 </div>
             </form>
@@ -450,7 +478,6 @@ function AppealsThread({ ticketId, detailsRedacted }: { ticketId: string; detail
     );
 }
 
-// ── Main content (must be wrapped in Suspense due to useSearchParams) ──────────
 function TrackContent() {
     const { status: authStatus } = useSession();
     const searchParams = useSearchParams();
@@ -462,58 +489,38 @@ function TrackContent() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [history, setHistory] = useState<StoredTicket[]>([]);
-    const [ticket, setTicket] = useState<{
-        ticketId: string;
-        status: string;
-        submittedAt: string;
-        detailsRedacted: boolean;
-        studentId: string;
-        campus: string;
-        college: string;
-        category: string;
-        subject: string;
-        complaintNarrative: string;
-        attachmentUrl: string;
-        resolutionNotes: string;
-    } | null>(null);
+    const [ticket, setTicket] = useState<TrackTicket | null>(null);
 
-    // Load localStorage history on mount (client-only)
     useEffect(() => {
         setHistory(loadStoredTickets());
     }, []);
 
     useEffect(() => {
-        if (authStatus !== 'authenticated') {
-            return;
-        }
+        if (authStatus !== 'authenticated') return;
 
         let cancelled = false;
-
         const loadServerHistory = async () => {
             try {
                 const response = await fetch('/api/tickets/mine', { cache: 'no-store' });
-                if (!response.ok) {
-                    return;
-                }
+                if (!response.ok) return;
 
                 const data = await response.json();
-                const serverTickets = ((data?.tickets || []) as ServerTicketListItem[]).map((ticket) => ({
-                    id: String(ticket.ticketId || '').trim().toUpperCase(),
-                    submittedAt: String(ticket.submittedAt || '').trim(),
-                    category: String(ticket.category || '').trim(),
-                    subject: String(ticket.subject || '').trim(),
+                const serverTickets = ((data?.tickets || []) as ServerTicketListItem[]).map((item) => ({
+                    id: String(item.ticketId || '').trim().toUpperCase(),
+                    submittedAt: String(item.submittedAt || '').trim(),
+                    category: String(item.category || '').trim(),
+                    subject: String(item.subject || '').trim(),
                 }));
 
                 if (!cancelled) {
                     setHistory((current) => mergeTicketHistory(serverTickets, current));
                 }
             } catch {
-                // Keep local-only history when server history fails.
+                // keep local history when server history fails
             }
         };
 
         loadServerHistory();
-
         return () => {
             cancelled = true;
         };
@@ -533,7 +540,6 @@ function TrackContent() {
         setError(null);
         setTicket(null);
 
-        // Push clean URL
         const query = new URLSearchParams({ id });
         if (token) {
             query.set('access', token);
@@ -542,11 +548,12 @@ function TrackContent() {
 
         try {
             const responseQuery = token ? `?access=${encodeURIComponent(token)}` : '';
-            const res = await fetch(`/api/tickets/${encodeURIComponent(id)}${responseQuery}`);
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error?.message || 'Failed to locate ticket');
+            const response = await fetch(`/api/tickets/${encodeURIComponent(id)}${responseQuery}`, { cache: 'no-store' });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error?.message || 'Failed to locate ticket');
+            }
 
-            // Normalize status from whatever the Regent typed in the sheet
             const rawStatus = data.ticket?.status || 'Open';
             setTicket({
                 ticketId: data.ticket?.ticketId || id,
@@ -563,294 +570,185 @@ function TrackContent() {
                 resolutionNotes: data.ticket?.resolutionNotes || '',
             });
 
-            // Clear the input so the placeholder is visible again
             setTicketId('');
-        } catch (err: any) {
-            setError(err.message || 'An error occurred while tracking this ticket.');
+        } catch (lookupError: unknown) {
+            setError(lookupError instanceof Error ? lookupError.message : 'An error occurred while tracking this ticket.');
         } finally {
             setLoading(false);
         }
     }, [router]);
 
-    // Auto-search if URL contains ?id=
     useEffect(() => {
-        if (initialId) handleSearch(initialId, initialAccess);
+        if (initialId) {
+            handleSearch(initialId, initialAccess);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    return (
-        <div className="container-main max-w-3xl pb-24">
+    const ownerView = Boolean(ticket && !ticket.detailsRedacted);
+    const redactedView = Boolean(ticket && ticket.detailsRedacted);
 
-            {/* ── Back link ──────────────────────────────────────────────────── */}
+    return (
+        <div className="container-main max-w-6xl pb-24">
             <div className="mb-8">
-                <Link href="/services" className="inline-flex items-center gap-2 text-sm text-subtle hover:text-body transition-colors group">
-                    <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+                <Link href="/services" className="group inline-flex items-center gap-2 text-sm text-subtle transition-colors hover:text-body">
+                    <ArrowLeft size={14} className="transition-transform group-hover:-translate-x-0.5" />
                     Back to Services
                 </Link>
             </div>
 
-            {/* ── Search card ────────────────────────────────────────────────── */}
-            <div className="card p-6 mb-6">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 rounded-lg bg-rtu-blue/10 text-rtu-blue">
-                        <Search size={18} />
-                    </div>
-                    <div>
-                        <h2 className="font-semibold text-body leading-tight">Track a Ticket</h2>
-                        <p className="text-xs text-subtle mt-0.5">
-                            Enter your Ticket ID from the confirmation email — e.g.&nbsp;<span className="font-mono">TKT-2604-1KMZ9D1Q7T</span>
+            {!ticket && !error ? (
+                <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
+                    <div className="relative overflow-hidden rounded-2xl border border-[rgba(35,72,116,0.18)] bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(242,247,252,0.9))] p-5 shadow-[0_16px_36px_-26px_rgba(16,35,59,0.5)]">
+                        <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-[rgba(125,211,252,0.22)] blur-2xl" />
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand/75">
+                            How this works
+                        </p>
+                        <h2 className="mt-1 text-xl font-semibold tracking-tight text-strong">A layered case workspace for grievance tracking</h2>
+                        <p className="mt-2 text-sm leading-relaxed text-subtle">
+                            Signed-in students see their own case history first. Manual lookup stays available at all times for ticket IDs and access tokens, and any result that is not verified for ownership remains in a privacy-protected shell.
                         </p>
                     </div>
-                </div>
 
-                <form
-                    onSubmit={(e) => { e.preventDefault(); handleSearch(ticketId); }}
-                    className="flex flex-col sm:flex-row gap-3"
-                >
-                    <div className="flex items-center flex-1 gap-2 border border-soft rounded-xl px-4 bg-surface-muted/40 focus-within:border-rtu-gold focus-within:ring-2 focus-within:ring-rtu-gold/20 transition-all">
-                        <Search className="text-subtle shrink-0 pointer-events-none" size={16} />
-                        <input
-                            type="text"
-                            value={ticketId}
-                            onChange={(e) => setTicketId(e.target.value)}
-                            placeholder="TKT-2604-1KMZ9D1Q7T"
-                            className="flex-1 h-11 bg-transparent outline-none uppercase tracking-wider font-mono text-sm text-body placeholder:text-subtle placeholder:normal-case placeholder:tracking-normal"
-                            disabled={loading}
-                            autoComplete="off"
-                            spellCheck={false}
-                        />
+                    <div className="rounded-2xl border border-[rgba(203,165,77,0.24)] bg-[linear-gradient(160deg,rgba(203,165,77,0.14),rgba(255,255,255,0.95))] p-5 shadow-[0_14px_32px_-28px_rgba(120,82,18,0.55)]">
+                        <div className="flex items-center gap-2">
+                            <BookOpen size={16} className="text-[var(--rtu-gold-dark)]" />
+                            <p className="text-sm font-semibold text-strong">Before you search</p>
+                        </div>
+                        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-subtle">
+                            <li>Use the exact ticket ID from your confirmation email.</li>
+                            <li>Sign in to load My cases automatically.</li>
+                            <li>Use the follow-up workspace only for meaningful updates or a formal appeal.</li>
+                        </ul>
                     </div>
-                    <button
-                        type="submit"
-                        disabled={loading || !ticketId.trim()}
-                        className="btn-primary h-11 px-7 flex items-center justify-center gap-2 text-sm"
-                    >
-                        {loading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
-                        {loading ? 'Searching…' : 'Track'}
-                    </button>
-                </form>
+                </div>
+            ) : null}
+
+            <div className="sticky top-20 z-10 mb-6">
+                <TrackEntryRail
+                    compact={Boolean(ticket || error)}
+                    loading={loading}
+                    ticketId={ticketId}
+                    history={history}
+                    authStatus={authStatus}
+                    activeStatus={ticket?.status}
+                    onTicketIdChange={setTicketId}
+                    onSubmit={() => handleSearch(ticketId)}
+                    onSelectHistory={(value) => handleSearch(value, getStoredAccessToken(value))}
+                    formatShortDate={formatShortSubmittedDate}
+                />
             </div>
 
-            {/* ── Saved ticket history ───────────────────────────────────────── */}
-            {history.length > 0 && (
-                <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="card p-5 mb-6"
-                >
-                    <h3 className="text-sm font-semibold text-body mb-3 flex items-center gap-2">
-                        <BookOpen size={14} className="text-subtle" />
-                        Your submitted tickets
-                    </h3>
-                    <ul className="space-y-2">
-                        {history.map((t) => (
-                            <li key={t.id}>
-                                <button
-                                    onClick={() => handleSearch(t.id, getStoredAccessToken(t.id))}
-                                    className="w-full text-left flex items-center justify-between px-4 py-3 rounded-xl border border-soft bg-surface-muted/40 hover:border-rtu-blue/40 hover:bg-rtu-blue/5 transition-all group"
-                                >
-                                    <div className="min-w-0">
-                                        <p className="font-mono text-xs font-bold text-body">{t.id}</p>
-                                        <p className="text-xs text-subtle truncate mt-0.5">
-                                            {t.category}{t.subject ? ` · ${t.subject}` : ''}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-3 ml-4 shrink-0">
-                                        <span className="text-xs text-subtle hidden sm:block">
-                                            {formatShortSubmittedDate(t.submittedAt)}
-                                        </span>
-                                        <ChevronRight size={14} className="text-subtle group-hover:text-body group-hover:translate-x-0.5 transition-all" />
-                                    </div>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                </motion.div>
-            )}
-
-            {/* ── Error state ────────────────────────────────────────────────── */}
             <AnimatePresence mode="wait">
-                {error && !loading && (
-                    <motion.div
-                        key="error"
-                        initial={{ opacity: 0, y: 8 }}
+                {error && !loading ? (
+                    <motion.section
+                        key="no-result"
+                        initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="card p-6 border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900/40"
+                        exit={{ opacity: 0, y: -6 }}
+                        className="rounded-2xl border border-[rgba(220,38,38,0.18)] bg-[linear-gradient(180deg,rgba(220,38,38,0.07),rgba(255,255,255,0.98))] p-6 shadow-[0_18px_42px_-34px_rgba(127,29,29,0.45)]"
                     >
                         <div className="flex gap-4">
-                            <XCircle className="shrink-0 text-red-500 mt-0.5" size={20} />
+                            <XCircle className="mt-0.5 shrink-0 text-red-500" size={20} />
                             <div>
-                                <h3 className="font-semibold text-red-900 dark:text-red-300 mb-1">Ticket not found</h3>
-                                <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-                                <p className="text-xs text-red-600/70 dark:text-red-400/60 mt-3 pt-3 border-t border-red-200/50 dark:border-red-900/40">
-                                    Double-check the exact ID from your confirmation email. Newly submitted tickets may take a few moments to appear.
+                                <h3 className="text-lg font-semibold tracking-tight text-strong">We couldn&apos;t find that ticket</h3>
+                                <p className="mt-2 text-sm text-body">{error}</p>
+                                <p className="mt-4 border-t border-[rgba(220,38,38,0.12)] pt-4 text-sm text-subtle">
+                                    Double-check the exact ID from your confirmation email. Newly submitted tickets may take a few moments to appear, and protected tickets may also require the access token that came with the confirmation link.
                                 </p>
                             </div>
                         </div>
-                    </motion.div>
-                )}
+                    </motion.section>
+                ) : null}
 
-                {/* ── Ticket result ───────────────────────────────────────────── */}
-                {ticket && !loading && (
+                {ticket && !loading ? (
                     <motion.div
-                        key="ticket"
-                        initial={{ opacity: 0, y: 16 }}
+                        key={`ticket-${ticket.ticketId}`}
+                        initial={{ opacity: 0, y: 14 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="space-y-4"
+                        exit={{ opacity: 0, y: -8 }}
+                        className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.9fr)]"
                     >
-                        {/* Header card */}
-                        <div className="card p-6 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-8 opacity-[0.04] pointer-events-none select-none">
-                                <ShieldCheck size={100} />
-                            </div>
+                        <div className="space-y-6">
+                            <TrackCaseSummary
+                                ticketId={ticket.ticketId}
+                                title={ticket.detailsRedacted ? 'Ticket status workspace' : (ticket.subject || `${ticket.category} grievance`)}
+                                status={ticket.status}
+                                submittedAtLabel={formatSubmittedDate(ticket.submittedAt)}
+                                submittedAtShort={formatShortSubmittedDate(ticket.submittedAt)}
+                                latestOfficialUpdate={getLatestOfficialUpdate(ticket)}
+                                nextStepGuidance={getNextStepGuidance(ticket)}
+                                isOwnerView={ownerView}
+                                category={ticket.detailsRedacted ? '' : ticket.category}
+                            />
 
-                            <div className="relative">
-                                <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                                    <div>
-                                        <p className="text-xs text-subtle font-mono mb-1">{ticket.ticketId}</p>
-                                        <h2 className="text-xl font-bold text-body leading-snug">
-                                            {ticket.detailsRedacted ? 'Ticket Status' : (ticket.subject || `${ticket.category} Grievance`)}
-                                        </h2>
-                                        {!ticket.detailsRedacted && ticket.category && (
-                                            <p className="text-xs text-subtle mt-1">
-                                                Category: <span className="font-medium text-body">{ticket.category}</span>
-                                            </p>
-                                        )}
-                                    </div>
-                                    <StatusBadge status={ticket.status} />
-                                </div>
-
-                                <p className="text-xs text-subtle">
-                                    Submitted {formatSubmittedDate(ticket.submittedAt)}
-                                </p>
-                            </div>
+                            {redactedView ? (
+                                <TrackRedactedShell
+                                    ticketId={ticket.ticketId}
+                                    status={ticket.status}
+                                    submittedAtLabel={formatSubmittedDate(ticket.submittedAt)}
+                                />
+                            ) : (
+                                <>
+                                    <TrackProgressPanel
+                                        status={ticket.status}
+                                        steps={STEPS}
+                                        resolutionNotes={ticket.resolutionNotes}
+                                    />
+                                    <TrackCaseDetails ticket={ticket} />
+                                </>
+                            )}
                         </div>
 
-                        {ticket.detailsRedacted && (
-                            <div className="card p-5 border-amber-200 bg-amber-50">
-                                <p className="text-sm text-amber-900 leading-relaxed">
-                                    Detailed ticket metadata is protected. If you are signed in with the same account that filed this grievance, full details will load automatically from your submitted list.
-                                </p>
-                            </div>
-                        )}
-
-                        {!ticket.detailsRedacted && (
-                            <div className="card p-6">
-                                <h3 className="text-sm font-semibold text-body mb-3">Ticket Details</h3>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                    <p><span className="text-subtle">Student ID:</span> <span className="text-body font-medium">{ticket.studentId || 'N/A'}</span></p>
-                                    <p><span className="text-subtle">Campus:</span> <span className="text-body font-medium">{ticket.campus || 'N/A'}</span></p>
-                                    <p className="sm:col-span-2"><span className="text-subtle">College / Institute:</span> <span className="text-body font-medium">{ticket.college || 'N/A'}</span></p>
-                                </div>
-
-                                {ticket.complaintNarrative?.trim() && (
-                                    <>
-                                        <p className="eyebrow-label text-subtle mt-4 mb-1">Complaint Narrative</p>
-                                        <p className="text-sm text-body whitespace-pre-wrap leading-relaxed">{ticket.complaintNarrative}</p>
-                                    </>
-                                )}
-
-                                {ticket.attachmentUrl?.trim() && (
-                                    <div className="mt-4">
-                                        {ticket.attachmentUrl.startsWith('https://') ? (
-                                            <a
-                                                href={ticket.attachmentUrl}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline"
-                                            >
-                                                View Attachment
-                                            </a>
-                                        ) : (
-                                            <p className="text-xs text-subtle">Attachment link is unavailable.</p>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Timeline card */}
-                        <div className="card p-6">
-                            <h3 className="text-sm font-semibold text-body mb-5">Resolution Progress</h3>
-
-                            <div className="relative">
-                                {/* Connector line */}
-                                <div className="absolute left-[15px] top-6 bottom-6 w-px bg-soft" />
-
-                                <div className="space-y-6">
-                                    {STEPS.map((step, i) => {
-                                        const isActive = step.activeFor.includes(ticket.status as TicketStatus);
-                                        const isCurrent = i === STEPS.findLastIndex(s => s.activeFor.includes(ticket.status as TicketStatus));
-                                        return (
-                                            <div key={step.label} className="flex gap-4 relative">
-                                                <div className={`
-                                                    w-8 h-8 rounded-full shrink-0 flex items-center justify-center z-10
-                                                    ring-4 ring-[var(--bg-surface,white)]
-                                                    transition-colors duration-300
-                                                    ${isActive
-                                                        ? isCurrent && ticket.status !== 'Resolved' && ticket.status !== 'Closed'
-                                                            ? 'bg-blue-100 text-blue-600'
-                                                            : 'bg-green-100 text-green-600'
-                                                        : 'bg-surface-muted text-subtle'
-                                                    }
-                                                `}>
-                                                    {isActive ? <CheckCircle2 size={16} /> : <Clock size={16} />}
-                                                </div>
-                                                <div className="pt-1 min-w-0">
-                                                    <p className={`text-sm font-semibold leading-snug ${isActive ? 'text-body' : 'text-subtle'}`}>
-                                                        {step.label}
-                                                    </p>
-                                                    <p className="text-xs text-subtle mt-1 leading-relaxed">
-                                                        {step.description}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                        <div className="space-y-6">
+                            <TrackActionWorkspace actionAllowed={ownerView}>
+                                <FollowUpThread ticketId={ticket.ticketId} detailsRedacted={ticket.detailsRedacted} />
+                            </TrackActionWorkspace>
                         </div>
-
-                        {/* Appeals Thread */}
-                        <AppealsThread ticketId={ticket.ticketId} detailsRedacted={ticket.detailsRedacted} />
-
-                        {/* Track another */}
-                        <button
-                            onClick={() => { setTicket(null); setError(null); setTicketId(''); router.replace('?'); }}
-                            className="text-sm text-subtle hover:text-body transition-colors underline underline-offset-2"
-                        >
-                            ← Track a different ticket
-                        </button>
                     </motion.div>
-                )}
+                ) : null}
             </AnimatePresence>
         </div>
     );
 }
 
-// ── Page shell ─────────────────────────────────────────────────────────────────
 export default function TrackPage() {
     return (
         <>
-            <section className="bg-gradient-rtu page-header">
-                <div className="container-main text-center">
-                    <Ticket className="mx-auto mb-4 text-white/80" size={36} />
-                    <h1 className="page-header-title font-bold text-white mb-3">
-                        Track Your <span className="text-gradient-gold">Grievance</span>
-                    </h1>
-                    <p className="page-header-subtitle max-w-lg mx-auto">
-                        Check real-time status of your submitted grievances. When signed in, your ticket list appears directly in-app.
-                    </p>
+            <section className="page-header relative overflow-hidden bg-[linear-gradient(165deg,#10233b_0%,#173455_46%,#22456d_100%)] text-slate-100">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_8%_12%,rgba(247,217,150,0.24),transparent_52%),radial-gradient(120%_120%_at_92%_10%,rgba(125,211,252,0.22),transparent_58%)]" />
+                <div className="container-main relative grid items-end gap-8 py-3 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:py-6">
+                    <div>
+                        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-100">
+                            <Ticket size={12} />
+                            Case workspace
+                        </div>
+                        <h1 className="page-header-title mb-3 font-bold text-white">
+                            Track Your <span className="text-gradient-gold">Grievance</span>
+                        </h1>
+                        <p className="max-w-2xl text-base leading-relaxed text-slate-200">
+                            Review case status, open your owner workspace, and keep follow-up actions separate from the official record so the whole process stays clearer and more privacy-safe.
+                        </p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/[0.07] p-4 backdrop-blur-sm">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-100/80">Workspace principles</p>
+                        <ul className="mt-3 space-y-2 text-sm text-slate-100/90">
+                            <li>Owner-first case context when signed in</li>
+                            <li>Manual lookup always available</li>
+                            <li>Protected records stay privacy-redacted</li>
+                        </ul>
+                    </div>
                 </div>
             </section>
 
-            <section className="section-tight">
-                <Suspense fallback={
-                    <div className="container-main max-w-3xl flex justify-center py-16">
-                        <Loader2 className="animate-spin text-subtle" size={24} />
-                    </div>
-                }>
+            <section className="section-tight bg-surface-base">
+                <Suspense
+                    fallback={
+                        <div className="container-main flex max-w-6xl justify-center py-16">
+                            <Loader2 className="animate-spin text-subtle" size={24} />
+                        </div>
+                    }
+                >
                     <TrackContent />
                 </Suspense>
             </section>

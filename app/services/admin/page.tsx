@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ShieldCheck, Ticket, Lightbulb, Users, Settings, ArrowRight, AlertCircle, Shield } from 'lucide-react';
+import { ShieldCheck, Ticket, Lightbulb, ArrowRight, AlertCircle, Shield, MapPinned } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import BackLink from '@/components/BackLink';
@@ -34,23 +34,16 @@ export default function AdminHubPage() {
             badgeType: 'warning'
         },
         {
-            id: 'users',
-            label: 'User Management',
-            kicker: 'Access Control',
-            description: 'Manage users, adjust roles, and revoke administrative access.',
-            icon: Users,
-            href: '/services/admin/users',
+            id: 'routes',
+            label: 'Community Routes',
+            kicker: 'Transit Moderation',
+            description: 'Review commuter route submissions, approve public listings, and keep the Local Guides queue accurate.',
+            icon: MapPinned,
+            href: '/services/admin/routes',
             tone: 'green',
+            badge: 'Needs Review',
+            badgeType: 'warning'
         },
-        {
-            id: 'settings',
-            label: 'System Settings',
-            kicker: 'Configuration',
-            description: 'Configure global portal settings and environment variables.',
-            icon: Settings,
-            href: '/services/admin/settings',
-            tone: 'gray',
-        }
     ];
 
     return (
@@ -70,7 +63,7 @@ export default function AdminHubPage() {
                                 Operations <span className="services-display-accent">Deck</span>
                             </h1>
                             <p className="services-lead mt-5 max-w-2xl">
-                                Central dashboard for administrative tasks. Manage portal activity, review submissions, and control system configuration securely.
+                                Central dashboard for administrative review work. Manage portal activity and moderate submissions, while backend-only controls stay outside the admin hub.
                             </p>
                         </div>
                     </div>

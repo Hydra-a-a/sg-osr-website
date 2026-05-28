@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NoncedStyle } from '@/components/CspNonceProvider';
+import CommuteMapPanel from '@/components/commute/CommuteMapPanel';
 import { 
     ArrowLeft, ArrowRightLeft, Bus, Footprints, Map, TrainFront, 
     AlertTriangle, Info, ExternalLink, Navigation, Clock, Banknote,
-    CarFront, Star, Share2, Copy, Check, X, History, Zap, Coins, GitFork
+    CarFront, Star, Share2, X, History, Zap, Coins, GitFork, ThumbsUp, ThumbsDown, Trophy, MapPinned
 } from 'lucide-react';
 import type { CommuteResponse, CommuteStep } from '@/schemas/commute';
 
@@ -18,6 +20,7 @@ const MAX_SAVED = 8;
 const MAX_RECENT = 5;
 const LS_SAVED = 'commute_saved_routes';
 const LS_RECENT = 'commute_recent_searches';
+const LS_VOTES = 'commute_route_votes';
 
 function readLS<T>(key: string, fallback: T): T {
     try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -70,11 +73,17 @@ export default function CommuterMapsPage() {
     const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
     const [toastMsg, setToastMsg] = useState('');
     const [isSaved, setIsSaved] = useState(false);
+    const [voteMemory, setVoteMemory] = useState<Record<string, 'UPVOTE' | 'DOWNVOTE'>>({});
+    const [votePending, setVotePending] = useState<'UPVOTE' | 'DOWNVOTE' | null>(null);
+    const [issueMessage, setIssueMessage] = useState('');
+    const [issueMode, setIssueMode] = useState<'ISSUE' | 'UPDATE'>('ISSUE');
+    const [issuePending, setIssuePending] = useState(false);
 
     // Load localStorage on mount
     useEffect(() => {
         setSavedRoutes(readLS<SavedRoute[]>(LS_SAVED, []));
         setRecentSearches(readLS<RecentSearch[]>(LS_RECENT, []));
+        setVoteMemory(readLS<Record<string, 'UPVOTE' | 'DOWNVOTE'>>(LS_VOTES, {}));
     }, []);
 
     // Check if current result is already saved
@@ -165,6 +174,86 @@ export default function CommuterMapsPage() {
             showToast('Could not copy to clipboard');
         }
     };
+
+    const currentVoteKey = result?.provider === 'curated' && result.rowNumber
+        ? `route_${result.rowNumber}`
+        : null;
+
+    const currentVote = currentVoteKey ? voteMemory[currentVoteKey] : undefined;
+
+    const handleVote = useCallback(async (voteType: 'UPVOTE' | 'DOWNVOTE') => {
+        if (!result || result.provider !== 'curated' || !result.rowNumber || !currentVoteKey) {
+            return;
+        }
+
+        if (voteMemory[currentVoteKey]) {
+            showToast('You already voted on this route from this device.');
+            return;
+        }
+
+        setVotePending(voteType);
+
+        try {
+            const response = await fetch('/api/hub/commute/vote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rowNumber: result.rowNumber,
+                    voteType,
+                }),
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data?.error?.message || 'Unable to save your vote right now.');
+            }
+
+            const nextVotes = { ...voteMemory, [currentVoteKey]: voteType };
+            writeLS(LS_VOTES, nextVotes);
+            setVoteMemory(nextVotes);
+            setResult((current) => current ? {
+                ...current,
+                upvotes: data.upvotes,
+                downvotes: data.downvotes,
+                healthStatus: data.healthStatus || current.healthStatus,
+            } : current);
+            showToast(voteType === 'UPVOTE' ? 'Marked as helpful.' : 'Marked for review.');
+        } catch (voteError: any) {
+            showToast(voteError?.message || 'Unable to save your vote right now.');
+        } finally {
+            setVotePending(null);
+        }
+    }, [currentVoteKey, result, voteMemory]);
+
+    const handleIssueSubmit = useCallback(async () => {
+        if (!result?.rowNumber || result.provider !== 'curated' || !issueMessage.trim()) {
+            return;
+        }
+
+        setIssuePending(true);
+        try {
+            const response = await fetch('/api/hub/commute/issue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rowNumber: result.rowNumber,
+                    reportType: issueMode,
+                    message: issueMessage.trim(),
+                }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data?.error?.message || 'Unable to report this route right now.');
+            }
+
+            setIssueMessage('');
+            showToast(issueMode === 'UPDATE' ? 'Update request sent for officer review.' : 'Issue report sent for officer review.');
+        } catch (issueError: any) {
+            showToast(issueError?.message || 'Unable to report this route right now.');
+        } finally {
+            setIssuePending(false);
+        }
+    }, [issueMessage, issueMode, result]);
 
     const studentFare = (fareRange: string | undefined): string | null => {
         if (!fareRange) return null;
@@ -281,6 +370,25 @@ export default function CommuterMapsPage() {
                             </div>
                         </div>
 
+                        <div className="hub-panel p-6 space-y-3">
+                            <div>
+                                <h3 className="text-sm font-medium text-slate-200">Local Guides</h3>
+                                <p className="mt-1 text-sm text-slate-400">
+                                    Add a trusted route to the map or see who is helping commuters the most.
+                                </p>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                                <Link href="/hub/commute/contribute" className="hub-action-secondary text-sm justify-center">
+                                    <MapPinned className="w-4 h-4 mr-1.5" />
+                                    Contribute a Route
+                                </Link>
+                                <Link href="/hub/commute/leaderboard" className="hub-action-secondary text-sm justify-center">
+                                    <Trophy className="w-4 h-4 mr-1.5" />
+                                    Local Guides Board
+                                </Link>
+                            </div>
+                        </div>
+
                         {/* Saved Routes */}
                         {savedRoutes.length > 0 && (
                             <div className="hub-panel p-6">
@@ -332,6 +440,9 @@ export default function CommuterMapsPage() {
 
                     {/* Results Area */}
                     <div className="lg:col-span-8">
+                        <div className="mb-6">
+                            <CommuteMapPanel result={result} origin={origin} destination={destination} />
+                        </div>
                         <AnimatePresence mode="wait">
                             {isLoading && (
                                 <motion.div 
@@ -408,7 +519,26 @@ export default function CommuterMapsPage() {
                                                             Suggested Route
                                                         </h2>
                                                         {result.provider === 'curated' && (
-                                                            <span className="text-xs font-medium text-amber-400/80 uppercase tracking-wider mt-1 block">Community-Curated Route</span>
+                                                            <div className="mt-1 space-y-1">
+                                                                <span className="text-xs font-medium text-amber-400/80 uppercase tracking-wider block">Community-Curated Route</span>
+                                                                {result.contributorDisplayLabel ? (
+                                                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-100">
+                                                                        <Star className="w-3 h-3 text-amber-300" />
+                                                                        Mapped by @{result.contributorDisplayLabel}
+                                                                    </span>
+                                                                ) : null}
+                                                                {result.reviewBadgeLabel ? (
+                                                                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                                                                        result.healthStatus === 'flagged'
+                                                                            ? 'border-red-400/30 bg-red-500/10 text-red-100'
+                                                                            : result.healthStatus === 'aging'
+                                                                                ? 'border-amber-400/30 bg-amber-500/10 text-amber-100'
+                                                                                : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
+                                                                    }`}>
+                                                                        Route status: {result.reviewBadgeLabel}
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
                                                         )}
                                                     </div>
                                                     
@@ -476,6 +606,96 @@ export default function CommuterMapsPage() {
                                                     ))}
                                                 </div>
                                             </div>
+
+                                            {result.provider === 'curated' && result.rowNumber ? (
+                                                <div className="px-6 pb-2 space-y-3">
+                                                    <div className="rounded-2xl border border-white/8 bg-slate-950/20 px-4 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                                        <div>
+                                                            <p className="text-sm font-medium text-slate-100">Route Karma</p>
+                                                            <p className="text-xs text-slate-400">
+                                                                Vote once per device to flag the route as helpful or needing an update.
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <button
+                                                                onClick={() => handleVote('UPVOTE')}
+                                                                disabled={Boolean(currentVote) || votePending !== null}
+                                                                className={`hub-vote-button ${currentVote === 'UPVOTE' ? 'hub-vote-button-active-up' : ''}`}
+                                                            >
+                                                                <ThumbsUp className="w-4 h-4" />
+                                                                Helpful
+                                                                <span className="hub-vote-pill">{result.upvotes ?? 0}</span>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleVote('DOWNVOTE')}
+                                                                disabled={Boolean(currentVote) || votePending !== null}
+                                                                className={`hub-vote-button ${currentVote === 'DOWNVOTE' ? 'hub-vote-button-active-down' : ''}`}
+                                                            >
+                                                                <ThumbsDown className="w-4 h-4" />
+                                                                Needs Update
+                                                                <span className="hub-vote-pill">{result.downvotes ?? 0}</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {(result.healthStatus === 'flagged' || result.healthStatus === 'aging') && result.healthReason ? (
+                                                        <div className={`rounded-2xl border px-4 py-3 ${
+                                                            result.healthStatus === 'flagged'
+                                                                ? 'border-red-500/30 bg-red-500/10 text-red-100'
+                                                                : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                                                        }`}>
+                                                            <p className="text-sm font-semibold">
+                                                                {result.healthStatus === 'flagged' ? 'Needs review' : 'Aging community guide'}
+                                                            </p>
+                                                            <p className="mt-1 text-xs opacity-90">{result.healthReason}</p>
+                                                            {result.lastReviewedAt ? (
+                                                                <p className="mt-1 text-[11px] opacity-75">Last reviewed: {result.lastReviewedAt}</p>
+                                                            ) : null}
+                                                        </div>
+                                                    ) : null}
+
+                                                    <div className="rounded-2xl border border-white/8 bg-slate-950/20 px-4 py-3">
+                                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                                            <div>
+                                                                <p className="text-sm font-medium text-slate-100">Report an issue</p>
+                                                                <p className="text-xs text-slate-400">
+                                                                    Send an issue report or update request to officers without editing the live route.
+                                                                </p>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => setIssueMode('ISSUE')}
+                                                                    className={`hub-mini-chip ${issueMode === 'ISSUE' ? 'border-red-400/25 bg-red-500/10 text-red-100' : ''}`}
+                                                                >
+                                                                    Report an issue
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setIssueMode('UPDATE')}
+                                                                    className={`hub-mini-chip ${issueMode === 'UPDATE' ? 'border-blue-400/25 bg-blue-500/10 text-blue-100' : ''}`}
+                                                                >
+                                                                    Suggest update
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <textarea
+                                                            value={issueMessage}
+                                                            onChange={(event) => setIssueMessage(event.target.value)}
+                                                            rows={3}
+                                                            placeholder={issueMode === 'UPDATE' ? 'Describe what should be changed or clarified.' : 'Describe what looks wrong or outdated.'}
+                                                            className="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
+                                                        />
+                                                        <div className="mt-3 flex justify-end">
+                                                            <button
+                                                                onClick={handleIssueSubmit}
+                                                                disabled={issuePending || issueMessage.trim().length < 12}
+                                                                className="hub-action-secondary text-sm"
+                                                            >
+                                                                {issuePending ? 'Sending...' : 'Send to officers'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : null}
 
                                             <div className="p-4 bg-white/[0.02] border-t border-white/5 flex flex-wrap justify-between gap-3">
                                                 <div className="flex gap-2">
@@ -577,6 +797,49 @@ export default function CommuterMapsPage() {
                     background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; transition: all 0.2s;
                 }
                 .hub-action-secondary:hover { background: rgba(255,255,255,0.08); transform: translateY(-1px); }
+                .hub-vote-button {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.45rem;
+                    border-radius: 999px;
+                    border: 1px solid rgba(255,255,255,0.1);
+                    background: rgba(255,255,255,0.04);
+                    color: #e2e8f0;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    padding: 0.6rem 0.9rem;
+                    transition: all 0.2s ease;
+                }
+                .hub-vote-button:hover:not(:disabled) {
+                    background: rgba(255,255,255,0.08);
+                    border-color: rgba(255,255,255,0.16);
+                }
+                .hub-vote-button:disabled {
+                    opacity: 0.7;
+                    cursor: not-allowed;
+                }
+                .hub-vote-button-active-up {
+                    border-color: rgba(16, 185, 129, 0.35);
+                    color: #bbf7d0;
+                    background: rgba(16, 185, 129, 0.14);
+                }
+                .hub-vote-button-active-down {
+                    border-color: rgba(248, 113, 113, 0.35);
+                    color: #fecaca;
+                    background: rgba(239, 68, 68, 0.14);
+                }
+                .hub-vote-pill {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-width: 1.5rem;
+                    height: 1.5rem;
+                    padding: 0 0.4rem;
+                    border-radius: 999px;
+                    background: rgba(15, 23, 42, 0.45);
+                    color: #f8fafc;
+                    font-size: 0.72rem;
+                }
                 .hub-mini-chip {
                     display: inline-flex; align-items: center; justify-content: center;
                     border-radius: 999px; padding: 0.35rem 0.7rem; font-weight: 600;

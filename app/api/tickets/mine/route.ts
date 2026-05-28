@@ -3,12 +3,8 @@ import { auth } from '@/lib/auth';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
-import { listTicketsByOwnerEmail } from '@/lib/tickets';
-
-function withNoStore(response: NextResponse): NextResponse {
-    response.headers.set('Cache-Control', 'no-store');
-    return response;
-}
+import { rateLimitResponse, withNoStore } from '@/lib/api-responses';
+import { listTicketsByOwnerEmail } from '@/features/tickets/server/access';
 
 /**
  * GET /api/tickets/mine
@@ -26,11 +22,7 @@ export async function GET(request: Request) {
 
     const limit = await checkRateLimit(`ticket_mine_${ownerEmail}_${ip}`, 30, 60_000);
     if (!limit.success) {
-        const response = toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests. Try again later.'));
-        if (limit.retryAfter) {
-            response.headers.set('Retry-After', String(limit.retryAfter));
-        }
-        return withNoStore(response);
+        return rateLimitResponse(limit, 'Too many requests. Try again later.');
     }
 
     try {

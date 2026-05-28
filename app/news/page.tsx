@@ -101,9 +101,10 @@ export default function NewsPage() {
                                     const title = post.displayTitle || post.manualTitle || post.articleTitle || 'Student government update';
                                     const body = post.displayBody || post.manualBody || post.articleBody || post.caption;
                                     const source = post.sourcePageName || post.source || 'Student Government';
+                                    const stablePostKey = `${post.id || post.articleSlug || 'news-post'}-${index}`;
 
                                     return (
-                                        <article key={post.id || post.articleSlug || `news-post-${index}`} className="fb-card fade-in-up content-visibility-auto">
+                                        <article key={stablePostKey} className="fb-card fade-in-up content-visibility-auto">
                                             <div className="fb-card-header">
                                                 <div className={`fb-avatar fb-avatar--${sourceVariant(source)}`} aria-hidden="true">
                                                     {source.charAt(0).toUpperCase()}
@@ -124,7 +125,7 @@ export default function NewsPage() {
                                                     {title}
                                                 </h2>
                                                 {body && (
-                                                    <p className="mt-3 text-sm md:text-base leading-7 text-slate-200">
+                                                    <p className="mt-3 text-sm md:text-base leading-7 text-body">
                                                         {excerpt(body)}
                                                     </p>
                                                 )}
@@ -168,7 +169,7 @@ export default function NewsPage() {
                                     <button
                                         type="button"
                                         onClick={() => setLimit((current) => current + PAGE_STEP)}
-                                        className="btn-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300"
+                                        className="btn-secondary btn-secondary-on-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300"
                                         aria-label="Load more news updates"
                                     >
                                         Load more

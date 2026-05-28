@@ -6,17 +6,16 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { NoncedStyle } from '@/components/CspNonceProvider';
 import BackLink from '@/components/BackLink';
+import LeaderAccessNoticeBanner from '@/components/LeaderAccessNoticeBanner';
 import {
     FileText,
     Search,
-    Lock,
     Lightbulb,
     ShieldCheck,
     ArrowRight,
     Star,
-    AlertCircle,
 } from 'lucide-react';
-import { deriveEffectivePortalRole } from '@/lib/portal-mode';
+import { getAccessVisibilityState } from '@/lib/access-visibility';
 import { PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
 
 
@@ -37,10 +36,8 @@ export default function ServicesPage() {
     const { data: session, status } = useSession();
     const portalMode = useSyncExternalStore(subscribeNoop, getPortalModeCookie, () => '');
 
-    const userRole = session?.user?.role ?? 'student';
-    const effectiveRole = deriveEffectivePortalRole(userRole, portalMode);
-
-    const isPrivileged = effectiveRole === 'leader' || effectiveRole === 'officer';
+    const visibility = getAccessVisibilityState(session?.user?.role, portalMode, '');
+    const { effectiveRole, canSeeLeaderFeatures, canSeeOfficerFeatures } = visibility;
     const isLoading = status === 'loading';
 
     const modeLabel = effectiveRole === 'officer'
@@ -72,7 +69,7 @@ export default function ServicesPage() {
             badge: 'Leaders & Officers',
             tone: 'amber',
             kicker: 'Program Pipeline',
-            visible: isPrivileged,
+            visible: canSeeLeaderFeatures,
         },
         {
             id: 'admin',
@@ -84,15 +81,17 @@ export default function ServicesPage() {
             badge: 'Officer Access',
             tone: 'green',
             kicker: 'Operations Deck',
-            visible: effectiveRole === 'officer',
+            visible: canSeeOfficerFeatures,
         },
     ] as const;
 
     const visibleCards = cards.filter(c => c.visible);
+    const visibleCardCount = visibleCards.length;
 
     return (
         <div className={`services-shell relative overflow-hidden`}>
             <div className="services-noise" aria-hidden="true" />
+            <LeaderAccessNoticeBanner />
 
             <section className="relative z-10 pt-20 pb-10 md:pt-28 md:pb-14">
                 <div className="container-main">
@@ -131,7 +130,7 @@ export default function ServicesPage() {
                 <div className="container-main max-w-6xl">
                     <div className="mb-8 flex justify-end">
                         <div className="flex flex-wrap justify-end gap-3">
-                            {isPrivileged ? (
+                            {canSeeLeaderFeatures ? (
                                 <Link href="/services/proposals/track" className="services-track-link group inline-flex items-center gap-2 px-5 py-3 rounded-xl">
                                     <Lightbulb size={16} />
                                     <span>Track Submitted Proposals</span>
@@ -147,7 +146,7 @@ export default function ServicesPage() {
                     </div>
 
                     {isLoading ? (
-                        <div className="services-card-grid gap-6">
+                        <div className={`services-card-grid gap-6 ${visibleCardCount <= 2 ? 'services-card-grid-compact' : ''} ${visibleCardCount === 1 ? 'services-card-grid-single' : ''}`}>
                             {[0, 1].map((item) => (
                                 <div key={item} className="services-card services-card-skeleton p-7 md:p-8">
                                     <div className="h-4 w-28 bg-white/20 rounded mb-5" />
@@ -201,35 +200,6 @@ export default function ServicesPage() {
                                 );
                             })}
 
-                            {!isPrivileged && status === 'authenticated' && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 28 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.45, delay: 0.18 }}
-                                    className="services-card services-card-locked p-7 md:p-8"
-                                >
-                                    <div className="flex items-start justify-between gap-4 mb-2">
-                                        <p className="services-card-kicker text-red-500/80">Restricted Module</p>
-                                    </div>
-
-                                    <div className="services-icon-box mb-6 relative">
-                                        <div className="services-icon-tile opacity-60">
-                                            <Lock size={24} />
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="services-badge-slot mb-4">
-                                        <span className="services-badge-locked inline-flex items-center gap-1.5">
-                                            <AlertCircle size={12} /> Leaders & Officers Only
-                                        </span>
-                                    </div>
-
-                                    <h2 className={`services-card-title text-gray-400`}>Project Proposals</h2>
-                                    <p className="services-card-description mt-3 text-gray-500">
-                                        Access required. Please log into an authorized account or switch your active mode to access this administrative portal.
-                                    </p>
-                                </motion.div>
-                            )}
                         </div>
                     )}
 
@@ -317,6 +287,14 @@ export default function ServicesPage() {
                 .services-card-grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                }
+
+                .services-card-grid-compact {
+                    justify-content: center;
+                }
+
+                .services-card-grid-single {
+                    grid-template-columns: minmax(280px, 520px);
                 }
 
                 .services-card::before {

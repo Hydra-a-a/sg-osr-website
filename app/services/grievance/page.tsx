@@ -275,7 +275,7 @@ export default function GrievancePage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
                     onSubmit={handleSubmit}
-                    className="portal-panel sg-hover-card p-6 sm:p-10 space-y-8 bg-slate-900/60 border border-white/10"
+                    className="portal-panel grievance-form-shell p-6 sm:p-10 space-y-7"
                 >
                     {/* hidden bot trap */}
                     <div className="is-hidden-offscreen" aria-hidden="true">
@@ -308,9 +308,9 @@ export default function GrievancePage() {
                     )}
 
                     {/* Section 1: Submission Mode */}
-                    <div className="space-y-4">
+                    <div className="grievance-section space-y-4">
                         <h3 className="portal-eyebrow text-rtu-gold">1. Submission Privacy</h3>
-                        <div className="rounded-xl border border-white/10 p-5 bg-black/20">
+                        <div className="grievance-inset p-5">
                             <label className="flex items-center gap-3 cursor-pointer">
                                 <input
                                     type="checkbox"
@@ -408,7 +408,7 @@ export default function GrievancePage() {
                     </div>
 
                     {/* Section 2: Case Details */}
-                    <div className="space-y-5 pt-6 border-t border-white/10">
+                    <div className="grievance-section space-y-5">
                         <h3 className="portal-eyebrow text-rtu-gold">2. Case Details</h3>
 
                         {!isAnonymous && (
@@ -560,9 +560,9 @@ export default function GrievancePage() {
                     </div>
 
                     {/* Section 3: Supporting Documents */}
-                    <div className="space-y-4 pt-6 border-t border-white/10">
+                    <div className="grievance-section space-y-4">
                         <h3 className="portal-eyebrow text-rtu-gold">3. Supporting Evidence</h3>
-                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-100/90">
+                        <div className="grievance-evidence-note p-4 text-sm text-amber-100/90">
                             <p className="font-semibold text-amber-200 mb-2">Submit evidence whenever possible.</p>
                             <p className="leading-relaxed">
                                 A grievance is easier to assess when it can establish a prima facie case, meaning there is enough initial evidence to show the complaint is credible on its face. Without evidence, the council may need to rely on similar submissions from other students, witness accounts, or later corroboration before it can formally acknowledge and act on the matter.
@@ -639,8 +639,8 @@ export default function GrievancePage() {
                     </div>
 
                     {/* Section 4: Compliance & Submit */}
-                    <div className="space-y-5 pt-8 border-t border-white/10">
-                        <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-5">
+                    <div className="grievance-section space-y-5">
+                        <div className="grievance-privacy-note p-5">
                             <div className="flex items-start gap-4">
                                 <ShieldCheck className="text-sky-400 mt-1 shrink-0" size={24} />
                                 <div className="flex-1 space-y-3">

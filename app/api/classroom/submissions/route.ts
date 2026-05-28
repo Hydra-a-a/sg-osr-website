@@ -8,12 +8,20 @@ import { ClassroomSubmissionSchema } from '@/schemas/classroom';
 import { logAuditAction } from '@/lib/audit';
 import { cookies } from 'next/headers';
 import { deriveEffectivePortalRole, hasLeaderPrivilege, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
+import { requireSameOriginRequest } from '@/lib/request-guards';
 
 const DEDUPE_TTL_MS = 90_000;
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
 export async function POST(request: Request) {
     const ip = getClientIp(request);
+
+    try {
+        requireSameOriginRequest(request);
+    } catch {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: NO_STORE_HEADERS });
+    }
+
     const limit = await checkRateLimit(`classroom_submit_${ip}`, 12, 60_000);
 
     if (!limit.success) {

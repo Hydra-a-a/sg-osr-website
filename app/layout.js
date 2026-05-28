@@ -1,6 +1,8 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 import NavbarClient from "@/components/NavbarClient";
+import SectionNavigationRail from "@/components/SectionNavigationRail";
 import Footer from "@/components/Footer";
 import AuthProvider from "@/components/AuthProvider";
 import PageTransition from "@/components/PageTransition";
@@ -47,6 +49,7 @@ export default async function RootLayout({ children }) {
           <ViewportModeGuard />
           <AuthProvider>
             <NavbarClient config={config} />
+            <SectionNavigationRail />
             <main id="main-content" className="flex-1" tabIndex={-1}>
               <PageTransition>
                 {children}

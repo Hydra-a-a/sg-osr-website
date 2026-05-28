@@ -538,25 +538,10 @@ function parseWorkbookOffices(rows: string[][]) {
     return parsed;
 }
 
-export async function GET(request: Request) {
-    const shouldRateLimitDirectory = process.env.NODE_ENV === 'production';
-
-    if (shouldRateLimitDirectory) {
-        const ip = getClientIp(request);
-        const limit = await checkRateLimit(`dir_api_${ip}`, 30, 60000); // 30 requests per minute per IP
-
-        if (!limit.success) {
-            const response = toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests'));
-            if (limit.retryAfter) {
-                response.headers.set('Retry-After', String(limit.retryAfter));
-            }
-            return response;
-        }
-    }
-
+export async function fetchDirectoryData() {
+    // Expose the directory-building logic so other endpoints can reuse it.
+    // This function mirrors the behavior previously implemented in GET.
     try {
-        // local Next.js requests often resolve to anonymous, which can make shared
-        // dev traffic trip the limiter even when the directory integration is healthy.
         const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_DIRECTORY_ID || process.env.GOOGLE_SHEETS_INFO_ID;
         const LEGACY_OFFICERS_RANGE_CANDIDATES = ['Officers!A2:J', 'OFFICERS!A2:J'];
         const LEGACY_OFFICES_RANGE_CANDIDATES = ['Offices!A2:G', 'OFFICES!A2:G'];
@@ -577,7 +562,7 @@ export async function GET(request: Request) {
         ];
 
         if (!SPREADSHEET_ID) {
-            return toApiResponse(new ApiError(500, 'SERVICE_MISCONFIGURED', 'Internal server error', undefined, false));
+            throw new ApiError(500, 'SERVICE_MISCONFIGURED', 'Internal server error', undefined, false);
         }
 
         const spreadsheetTitles = await getSpreadsheetSheetTitles(SPREADSHEET_ID);
@@ -758,7 +743,7 @@ export async function GET(request: Request) {
             })),
         ];
 
-        return NextResponse.json({
+        return {
             data: merged,
             leaders: finalOfficers,
             offices: finalOffices,
@@ -772,10 +757,34 @@ export async function GET(request: Request) {
                 invalid: invalidLegacyOfficerCount + invalidLegacyOfficeCount,
                 officeSheetUnavailable,
             }
-        });
+        };
 
     } catch (error) {
         console.error('Directory API Error:', redactErrorForLog(error));
+        throw error;
+    }
+}
+
+export async function GET(request: Request) {
+    const shouldRateLimitDirectory = process.env.NODE_ENV === 'production';
+
+    if (shouldRateLimitDirectory) {
+        const ip = getClientIp(request);
+        const limit = await checkRateLimit(`dir_api_${ip}`, 30, 60000); // 30 requests per minute per IP
+
+        if (!limit.success) {
+            const response = toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests'));
+            if (limit.retryAfter) {
+                response.headers.set('Retry-After', String(limit.retryAfter));
+            }
+            return response;
+        }
+    }
+
+    try {
+        const payload = await fetchDirectoryData();
+        return NextResponse.json(payload);
+    } catch (error) {
         return toApiResponse(error);
     }
 }

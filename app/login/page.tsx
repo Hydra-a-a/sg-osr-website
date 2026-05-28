@@ -354,7 +354,11 @@ function LoginContent() {
                                                     placeholder="student@rtu.edu.ph"
                                                     className="login-dev-input w-full"
                                                 />
+                                                <label htmlFor="local-dev-role" className="sr-only">
+                                                    Local development role
+                                                </label>
                                                 <select
+                                                    id="local-dev-role"
                                                     value={devRole}
                                                     onChange={(e) => {
                                                         const v = e.target.value;

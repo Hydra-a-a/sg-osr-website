@@ -2,17 +2,13 @@ import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
+import { rateLimitResponse, withNoStore } from '@/lib/api-responses';
 import { auth } from '@/lib/auth';
-import { lookupTicketByIdForOwner } from '@/lib/tickets';
-
-function withNoStore(response: NextResponse): NextResponse {
-    response.headers.set('Cache-Control', 'no-store');
-    return response;
-}
+import { lookupTicketByIdForOwner } from '@/features/tickets/server/access';
 
 /**
  * GET /api/tickets/[id]
- * Public endpoint — no auth required so students can track anonymous tickets.
+ * Public endpoint - no auth required so students can track anonymous tickets.
  * Returns only safe, non-PII fields.
  */
 export async function GET(
@@ -29,9 +25,7 @@ export async function GET(
     // Rate limit: 20 lookups per minute per IP to prevent enumeration attacks
     const limit = await checkRateLimit(`ticket_lookup_${ip}`, 20, 60000);
     if (!limit.success) {
-        const response = toApiResponse(new ApiError(429, 'RATE_LIMITED', 'Too many requests. Try again later.'));
-        if (limit.retryAfter) response.headers.set('Retry-After', String(limit.retryAfter));
-        return withNoStore(response);
+        return rateLimitResponse(limit, 'Too many requests. Try again later.');
     }
 
     // Basic format validation to avoid needlessly querying Sheets.

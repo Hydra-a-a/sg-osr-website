@@ -26,7 +26,10 @@ export default function AnnouncementPopup() {
     const [closing, setClosing] = useState(false);
     const panelRef = useRef<HTMLDivElement>(null);
 
-    const isBlockedRoute = useMemo(() => pathname === '/' || pathname === '/osr', [pathname]);
+    const isBlockedRoute = useMemo(
+        () => pathname === '/' || pathname === '/osr' || pathname.startsWith('/hub'),
+        [pathname]
+    );
 
     useEffect(() => {
         if (isBlockedRoute) return;

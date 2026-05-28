@@ -38,6 +38,11 @@
     "**/*.tsx"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    ".agents",
+    ".worktrees",
+    "skills",
+    "artifacts",
+    "scratch"
   ]
 }

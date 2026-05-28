@@ -24,15 +24,30 @@ export default function AnnouncementsPanel({ announcements }: Props) {
             <div className="portal-noise-overlay" aria-hidden="true" />
             <div className="container-main relative z-10">
                 <div className="mb-8">
-                    <span className="portal-eyebrow">Announcements</span>
-                    <h2 className="home-section-title mt-4">Current Advisory Notices</h2>
+                    <div className="home-updates-head">
+                        <div>
+                            <span className="portal-eyebrow home-updates-eyebrow">Announcements</span>
+                            <h2 className="home-section-title mt-4">Current Advisory Notices</h2>
+                            <p className="home-updates-subline mt-3">
+                                Official advisories, student-government notices, and service updates for the RTU community.
+                            </p>
+                        </div>
+                        <Link href="/student-government/osr#osr-announcements" className="home-updates-link no-underline">
+                            View SSC Feed
+                        </Link>
+                    </div>
+                    <div className="home-updates-divider" aria-hidden="true">
+                        <span className="home-updates-divider-mark" />
+                    </div>
                 </div>
                 <div className="announcement-grid">
                     {announcements.map((item) => {
                         const summaryId = `announcement-summary-${item.id}`;
                         return (
                             <article key={item.id} className="announcement-card">
-                                <p className="announcement-date">{formatDate(item.publishedAt)}</p>
+                                <div className="announcement-meta">
+                                    <p className="announcement-date">{formatDate(item.publishedAt)}</p>
+                                </div>
                                 <h3 className="announcement-title">{item.title}</h3>
                                 <p id={summaryId} className="announcement-summary">{item.summary}</p>
                                 <Link href="/news" className="announcement-link no-underline" aria-describedby={summaryId}>

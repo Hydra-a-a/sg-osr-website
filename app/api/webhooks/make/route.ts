@@ -9,6 +9,11 @@ import { ApiError, toApiResponse } from '@/lib/api-errors';
 const replayCache = new Map<string, number>();
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
 
+function withNoStore(response: NextResponse) {
+    response.headers.set('Cache-Control', 'no-store');
+    return response;
+}
+
 function isReplayRequest(signature: string, timestamp: string): boolean {
     const now = Date.now();
 
@@ -39,7 +44,7 @@ export async function POST(request: Request) {
         if (limit.retryAfter) {
             response.headers.set('Retry-After', String(limit.retryAfter));
         }
-        return response;
+        return withNoStore(response);
     }
 
     try {
@@ -50,42 +55,42 @@ export async function POST(request: Request) {
 
         if (!secret) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Webhook secret is not configured' });
-            return toApiResponse(new ApiError(500, 'WEBHOOK_NOT_CONFIGURED', 'Internal server error', undefined, false));
+            return withNoStore(toApiResponse(new ApiError(500, 'WEBHOOK_NOT_CONFIGURED', 'Internal server error', undefined, false)));
         }
 
         if (!signatureHeader || !timestampHeader) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Missing webhook signature or timestamp header' });
-            return toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized'));
+            return withNoStore(toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized')));
         }
 
         if (!isRecentWebhookTimestamp(timestampHeader)) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Invalid or stale webhook timestamp' });
-            return toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized'));
+            return withNoStore(toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized')));
         }
 
         const timestamp = String(timestampHeader);
 
         if (!verifyWebhookHmac(rawBody, timestamp, signatureHeader, secret)) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Invalid webhook signature' });
-            return toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized'));
+            return withNoStore(toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized')));
         }
 
         if (isReplayRequest(signatureHeader, timestamp)) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Webhook replay detected' });
-            return toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized'));
+            return withNoStore(toApiResponse(new ApiError(401, 'UNAUTHORIZED', 'Unauthorized')));
         }
 
         let body: unknown;
         try {
             body = JSON.parse(rawBody);
         } catch {
-            return toApiResponse(new ApiError(400, 'INVALID_JSON', 'Invalid request payload'));
+            return withNoStore(toApiResponse(new ApiError(400, 'INVALID_JSON', 'Invalid request payload')));
         }
 
         const result = MakeWebhookPayloadSchema.safeParse(body);
         if (!result.success) {
             logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Schema validation mismatch on webhook payload' });
-            return toApiResponse(new ApiError(400, 'INVALID_PAYLOAD', 'Invalid request payload'));
+            return withNoStore(toApiResponse(new ApiError(400, 'INVALID_PAYLOAD', 'Invalid request payload')));
         }
 
         const data = result.data;
@@ -105,7 +110,7 @@ export async function POST(request: Request) {
 
         if (recentCaptions.includes(cleanContent)) {
             logAuditAction('WEBHOOK_PROCESSED', { ip, sourcePage: rowSource, reason: 'Duplicate post ignored' });
-            return NextResponse.json({ success: true, message: 'Duplicate post ignored', skipped: true });
+            return withNoStore(NextResponse.json({ success: true, message: 'Duplicate post ignored', skipped: true }));
         }
 
         const lowContent = cleanContent.toLowerCase();
@@ -125,7 +130,7 @@ export async function POST(request: Request) {
         
         if (blockKeywords.some(kw => lowContent.includes(kw))) {
             logAuditAction('WEBHOOK_FILTERED', { ip, sourcePage: rowSource, reason: 'Non-news content matches blocklist' });
-            return NextResponse.json({ success: true, message: 'Filtered: Non-news content', filtered: true });
+            return withNoStore(NextResponse.json({ success: true, message: 'Filtered: Non-news content', filtered: true }));
         }
 
         const rowId = data.publishedAt || new Date().toISOString();
@@ -142,15 +147,15 @@ export async function POST(request: Request) {
 
         logAuditAction('WEBHOOK_PROCESSED', { ip, sourcePage: rowSource });
 
-        return NextResponse.json({
+        return withNoStore(NextResponse.json({
             success: true,
             message: 'News post automated successfully',
             timestamp: new Date().toISOString(),
-        });
+        }));
 
     } catch (error) {
         logAuditAction('WEBHOOK_FAILED_AUTH', { ip, reason: 'Internal exception during processing' });
         console.error('Make Webhook Error:', redactErrorForLog(error));
-        return toApiResponse(error);
+        return withNoStore(toApiResponse(error));
     }
 }

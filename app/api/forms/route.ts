@@ -6,27 +6,11 @@ import { logAuditAction } from '@/lib/audit';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { auth } from '@/lib/auth';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
+import { requireSameOriginRequest } from '@/lib/request-guards';
 
 function withNoStore(response: NextResponse): NextResponse {
     response.headers.set('Cache-Control', 'no-store');
     return response;
-}
-
-function getCanonicalOrigin(request: Request): string | null {
-    const configuredOrigin = process.env.AUTH_URL || process.env.NEXTAUTH_URL;
-    if (configuredOrigin) {
-        try {
-            return new URL(configuredOrigin).origin;
-        } catch {
-            return null;
-        }
-    }
-
-    try {
-        return new URL(request.url).origin;
-    } catch {
-        return null;
-    }
 }
 
 export async function POST(request: Request) {
@@ -44,21 +28,11 @@ export async function POST(request: Request) {
         return withNoStore(toApiResponse(new ApiError(403, 'FORBIDDEN', 'Forbidden')));
     }
 
-    const origin = request.headers.get('origin');
-    const expectedOrigin = getCanonicalOrigin(request);
-    if (!origin || !expectedOrigin) {
-        logAuditAction('FORM_VALIDATION_FAILED', { ip, reason: 'Origin header missing or expected origin unavailable' });
-        return withNoStore(toApiResponse(new ApiError(403, 'FORBIDDEN', 'Forbidden')));
-    }
-
     try {
-        const parsedOrigin = new URL(origin).origin;
-        if (parsedOrigin !== expectedOrigin) {
-            logAuditAction('FORM_VALIDATION_FAILED', { ip, reason: 'Origin header mismatch' });
-            return withNoStore(toApiResponse(new ApiError(403, 'FORBIDDEN', 'Forbidden')));
-        }
-    } catch {
-        return withNoStore(toApiResponse(new ApiError(403, 'FORBIDDEN', 'Forbidden')));
+        requireSameOriginRequest(request);
+    } catch (error) {
+        logAuditAction('FORM_VALIDATION_FAILED', { ip, reason: 'Origin check failed' });
+        return withNoStore(toApiResponse(error));
     }
 
     // keeping this low so bots don't nuke my inbox

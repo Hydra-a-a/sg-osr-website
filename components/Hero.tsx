@@ -2,15 +2,22 @@
 
 import useSWR from 'swr';
 import Link from 'next/link';
-import { ExternalLink, FileText, Landmark, Newspaper } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import {
+    ArrowTopRightOnSquareIcon,
+    BuildingLibraryIcon,
+    DocumentTextIcon,
+    NewspaperIcon,
+} from '@heroicons/react/24/outline';
+import type { ComponentType, SVGProps } from 'react';
 import type { QuickLink } from '@/schemas/links';
 
-const iconMap: Record<string, LucideIcon> = {
-    FileText,
-    Landmark,
-    Newspaper,
-    ExternalLink,
+type HeroIcon = ComponentType<SVGProps<SVGSVGElement>>;
+
+const iconMap: Record<string, HeroIcon> = {
+    FileText: DocumentTextIcon,
+    Landmark: BuildingLibraryIcon,
+    Newspaper: NewspaperIcon,
+    ExternalLink: ArrowTopRightOnSquareIcon,
 };
 
 const fallbackLinks: QuickLink[] = [
@@ -45,6 +52,7 @@ export default function Hero() {
 
     return (
         <section className="home-hero-section relative overflow-hidden">
+            <div className="home-hero-photo" aria-hidden="true" />
             <div className="portal-noise-overlay" aria-hidden="true" />
             <div className="home-hero-texture" aria-hidden="true" />
 
@@ -73,7 +81,7 @@ export default function Hero() {
 
                 <div className="home-hero-utility-strip">
                     {heroLinks.map((item) => {
-                        const IconComponent = iconMap[item.icon || 'ExternalLink'] || ExternalLink;
+                        const IconComponent = iconMap[item.icon || 'ExternalLink'] || ArrowTopRightOnSquareIcon;
 
                         return (
                             <Link
@@ -82,7 +90,7 @@ export default function Hero() {
                                 className="home-hero-utility-link no-underline"
                             >
                                 <div className="home-hero-utility-icon">
-                                    <IconComponent size={18} />
+                                    <IconComponent className="h-[18px] w-[18px]" aria-hidden="true" />
                                 </div>
                                 <div className="min-w-0">
                                     <p className="home-hero-utility-label">{item.label}</p>

@@ -6,17 +6,13 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, LogOut, Menu, Shield, ShieldAlert, User, X } from 'lucide-react';
+import { LogOut, Menu, Shield, ShieldAlert, User, X } from 'lucide-react';
 import AlertBanner from './AlertBanner';
 import { SiteConfig } from '@/lib/slideConfig';
+import { getAccessVisibilityState } from '@/lib/access-visibility';
 import {
-    deriveEffectivePortalRole,
-    hasLeaderPrivilege,
-    hasOfficerPrivilege,
-    LEADER_ATTEMPT_COOKIE,
     OFFICER_ATTEMPT_COOKIE,
     PORTAL_MODE_COOKIE,
-    shouldShowLeaderAccessDeniedNotice,
     shouldShowOfficerAccessNotice,
 } from '@/lib/portal-mode';
 
@@ -29,10 +25,6 @@ const baseNavLinks = [
     { href: '/transparency', label: 'Transparency' },
     { href: '/hub', label: 'Student Hub' },
 ];
-
-function readCookieValue(name: string): string {
-    return readCookieValueFromSnapshot(typeof document === 'undefined' ? '' : document.cookie, name);
-}
 
 function readCookieValueFromSnapshot(cookieSnapshot: string, name: string): string {
     if (typeof document === 'undefined') {
@@ -75,17 +67,14 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
     const [scrolled, setScrolled] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
     const [authLoadTimedOutPath, setAuthLoadTimedOutPath] = useState<string | null>(null);
-    const [dismissedLeaderNotice, setDismissedLeaderNotice] = useState(false);
     const [dismissedOfficerNotice, setDismissedOfficerNotice] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
     const cookieSnapshot = useSyncExternalStore(subscribeNoop, getCookieSnapshot, () => '');
     const cookieState = useMemo(() => ({
         portalMode: readCookieValueFromSnapshot(cookieSnapshot, PORTAL_MODE_COOKIE),
-        leaderAttempt: readCookieValueFromSnapshot(cookieSnapshot, LEADER_ATTEMPT_COOKIE),
         officerAttempt: readCookieValueFromSnapshot(cookieSnapshot, OFFICER_ATTEMPT_COOKIE),
     }), [cookieSnapshot]);
     const portalMode = cookieState.portalMode;
-    const leaderAttempt = cookieState.leaderAttempt;
     const officerAttempt = cookieState.officerAttempt;
 
     useEffect(() => {
@@ -157,16 +146,13 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
         navLinks.push({ href: '/elections', label: 'Elections' });
     }
 
-    const effectiveRole = deriveEffectivePortalRole(session?.user?.role, portalMode);
-    const isPrivilegedAccount = hasLeaderPrivilege(session?.user?.role);
-    const isOfficerAccount = hasOfficerPrivilege(session?.user?.role);
-    const isLeader = effectiveRole === 'leader' || effectiveRole === 'officer';
-    const isOfficer = effectiveRole === 'officer';
+    const visibility = getAccessVisibilityState(session?.user?.role, portalMode, '');
+    const { effectiveRole, canSeeLeaderFeatures, canSeeOfficerFeatures, actualRole } = visibility;
+    const isPrivilegedAccount = actualRole !== 'student';
+    const isOfficerAccount = actualRole === 'officer';
+    const isLeader = canSeeLeaderFeatures;
+    const isOfficer = canSeeOfficerFeatures;
 
-    const shouldShowLeaderDeniedNotice = status === 'authenticated'
-        && Boolean(session?.user)
-        && !dismissedLeaderNotice
-        && shouldShowLeaderAccessDeniedNotice(session?.user?.role, leaderAttempt);
     const shouldShowOfficerDeniedNotice = status === 'authenticated'
         && Boolean(session?.user)
         && !dismissedOfficerNotice
@@ -183,7 +169,6 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
 
     const clearPortalCookies = (resetPortalMode: boolean) => {
         const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-        document.cookie = `${LEADER_ATTEMPT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
         document.cookie = `${OFFICER_ATTEMPT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
 
         if (resetPortalMode) {
@@ -206,33 +191,6 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
 
     return (
         <header className="sticky top-0 z-50">
-            {shouldShowLeaderDeniedNotice && (
-                <div className="portal-notice portal-notice-amber">
-                    <div className="container-main flex items-start gap-2 py-2 text-sm">
-                        <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                        <p className="flex-1">Your account has Student Leader Access, but you are currently in Student Mode. Switch modes to access leadership tools.</p>
-                        <button
-                            type="button"
-                            className="font-semibold underline underline-offset-4"
-                            onClick={() => switchPortalMode('leader')}
-                        >
-                            Go to Leader Mode
-                        </button>
-                        <button
-                            type="button"
-                            className="px-2 text-xs"
-                            onClick={() => {
-                                clearPortalCookies(false);
-                                setDismissedLeaderNotice(true);
-                            }}
-                            aria-label="Dismiss access notice"
-                        >
-                            Dismiss
-                        </button>
-                    </div>
-                </div>
-            )}
-
             {shouldShowOfficerDeniedNotice && (
                 <div className="portal-notice portal-notice-red">
                     <div className="container-main flex items-start gap-2 py-2 text-sm">
@@ -262,23 +220,23 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
 
             {config.alertBanner && <AlertBanner message={config.alertBanner} />}
 
-            <nav className={`portal-nav-shell relative transition-[background,box-shadow] duration-300 ${scrolled ? 'portal-nav-shell-scrolled' : ''}`}>
+            <nav className={`portal-nav-shell portal-nav-shell-framed relative transition-[background,box-shadow] duration-300 ${scrolled ? 'portal-nav-shell-scrolled' : ''}`}>
                 <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[rgba(247,217,150,0.32)] to-transparent" />
 
-                <div className="container-main flex h-[4.75rem] items-center justify-between gap-3">
+                <div className="container-main flex h-[4.1rem] items-center justify-between gap-3">
                     <Link href="/" className="flex min-w-0 flex-1 items-center gap-3 pr-1 no-underline" onClick={() => { setMobileOpen(false); setProfileOpen(false); }}>
-                        <div className="relative h-11 w-11 overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-[0_14px_35px_-26px_rgba(247,217,150,0.65)]">
+                        <div className="relative h-10 w-10 overflow-hidden rounded-full border border-[rgba(247,217,150,0.46)] bg-[rgba(247,217,150,0.08)] shadow-[0_14px_35px_-26px_rgba(247,217,150,0.65)]">
                             <Image
-                                src="/images/OSR_LOGO.jpg"
+                                src="/images/RTU_SSC.jpg"
                                 alt="RTU Student Government Portal"
                                 fill
-                                sizes="44px"
-                                className="object-cover"
+                                sizes="40px"
+                                className="object-contain"
                             />
                         </div>
                         <div className="min-w-0">
-                            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-slate-400">RTU</p>
-                            <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold text-white md:text-base">
+                            <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-[rgba(203,213,225,0.78)]">RTU</p>
+                            <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold text-[rgba(241,245,249,0.95)] md:text-[0.97rem]">
                                 Student Government Portal
                             </span>
                         </div>
@@ -290,7 +248,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                             <Link
                                 key={link.href}
                                 href={link.href}
-                                className={`portal-nav-link text-sm font-medium ${isActiveNavLink(link.href) ? 'portal-nav-link-active' : ''}`}
+                                className={`portal-nav-link portal-nav-link-desktop text-sm font-medium ${isActiveNavLink(link.href) ? 'portal-nav-link-active' : ''}`}
                                 aria-current={isActiveNavLink(link.href) ? 'page' : undefined}
                                 onClick={() => setProfileOpen(false)}
                             >
@@ -393,7 +351,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                 </AnimatePresence>
                             </div>
                         ) : (
-                            <Link href="/login" className="btn-primary ml-2 px-5 text-sm no-underline" onClick={() => setProfileOpen(false)}>
+                            <Link href="/login" className="portal-signin-btn ml-2 px-5 text-sm no-underline" onClick={() => setProfileOpen(false)}>
                                 Sign In
                             </Link>
                         )}

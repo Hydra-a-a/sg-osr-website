@@ -8,6 +8,7 @@ import { formatPhtStorageTimestamp } from '@/lib/date-time';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { PORTAL_MODE_COOKIE, deriveEffectivePortalRole } from '@/lib/portal-mode';
+import { requireSameOriginRequest } from '@/lib/request-guards';
 import { TICKET_COLS, appendGrievanceComment, buildTicketStatusHistoryMessage, generateGrievanceCommentId } from '@/lib/tickets';
 import type { TicketStatus } from '@/lib/ticket-constants';
 import { emitGrievanceAdminUpdateNotifications, processGrievanceNotificationQueue, resolveGrievanceSubmitterEmail } from '@/lib/grievance-notifications';
@@ -158,6 +159,7 @@ export async function PATCH(request: NextRequest) {
     const ip = getClientIp(request);
 
     try {
+        requireSameOriginRequest(request);
         const session = await requireOfficerSession(request);
 
         const limit = await checkRateLimit(`admin_tickets_patch_${session.user.email?.toLowerCase().trim() || ip}_${ip}`, 40, 60_000);

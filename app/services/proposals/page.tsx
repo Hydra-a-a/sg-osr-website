@@ -221,7 +221,7 @@ export default function ProposalsPage() {
                             initial={{ opacity: 0, y: 16 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.35, ease: "easeOut" }}
-                            className="services-card p-6 md:p-10"
+                            className="services-command-deck p-6 md:p-10"
                         >
                             <div className="flex items-center gap-4 mb-8 pb-6 border-b border-white/10">
                                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/5 flex justify-center items-center border border-blue-500/20">
@@ -409,7 +409,7 @@ export default function ProposalsPage() {
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.35, delay: 0.1 }}
-                            className="services-card p-6 md:p-8"
+                            className="services-process-rail p-6 md:p-8"
                         >
                             <h3 className={`text-xl font-semibold text-white mb-6 flex items-center gap-2 border-b border-white/10 pb-4`}>
                                 <Users size={20} className="text-blue-400" /> Guidance
@@ -444,7 +444,7 @@ export default function ProposalsPage() {
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.35, delay: 0.2 }}
-                            className="p-6 md:p-8 rounded-2xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 relative overflow-hidden"
+                            className="services-security-callout p-6 md:p-8 relative overflow-hidden"
                         >
                             <div className="absolute top-0 right-0 p-4 opacity-10">
                                 <Target size={100} />
@@ -566,7 +566,38 @@ function getStyles() {
             border-color: rgba(255, 255, 255, 0.15);
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
         }
+
+        .services-command-deck {
+            position: relative;
+            border-radius: 1.5rem;
+            border: 1px solid rgba(125, 211, 252, 0.28);
+            background:
+                radial-gradient(120% 130% at 0% 0%, rgba(125, 211, 252, 0.15) 0%, transparent 55%),
+                linear-gradient(150deg, rgba(9, 20, 36, 0.82), rgba(13, 30, 52, 0.72));
+            box-shadow: 0 20px 40px -30px rgba(8, 47, 73, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .services-process-rail {
+            position: relative;
+            border-radius: 1.25rem;
+            border: 1px solid rgba(147, 197, 253, 0.24);
+            background:
+                linear-gradient(180deg, rgba(10, 21, 37, 0.84), rgba(12, 25, 43, 0.8));
+            box-shadow: 0 16px 36px -30px rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .services-security-callout {
+            border-radius: 1.25rem;
+            border: 1px solid rgba(251, 191, 36, 0.35);
+            background:
+                radial-gradient(120% 140% at 100% 0%, rgba(251, 191, 36, 0.16) 0%, transparent 50%),
+                linear-gradient(145deg, rgba(55, 30, 8, 0.6), rgba(18, 20, 32, 0.78));
+            box-shadow: 0 18px 40px -30px rgba(146, 64, 14, 0.8);
+        }
     `;
 }
-
 

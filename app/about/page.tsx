@@ -383,7 +383,7 @@ export default function AboutPage() {
                                     View Contact Information <ExternalLink size={18} />
                                 </Link>
                                 <button
-                                    className="btn-secondary text-base flex items-center justify-center gap-2"
+                                    className="btn-secondary btn-secondary-on-light text-base flex items-center justify-center gap-2"
                                 >
                                     Share <Share2 size={18} />
                                 </button>

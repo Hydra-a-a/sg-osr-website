@@ -3,6 +3,7 @@ import { withSentryConfig } from '@sentry/nextjs';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactCompiler: true,
+  allowedDevOrigins: ['127.0.0.1'],
 
   experimental: {
     serverActions: {

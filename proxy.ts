@@ -58,7 +58,6 @@ function buildCspReportOnlyHeader(nonce: string): string {
       connect-src 'self' https://*.google.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.ingest.sentry.io https://ingest.sentry.io;
       worker-src 'self' blob:;
       manifest-src 'self';
-      upgrade-insecure-requests;
     `.replace(/\s{2,}/g, ' ').trim();
 }
 
@@ -88,6 +87,39 @@ function applySecurityHeaders(response: NextResponse, nonce: string, cspHeader: 
         'accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()'
     );
     return response;
+}
+
+function getRequestHost(req: Parameters<ReturnType<typeof auth>>[0]): string {
+    const forwardedHost = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+    const host = req.headers.get('host')?.split(',')[0]?.trim();
+    return forwardedHost || host || '';
+}
+
+function extractHostname(hostHeader: string): string {
+    if (hostHeader.startsWith('[')) {
+        return hostHeader.slice(1, hostHeader.indexOf(']'));
+    }
+
+    return hostHeader.split(':')[0] || '';
+}
+
+function isLocalRequestHost(host: string): boolean {
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+function buildInternalRedirectUrl(path: string, req: Parameters<ReturnType<typeof auth>>[0]): URL {
+    const requestHost = getRequestHost(req);
+    const requestHostname = extractHostname(requestHost).toLowerCase();
+    const nextHostname = req.nextUrl.hostname.toLowerCase();
+
+    if (requestHost && isLocalRequestHost(requestHostname) && !isLocalRequestHost(nextHostname)) {
+        const forwardedProto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+        const protocol = forwardedProto || 'http';
+        const requestOrigin = `${protocol}://${requestHost}`;
+        return new URL(path, requestOrigin);
+    }
+
+    return new URL(path, req.nextUrl);
 }
 
 function nextWithSecurityHeaders(req: Parameters<ReturnType<typeof auth>>[0], nonce: string, cspHeader: string): NextResponse {
@@ -131,6 +163,7 @@ export default auth((req) => {
         '/transparency',
         '/hub',
         '/hub/commute',
+        '/hub/commute/leaderboard',
         '/osr',
         '/about',
         '/student-government',
@@ -138,7 +171,7 @@ export default auth((req) => {
         '/student-government/commissions',
         '/student-government/councils',
     ];
-    const publicRoutePrefixes = ['/projects'];
+    const publicRoutePrefixes = ['/projects', '/directory'];
     const leaderOnlyRoutes: string[] = ['/services/proposals'];
     const officerOnlyRoutes = ['/services/admin'];
 
@@ -154,14 +187,14 @@ export default auth((req) => {
     if (isPublic) {
         // If already logged in and visiting /login, redirect to home
         if (pathname === '/login' && isLoggedIn) {
-            return applySecurityHeaders(NextResponse.redirect(new URL('/', nextUrl)), nonce, cspHeader, '/');
+            return applySecurityHeaders(NextResponse.redirect(buildInternalRedirectUrl('/', req)), nonce, cspHeader, '/');
         }
         return nextWithSecurityHeaders(req, nonce, cspHeader);
     }
 
     // Not logged in → redirect to login
     if (!isLoggedIn) {
-        const loginUrl = new URL('/login', nextUrl);
+        const loginUrl = buildInternalRedirectUrl('/login', req);
         loginUrl.searchParams.set('callbackUrl', pathname);
         return applySecurityHeaders(NextResponse.redirect(loginUrl), nonce, cspHeader, '/login');
     }
@@ -175,11 +208,11 @@ export default auth((req) => {
             const isAuthorized = hasOfficerPrivilege(session?.user?.role);
             if (isAuthorized) {
                 // Hint for the UI to show a "Switch to Officer Mode" notice
-                const response = applySecurityHeaders(NextResponse.redirect(new URL('/', nextUrl)), nonce, cspHeader, '/');
+                const response = applySecurityHeaders(NextResponse.redirect(buildInternalRedirectUrl('/', req)), nonce, cspHeader, '/');
                 response.cookies.set(OFFICER_ATTEMPT_COOKIE, '1', { path: '/', maxAge: 300, sameSite: 'lax' });
                 return response;
             }
-            return applySecurityHeaders(NextResponse.redirect(new URL('/?error=unauthorized', nextUrl)), nonce, cspHeader, '/');
+            return applySecurityHeaders(NextResponse.redirect(buildInternalRedirectUrl('/?error=unauthorized', req)), nonce, cspHeader, '/');
         }
     }
 
@@ -190,11 +223,11 @@ export default auth((req) => {
             const isAuthorized = hasLeaderPrivilege(session?.user?.role);
             if (isAuthorized) {
                 // Hint for the UI to show a "Switch to Leader Mode" notice
-                const response = applySecurityHeaders(NextResponse.redirect(new URL('/', nextUrl)), nonce, cspHeader, '/');
+                const response = applySecurityHeaders(NextResponse.redirect(buildInternalRedirectUrl('/', req)), nonce, cspHeader, '/');
                 response.cookies.set(LEADER_ATTEMPT_COOKIE, '1', { path: '/', maxAge: 300, sameSite: 'lax' });
                 return response;
             }
-            return applySecurityHeaders(NextResponse.redirect(new URL('/?error=unauthorized', nextUrl)), nonce, cspHeader, '/');
+            return applySecurityHeaders(NextResponse.redirect(buildInternalRedirectUrl('/?error=unauthorized', req)), nonce, cspHeader, '/');
         }
     }
 

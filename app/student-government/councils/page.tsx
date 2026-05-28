@@ -1,18 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import useSWR from 'swr';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ExternalLink } from 'lucide-react';
-import { applyCouncilLogoOverrides, type DirectoryLogoSource } from '@/lib/council-logos';
 import BackLink from '@/components/BackLink';
 import {
-    fetchStudentGovernmentDirectoryPayload,
     isRuntimeLogoSource,
     studentGovernmentCouncils,
-    STUDENT_GOVERNMENT_DIRECTORY_SWR_OPTIONS,
 } from '@/lib/student-government';
 
 const fadeInUp = {
@@ -27,23 +23,27 @@ const swapIn = {
 };
 
 export default function StudentGovernmentCouncilsPage() {
-    const { data: directoryResponse } = useSWR(
-        '/api/directory',
-        fetchStudentGovernmentDirectoryPayload,
-        STUDENT_GOVERNMENT_DIRECTORY_SWR_OPTIONS
-    );
-    const directoryLeaders = useMemo(
-        () => (directoryResponse?.leaders || []) as DirectoryLogoSource[],
-        [directoryResponse?.leaders]
-    );
-    const resolvedCouncils = useMemo(
-        () => applyCouncilLogoOverrides(studentGovernmentCouncils, directoryLeaders),
-        [directoryLeaders]
-    );
+    const resolvedCouncils = useMemo(() => studentGovernmentCouncils, []);
     const [selectedCouncil, setSelectedCouncil] = useState(0);
+    const [scrollRequestId, setScrollRequestId] = useState(0);
+    const featuredCouncilRef = useRef<HTMLElement | null>(null);
 
     const selectedCouncilIndex = resolvedCouncils.length > 0 ? selectedCouncil % resolvedCouncils.length : 0;
     const activeCouncil = resolvedCouncils[selectedCouncilIndex];
+
+    useEffect(() => {
+        if (!scrollRequestId || !featuredCouncilRef.current) {
+            return;
+        }
+
+        const prefersReducedMotion = typeof window !== 'undefined'
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        featuredCouncilRef.current.scrollIntoView({
+            behavior: prefersReducedMotion ? 'auto' : 'smooth',
+            block: 'start',
+        });
+    }, [selectedCouncilIndex, scrollRequestId]);
 
     if (!activeCouncil) {
         return null;
@@ -76,7 +76,7 @@ export default function StudentGovernmentCouncilsPage() {
                 </div>
             </section>
 
-            <section className="portal-section-dark section">
+            <section ref={featuredCouncilRef} className="portal-section-dark section scroll-mt-32">
                 <div className="portal-noise-overlay" aria-hidden="true" />
                 <div className="container-main relative z-10">
                     <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
@@ -147,7 +147,7 @@ export default function StudentGovernmentCouncilsPage() {
                         <span className="portal-kicker">Council Selector</span>
                         <h2 className="mt-4 text-3xl font-bold text-white">All councils in the current governance map</h2>
                         <p className="mt-4 portal-lead">
-                            Select a card to swap the featured council. Directory-backed logos will appear automatically when available.
+                            Select a card to swap the featured council. Logos use the curated image set from the public directory assets.
                         </p>
                     </div>
                     <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
@@ -158,7 +158,10 @@ export default function StudentGovernmentCouncilsPage() {
                                 <motion.button
                                     key={council.id}
                                     type="button"
-                                    onClick={() => setSelectedCouncil(index)}
+                                    onClick={() => {
+                                        setSelectedCouncil(index);
+                                        setScrollRequestId((current) => current + 1);
+                                    }}
                                     className="portal-panel sg-hover-card sg-selector-card p-4 text-left"
                                     data-council={council.id}
                                     data-active={isActive}

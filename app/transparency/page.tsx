@@ -27,7 +27,7 @@ export default function TransparencyPage() {
                 <div className="container-main relative z-10">
                     <div className="transparency-hero-grid">
                         <div className="transparency-hero-copy">
-                            <span className="portal-eyebrow">
+                            <span className="portal-eyebrow transparency-eyebrow">
                                 <ShieldCheck size={16} aria-hidden="true" />
                                 Public Records
                             </span>
@@ -40,6 +40,7 @@ export default function TransparencyPage() {
                         </div>
 
                         <div className="portal-panel-soft transparency-access-panel p-6">
+                            <div className="transparency-access-linework" aria-hidden="true" />
                             <div className="flex items-start gap-4">
                                 <div className="transparency-icon-wrap">
                                     <ClipboardCheck className="h-5 w-5" aria-hidden="true" />
@@ -69,7 +70,13 @@ export default function TransparencyPage() {
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                    <div className="transparency-ledger-shell">
+                        <div className="transparency-ledger-rail" aria-hidden="true">
+                            <span className="transparency-ledger-knot" />
+                            <span className="transparency-ledger-knot" />
+                            <span className="transparency-ledger-knot" />
+                        </div>
+                        <div className="grid grid-cols-1 gap-5 md:grid-cols-3 transparency-record-grid">
                         {sections.map((section) => {
                             const Icon = section.icon;
 
@@ -89,6 +96,7 @@ export default function TransparencyPage() {
                                 </article>
                             );
                         })}
+                        </div>
                     </div>
 
                     <div className="transparency-submission-grid">
@@ -96,7 +104,8 @@ export default function TransparencyPage() {
                             <ClassroomSubmissionForm />
                         </div>
 
-                        <aside className="portal-panel-soft p-6">
+                        <aside className="portal-panel-soft p-6 transparency-status-rail">
+                            <div className="transparency-status-linework" aria-hidden="true" />
                             <span className="portal-kicker">Publication Status</span>
                             <h2 className="mt-3 text-xl font-semibold text-white">Records pending publication</h2>
                             <p className="mt-3 text-sm leading-7 text-slate-300">

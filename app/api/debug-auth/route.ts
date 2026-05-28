@@ -5,7 +5,21 @@ import { getSheetData } from '@/lib/sheets';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+function withNoStore(response: NextResponse): NextResponse {
+    response.headers.set('Cache-Control', 'no-store');
+    return response;
+}
+
+function isDebugAuthRouteEnabled(): boolean {
+    return process.env.NODE_ENV !== 'production'
+        && process.env.ENABLE_AUTH_DEBUG_ROUTE === 'true';
+}
+
 export async function GET() {
+    if (!isDebugAuthRouteEnabled()) {
+        return withNoStore(NextResponse.json({ error: 'Not found' }, { status: 404 }));
+    }
+
     try {
         const users = await getAuthorizedUsers();
         
@@ -23,18 +37,18 @@ export async function GET() {
             role: data.role,
         }));
 
-        return NextResponse.json({ 
+        return withNoStore(NextResponse.json({
             status: 'success', 
             diagnostics: {
                 headersRaw: firstRow,
                 firstDataRow: rows[1] || [],
             },
             totalUsers: userList.length,
-        });
+        }));
     } catch (error) {
-        return NextResponse.json({ 
+        return withNoStore(NextResponse.json({
             status: 'error', 
-            message: error instanceof Error ? error.message : String(error) 
-        }, { status: 500 });
+            message: 'Debug auth diagnostics failed',
+        }, { status: 500 }));
     }
 }

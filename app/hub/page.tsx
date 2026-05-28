@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import {
     ArrowRight,
     BookOpen,
@@ -23,6 +23,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import useSWR from 'swr';
 import { NoncedStyle } from '@/components/CspNonceProvider';
+import { useSession } from 'next-auth/react';
+import { getAccessVisibilityState } from '@/lib/access-visibility';
+import { PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
+import LeaderAccessNoticeBanner from '@/components/LeaderAccessNoticeBanner';
 
 const HUB_GUIDES_SWR_OPTIONS = {
     revalidateOnFocus: false,
@@ -51,9 +55,15 @@ type DashboardAction = {
     summary: string;
     icon: typeof BookOpen;
     accentClassName: string;
-    disabled?: boolean;
     onClick: () => void;
     badge: string;
+    isLocked?: boolean;
+};
+
+type LockedFeatureNotice = {
+    title: string;
+    summary: string;
+    detail: string;
 };
 
 function getDriveGuideIdentifiers(guide: HubGuide): { fileId: string; resourceKey: string } {
@@ -203,8 +213,36 @@ function selectFeaturedGuides(guides: HubGuide[]): HubGuide[] {
     return picked;
 }
 
+function guideLooksLeaderOnly(guide: HubGuide): boolean {
+    const source = `${guide.title} ${guide.description} ${guide.category}`.toLowerCase();
+    return (
+        source.includes('student leader')
+        || source.includes('leader')
+        || source.includes('officer')
+        || source.includes('council memo')
+        || source.includes('committee')
+        || source.includes('internal')
+    );
+}
+
+function getPortalModeCookie(): string {
+    if (typeof document === 'undefined') return '';
+    return document.cookie
+        .split('; ')
+        .find((row) => row.startsWith(`${PORTAL_MODE_COOKIE}=`))
+        ?.split('=')[1] ?? '';
+}
+
+function subscribeNoop(): () => void {
+    return () => {};
+}
+
 export default function HubPage() {
+    const { data: session } = useSession();
+    const portalMode = useSyncExternalStore(subscribeNoop, getPortalModeCookie, () => '');
+    const visibility = getAccessVisibilityState(session?.user?.role, portalMode, '');
     const [lightboxOpen, setLightboxOpen] = useState(false);
+    const [lockedFeatureNotice, setLockedFeatureNotice] = useState<LockedFeatureNotice | null>(null);
     const [zoom, setZoom] = useState(1);
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [dragging, setDragging] = useState(false);
@@ -212,7 +250,13 @@ export default function HubPage() {
     const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
     const { data: guidesResponse, error: guidesError, isLoading: guidesLoading } = useSWR('/api/hub/guides', hubFetcher, HUB_GUIDES_SWR_OPTIONS);
 
-    const guides = useMemo(() => guidesResponse?.data || [], [guidesResponse?.data]);
+    const guides = useMemo(() => {
+        const allGuides = guidesResponse?.data || [];
+        if (visibility.canSeeLeaderFeatures) {
+            return allGuides;
+        }
+        return allGuides.filter((guide) => !guideLooksLeaderOnly(guide));
+    }, [guidesResponse?.data, visibility.canSeeLeaderFeatures]);
     const featuredGuides = useMemo(() => selectFeaturedGuides(guides), [guides]);
 
     const {
@@ -273,6 +317,10 @@ export default function HubPage() {
     }, []);
 
     const closeLightbox = useCallback(() => setLightboxOpen(false), []);
+    const openLockedFeatureNotice = useCallback((notice: LockedFeatureNotice) => {
+        setLockedFeatureNotice(notice);
+    }, []);
+    const closeLockedFeatureNotice = useCallback(() => setLockedFeatureNotice(null), []);
     const zoomIn = useCallback(() => setZoom((z) => Math.min(z + 0.5, 4)), []);
     const zoomOut = useCallback(() => setZoom((z) => Math.max(z - 0.5, 0.5)), []);
     const resetView = useCallback(() => {
@@ -325,10 +373,23 @@ export default function HubPage() {
             onClick: () => {
                 window.location.href = '/hub/commute';
             },
-            disabled: false,
             badge: 'New',
         },
-    ]), [guides.length, scrollToSection, selectedGuide]);
+        {
+            id: 'campus-wayfinding',
+            title: 'Campus wayfinding',
+            summary: 'Temporary office relocations make a live campus map unreliable right now.',
+            icon: MapPin,
+            accentClassName: 'hub-accent-slate',
+            onClick: () => openLockedFeatureNotice({
+                title: 'Campus wayfinding is temporarily unavailable',
+                summary: 'Campus offices and student-facing service points are moving too frequently for a reliable live map right now.',
+                detail: 'Ongoing renovation and construction work has relocated multiple offices into temporary spaces. To avoid publishing directions that could quickly become wrong, this hub feature is staying locked until the campus layout stabilizes.',
+            }),
+            isLocked: true,
+            badge: 'Temporarily locked',
+        },
+    ]), [guides.length, openLockedFeatureNotice, scrollToSection, selectedGuide]);
 
     const activePointers = useRef<{ [key: number]: { x: number; y: number } }>({});
     const initialDistance = useRef<number | null>(null);
@@ -429,23 +490,27 @@ export default function HubPage() {
     return (
         <div className="hub-shell relative overflow-hidden">
             <div className="hub-noise" aria-hidden="true" />
+            <LeaderAccessNoticeBanner />
 
             <section className="relative z-10 pt-20 pb-8 md:pt-28 md:pb-10">
                 <div className="container-main mx-auto w-full max-w-7xl">
-                    <div className="hub-panel p-6 md:p-8 flex flex-col items-center text-center">
-                            <span className="hub-eyebrow inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-5">
+                    <div className="hub-masthead p-6 md:p-8">
+                        <div className="hub-hero-layout">
+                            <div className="hub-hero-copy">
+                                <span className="hub-eyebrow inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-5">
                                 <Sparkles size={14} className="text-amber-300" />
                                 Information Hub
                             </span>
-                            <h1 className="hub-display w-full text-white mx-auto">
+                                <h1 className="hub-display w-full text-white">
                                 Academic Resource <span className="hub-display-accent">Dashboard</span>
                             </h1>
-                            <p className="hub-lead mt-5 max-w-2xl text-slate-200 mx-auto">
+                                <p className="hub-lead mt-5 max-w-2xl text-slate-200">
                                 Access official student references, published guides, and the academic calendar from one page.
                             </p>
+                            </div>
 
-                            <div className="mt-7 grid w-full gap-3 sm:grid-cols-3">
-                                <div className="hub-stat-card">
+                            <div className="hub-stats-strip">
+                                <div className="hub-stat-card hub-stat-card-primary">
                                     <p className="hub-stat-label">Live Guides</p>
                                     <p className="hub-stat-value">{guides.length}</p>
                                     <p className="hub-stat-note">Published PDFs ready for preview or download</p>
@@ -461,13 +526,14 @@ export default function HubPage() {
                                     <p className="hub-stat-note">Zoomable academic snapshot built into the hub</p>
                                 </div>
                             </div>
+                        </div>
                     </div>
                 </div>
             </section>
 
             <section className="relative z-10 pb-8 md:pb-10">
                 <div className="container-main mx-auto w-full max-w-7xl">
-                    <div className="hub-panel p-6 md:p-7">
+                    <div className="hub-command-band p-6 md:p-7">
                         <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
                             <div>
                                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Quick Access</p>
@@ -478,14 +544,13 @@ export default function HubPage() {
                             </p>
                         </div>
 
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="hub-actions-grid grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                             {quickActions.map((item) => (
                                 <button
                                     key={item.id}
                                     type="button"
                                     onClick={item.onClick}
-                                    disabled={item.disabled}
-                                    className={`hub-shortcut-card text-left ${item.disabled ? 'hub-shortcut-card-disabled' : ''}`}
+                                    className={`hub-shortcut-card text-left ${item.isLocked ? 'hub-shortcut-card-disabled hub-shortcut-card-locked' : ''}`}
                                 >
                                     <div className={`hub-shortcut-icon ${item.accentClassName}`}>
                                         <item.icon size={20} />
@@ -495,7 +560,7 @@ export default function HubPage() {
                                             <p className="text-sm font-semibold text-white">{item.title}</p>
                                             <p className="mt-2 text-sm leading-relaxed text-slate-300">{item.summary}</p>
                                         </div>
-                                        {item.disabled ? <Lock size={16} className="text-slate-500 shrink-0 mt-1" /> : <ArrowRight size={16} className="text-amber-200 shrink-0 mt-1" />}
+                                        {item.isLocked ? <Lock size={16} className="text-slate-400 shrink-0 mt-1" /> : <ArrowRight size={16} className="text-amber-200 shrink-0 mt-1" />}
                                     </div>
                                     <div className="mt-5">
                                         <span className="hub-shortcut-badge">{item.badge}</span>
@@ -509,7 +574,7 @@ export default function HubPage() {
 
             <section className="relative z-10 pb-8 md:pb-10">
                 <div className="container-main mx-auto w-full max-w-7xl">
-                    <div className="hub-panel p-6 md:p-7">
+                    <div className="hub-feature-spread p-6 md:p-7">
                         <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
                             <div>
                                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Featured Documents</p>
@@ -539,7 +604,7 @@ export default function HubPage() {
                                 No featured guides are published yet. Once PDF entries are available, they will appear here automatically.
                             </div>
                         ) : (
-                            <div className="grid gap-4 lg:grid-cols-3">
+                            <div className="hub-featured-grid grid gap-4 lg:grid-cols-3">
                                 {featuredGuides.map((guide, index) => (
                                     <article key={guide.id} className="hub-feature-card">
                                         <div className="flex items-center justify-between gap-3">
@@ -579,7 +644,7 @@ export default function HubPage() {
 
             <section id="student-guides" className="relative z-10 pb-8 md:pb-10 scroll-mt-24">
                 <div className="container-main mx-auto w-full max-w-7xl">
-                    <div className="hub-panel p-6 md:p-7">
+                    <div className="hub-reading-room p-6 md:p-7">
                         <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
                             <div>
                                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Student Guides</p>
@@ -705,7 +770,7 @@ export default function HubPage() {
 
             <section id="academic-calendar" className="relative z-10 pb-14 md:pb-16 scroll-mt-24">
                 <div className="container-main mx-auto w-full max-w-7xl">
-                    <div className="hub-panel p-6 md:p-7">
+                    <div className="hub-calendar-feature p-6 md:p-7">
                         <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
                             <div>
                                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Academic Calendar</p>
@@ -750,6 +815,62 @@ export default function HubPage() {
 
             {typeof document !== 'undefined' && createPortal(
                 <AnimatePresence>
+                    {lockedFeatureNotice && (
+                        <motion.div
+                            className="fixed inset-0 z-[9998] flex items-center justify-center px-4"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            <div className="absolute inset-0 bg-slate-950/78 backdrop-blur-sm" onClick={closeLockedFeatureNotice} />
+                            <motion.div
+                                initial={{ opacity: 0, y: 16, scale: 0.96 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                                transition={{ duration: 0.22, ease: 'easeOut' }}
+                                className="relative z-[9999] w-full max-w-lg rounded-[1.75rem] border border-white/10 bg-[linear-gradient(145deg,rgba(12,22,36,0.92),rgba(11,20,34,0.98))] p-6 shadow-[0_28px_80px_rgba(2,8,23,0.45)]"
+                            >
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-400/25 bg-amber-500/12 text-amber-200">
+                                            <Lock size={18} />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-200/80">Later feature</p>
+                                            <h3 className="mt-2 text-xl font-semibold text-white">{lockedFeatureNotice.title}</h3>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={closeLockedFeatureNotice}
+                                        className="rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                                        aria-label="Close notice"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+
+                                <div className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+                                    {lockedFeatureNotice.summary}
+                                </div>
+
+                                <p className="mt-4 text-sm leading-7 text-slate-300">
+                                    {lockedFeatureNotice.detail}
+                                </p>
+
+                                <div className="mt-6 flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={closeLockedFeatureNotice}
+                                        className="hub-action-secondary text-sm"
+                                    >
+                                        Got it
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
                     {lightboxOpen && (
                         <motion.div
                             className="fixed inset-0 z-[9999] flex items-center justify-center"
@@ -820,9 +941,9 @@ export default function HubPage() {
                 .hub-shell {
                     min-height: 100vh;
                     background:
-                        radial-gradient(88% 96% at 10% 10%, rgba(244, 192, 82, 0.18) 0%, rgba(244, 192, 82, 0) 48%),
-                        radial-gradient(108% 118% at 92% 12%, rgba(94, 184, 255, 0.18) 0%, rgba(94, 184, 255, 0) 52%),
-                        linear-gradient(135deg, #102845 0%, #1c436c 45%, #245f82 100%);
+                        radial-gradient(88% 96% at 10% 10%, rgba(244, 192, 82, 0.16) 0%, rgba(244, 192, 82, 0) 48%),
+                        radial-gradient(108% 118% at 92% 12%, rgba(94, 184, 255, 0.16) 0%, rgba(94, 184, 255, 0) 52%),
+                        linear-gradient(135deg, #0c2239 0%, #12314f 45%, #173b5e 100%);
                     color: #e2e8f0;
                 }
 
@@ -846,19 +967,73 @@ export default function HubPage() {
                     z-index: 2;
                 }
 
-                .hub-panel,
-                .hub-feature-card,
-                .hub-shortcut-card,
-                .hub-guides-sidebar,
-                .hub-guide-preview-shell,
-                .hub-calendar-card {
+                .hub-masthead,
+                .hub-command-band,
+                .hub-feature-spread,
+                .hub-reading-room,
+                .hub-calendar-feature {
                     position: relative;
-                    border-radius: 1.5rem;
-                    background: linear-gradient(145deg, rgba(12, 22, 36, 0.42), rgba(11, 20, 34, 0.62));
-                    border: 1px solid rgba(255, 255, 255, 0.08);
-                    box-shadow: 0 20px 50px rgba(4, 10, 22, 0.26);
-                    backdrop-filter: blur(18px);
-                    -webkit-backdrop-filter: blur(18px);
+                    border-top: 1px solid rgba(255, 255, 255, 0.14);
+                }
+
+                .hub-masthead {
+                    overflow: hidden;
+                    border-radius: 0.9rem;
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    background:
+                        linear-gradient(135deg, rgba(8, 20, 36, 0.58), rgba(8, 20, 36, 0.24)),
+                        linear-gradient(145deg, rgba(16, 34, 55, 0.8), rgba(10, 22, 36, 0.62));
+                    box-shadow: 0 24px 58px rgba(4, 10, 22, 0.3);
+                    clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+                }
+
+                .hub-masthead::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background:
+                        radial-gradient(70% 90% at 0% 0%, rgba(245, 158, 11, 0.13) 0%, transparent 72%),
+                        radial-gradient(90% 95% at 100% 100%, rgba(56, 189, 248, 0.13) 0%, transparent 66%);
+                    pointer-events: none;
+                }
+
+                .hub-command-band,
+                .hub-feature-spread,
+                .hub-reading-room,
+                .hub-calendar-feature {
+                    padding-top: 1.75rem;
+                }
+
+                .hub-command-band {
+                    border-top-color: rgba(245, 158, 11, 0.3);
+                }
+
+                .hub-feature-spread {
+                    border-top-color: rgba(125, 211, 252, 0.28);
+                }
+
+                .hub-reading-room {
+                    border-top-color: rgba(255, 255, 255, 0.16);
+                }
+
+                .hub-calendar-feature {
+                    border-top-color: rgba(251, 191, 36, 0.28);
+                }
+
+                .hub-hero-layout {
+                    position: relative;
+                    z-index: 2;
+                    display: grid;
+                    gap: 1.1rem;
+                }
+
+                .hub-hero-copy {
+                    max-width: 48rem;
+                }
+
+                .hub-stats-strip {
+                    display: grid;
+                    gap: 0.75rem;
                 }
 
                 .hub-eyebrow {
@@ -867,6 +1042,7 @@ export default function HubPage() {
                     color: #fde68a;
                     font-size: 0.8rem;
                     font-weight: 600;
+                    border-radius: 0.5rem;
                     backdrop-filter: blur(8px);
                 }
 
@@ -890,10 +1066,39 @@ export default function HubPage() {
                 }
 
                 .hub-stat-card {
-                    border-radius: 1.25rem;
-                    border: 1px solid rgba(255, 255, 255, 0.08);
-                    background: rgba(0, 0, 0, 0.16);
+                    position: relative;
+                    overflow: hidden;
+                    border-radius: 0.65rem;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    background: rgba(6, 16, 28, 0.22);
                     padding: 1rem;
+                    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+                }
+
+                .hub-stat-card::after {
+                    content: '';
+                    position: absolute;
+                    left: 0.65rem;
+                    bottom: 0.55rem;
+                    width: 2rem;
+                    height: 0.95rem;
+                    background:
+                        linear-gradient(125deg, rgba(214, 238, 255, 0.14), rgba(214, 238, 255, 0.03)),
+                        repeating-linear-gradient(135deg, rgba(214, 238, 255, 0.1) 0 1px, transparent 1px 5px);
+                    clip-path: polygon(0 20%, 100% 0, 84% 100%, 0 100%);
+                    opacity: 0.45;
+                    z-index: 0;
+                    pointer-events: none;
+                }
+
+                .hub-stat-card > * {
+                    position: relative;
+                    z-index: 1;
+                }
+
+                .hub-stat-card-primary {
+                    border-color: rgba(245, 158, 11, 0.24);
+                    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(30, 41, 59, 0.42));
                 }
 
                 .hub-stat-label {
@@ -920,27 +1125,87 @@ export default function HubPage() {
 
                 .hub-shortcut-card,
                 .hub-feature-card {
+                    position: relative;
+                    overflow: hidden;
+                    border-radius: 0.75rem;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    background: rgba(6, 16, 28, 0.2);
                     padding: 1.4rem;
                     transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
                     backface-visibility: hidden;
                     contain: layout style paint;
+                    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+                }
+
+                .hub-shortcut-card::after,
+                .hub-feature-card::after {
+                    content: '';
+                    position: absolute;
+                    left: 0.75rem;
+                    bottom: 0.6rem;
+                    width: 2.25rem;
+                    height: 1.05rem;
+                    background:
+                        linear-gradient(130deg, rgba(214, 238, 255, 0.14), rgba(214, 238, 255, 0.02)),
+                        repeating-linear-gradient(135deg, rgba(214, 238, 255, 0.11) 0 1px, transparent 1px 5px);
+                    clip-path: polygon(0 20%, 100% 0, 84% 100%, 0 100%);
+                    opacity: 0.42;
+                    z-index: 0;
+                    pointer-events: none;
+                }
+
+                .hub-shortcut-card > *,
+                .hub-feature-card > * {
+                    position: relative;
+                    z-index: 1;
                 }
 
                 .hub-shortcut-card:hover,
                 .hub-feature-card:hover {
-                    transform: translateY(-2px);
-                    border-color: rgba(244, 192, 82, 0.26);
+                    transform: translateY(-1px);
+                    border-color: rgba(244, 192, 82, 0.28);
+                }
+
+                .hub-actions-grid .hub-shortcut-card {
+                    min-height: 100%;
+                }
+
+                .hub-actions-grid .hub-shortcut-card:first-child {
+                    background:
+                        linear-gradient(145deg, rgba(244, 192, 82, 0.16), rgba(15, 34, 54, 0.72)),
+                        rgba(6, 16, 28, 0.24);
+                    border-color: rgba(244, 192, 82, 0.28);
+                }
+
+                .hub-actions-grid .hub-shortcut-card:not(:first-child) {
+                    background: transparent;
+                    border-color: rgba(255, 255, 255, 0.06);
+                    box-shadow: none;
+                }
+
+                .hub-actions-grid .hub-shortcut-card:first-child .hub-shortcut-badge {
+                    background: rgba(245, 158, 11, 0.2);
+                    border-color: rgba(245, 158, 11, 0.34);
                 }
 
                 .hub-shortcut-card-disabled {
                     opacity: 0.78;
-                    cursor: not-allowed;
+                }
+
+                .hub-shortcut-card-locked {
+                    cursor: pointer;
+                }
+
+                .hub-shortcut-card-locked .hub-shortcut-badge {
+                    background: rgba(148, 163, 184, 0.14);
+                    border-color: rgba(148, 163, 184, 0.18);
+                    color: #e2e8f0;
                 }
 
                 .hub-shortcut-icon {
-                    width: 3rem;
-                    height: 3rem;
-                    border-radius: 1rem;
+                    width: 2.85rem;
+                    height: 2.85rem;
+                    border-radius: 0.55rem;
                     display: inline-flex;
                     align-items: center;
                     justify-content: center;
@@ -971,10 +1236,11 @@ export default function HubPage() {
                     display: inline-flex;
                     align-items: center;
                     justify-content: center;
-                    border-radius: 999px;
-                    padding: 0.35rem 0.7rem;
+                    border-radius: 0.45rem;
+                    padding: 0.3rem 0.58rem;
                     font-size: 0.72rem;
                     font-weight: 600;
+                    letter-spacing: 0.03em;
                 }
 
                 .hub-shortcut-badge,
@@ -997,7 +1263,7 @@ export default function HubPage() {
                     align-items: center;
                     justify-content: center;
                     gap: 0.45rem;
-                    border-radius: 0.9rem;
+                    border-radius: 0.5rem;
                     padding: 0.78rem 1rem;
                     font-size: 0.92rem;
                     font-weight: 600;
@@ -1025,18 +1291,56 @@ export default function HubPage() {
                     background: rgba(255, 255, 255, 0.08);
                 }
 
+                .hub-featured-grid .hub-feature-card:first-child {
+                    background:
+                        linear-gradient(138deg, rgba(245, 158, 11, 0.17), rgba(13, 22, 36, 0.78) 42%),
+                        rgba(6, 16, 28, 0.24);
+                    border-color: rgba(245, 158, 11, 0.3);
+                }
+
+                .hub-featured-grid .hub-feature-card:not(:first-child) {
+                    background: transparent;
+                    border-color: rgba(255, 255, 255, 0.06);
+                }
+
+                .hub-featured-grid .hub-feature-card .hub-action-primary {
+                    min-width: 8.5rem;
+                }
+
                 .hub-guides-sidebar,
                 .hub-guide-preview-shell {
+                    position: relative;
+                    border-radius: 0.8rem;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    background: rgba(6, 16, 28, 0.22);
                     padding: 1.35rem;
+                }
+
+                .hub-guides-sidebar {
+                    border: 0;
+                    border-right: 1px solid rgba(244, 192, 82, 0.24);
+                    border-radius: 0;
+                    background: transparent;
+                    padding-left: 0;
+                    border-right-color: rgba(244, 192, 82, 0.24);
+                }
+
+                .hub-guide-preview-shell {
+                    border-color: rgba(255, 255, 255, 0.1);
+                    background:
+                        linear-gradient(145deg, rgba(10, 22, 36, 0.26), rgba(10, 22, 36, 0.42)),
+                        rgba(6, 16, 28, 0.22);
+                    clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
                 }
 
                 .hub-guide-list-item {
                     width: 100%;
                     text-align: left;
-                    border-radius: 1rem;
-                    border: 1px solid rgba(255, 255, 255, 0.08);
-                    background: rgba(255, 255, 255, 0.04);
-                    padding: 0.95rem 1rem;
+                    border-radius: 0;
+                    border: 0;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                    background: transparent;
+                    padding: 0.95rem 0.35rem;
                     transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
                     backface-visibility: hidden;
                     contain: layout style paint;
@@ -1044,8 +1348,8 @@ export default function HubPage() {
 
                 .hub-guide-list-item:hover,
                 .hub-guide-list-item-active {
-                    border-color: rgba(251, 191, 36, 0.24);
-                    background: rgba(251, 191, 36, 0.1);
+                    border-color: rgba(251, 191, 36, 0.3);
+                    background: rgba(251, 191, 36, 0.06);
                     transform: translateY(-1px);
                 }
 
@@ -1060,7 +1364,7 @@ export default function HubPage() {
 
                 .hub-preview-frame {
                     overflow: hidden;
-                    border-radius: 1.25rem;
+                    border-radius: 0.65rem;
                     border: 1px solid rgba(148, 163, 184, 0.22);
                     background: #f8fafc;
                     box-shadow: none;
@@ -1069,7 +1373,7 @@ export default function HubPage() {
                 }
 
                 .hub-empty-state {
-                    border-radius: 1.25rem;
+                    border-radius: 0.65rem;
                     border: 1px solid rgba(255, 255, 255, 0.08);
                     background: rgba(255, 255, 255, 0.04);
                     padding: 1.25rem;
@@ -1078,10 +1382,13 @@ export default function HubPage() {
                 }
 
                 .hub-calendar-card {
+                    position: relative;
                     overflow: hidden;
                     width: 100%;
                     padding: 0;
-                    border: 0;
+                    border-radius: 0.85rem;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    background: rgba(6, 16, 28, 0.18);
                     cursor: pointer;
                     display: block;
                 }
@@ -1106,7 +1413,7 @@ export default function HubPage() {
                 .hub-calendar-overlay-icon {
                     width: 3.5rem;
                     height: 3.5rem;
-                    border-radius: 999px;
+                    border-radius: 0.65rem;
                     display: flex;
                     align-items: center;
                     justify-content: center;
@@ -1115,13 +1422,51 @@ export default function HubPage() {
                     backdrop-filter: blur(6px);
                 }
 
+                @media (min-width: 768px) {
+                    .hub-hero-layout {
+                        grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr);
+                        align-items: end;
+                        gap: 1.4rem;
+                    }
+
+                    .hub-stats-strip {
+                        grid-template-columns: repeat(2, minmax(0, 1fr));
+                    }
+
+                    .hub-stats-strip .hub-stat-card:first-child {
+                        grid-column: 1 / -1;
+                    }
+                }
+
+                @media (min-width: 1280px) {
+                    .hub-actions-grid {
+                        grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+                    }
+
+                    .hub-actions-grid .hub-shortcut-card:first-child {
+                        grid-column: auto;
+                    }
+
+                    .hub-featured-grid .hub-feature-card:first-child {
+                        grid-column: span 2 / span 2;
+                    }
+                }
+
                 @media (max-width: 768px) {
-                    .hub-panel,
+                    .hub-masthead,
                     .hub-feature-card,
                     .hub-shortcut-card,
                     .hub-guides-sidebar,
-                    .hub-guide-preview-shell {
-                        border-radius: 1.25rem;
+                    .hub-guide-preview-shell,
+                    .hub-calendar-card {
+                        border-radius: 0.75rem;
+                    }
+
+                    .hub-guides-sidebar {
+                        border-right: 0;
+                        border-bottom: 1px solid rgba(244, 192, 82, 0.24);
+                        padding-right: 0;
+                        padding-bottom: 1.35rem;
                     }
                 }
             `} />

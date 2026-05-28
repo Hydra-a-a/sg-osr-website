@@ -82,6 +82,10 @@ export const OfficerSchema = z.object({
 
 export type OfficerData = z.infer<typeof OfficerSchema>;
 
+// Alias for clarity: student organizations use the same shape as officers
+export const StudentOrganizationSchema = OfficerSchema;
+export type StudentOrganizationData = OfficerData;
+
 export const OfficeSchema = z.object({
     id: z.string().trim().max(50).optional(),
 
