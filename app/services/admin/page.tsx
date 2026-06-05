@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ShieldCheck, Ticket, Lightbulb, ArrowRight, AlertCircle, Shield, MapPinned } from 'lucide-react';
+import { ShieldCheck, Ticket, Lightbulb, ArrowRight, Shield, MapPinned } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import BackLink from '@/components/BackLink';
@@ -14,35 +14,26 @@ export default function AdminHubPage() {
         {
             id: 'grievances',
             label: 'Grievance Tickets',
-            kicker: 'Case Management',
             description: 'Review, respond to, and manage student grievances and complaints.',
             icon: Ticket,
             href: '/services/admin/grievances',
             tone: 'blue',
-            badge: '5 Pending',
-            badgeType: 'warning'
         },
         {
             id: 'proposals',
             label: 'Project Proposals',
-            kicker: 'Program Pipeline',
             description: 'Evaluate and approve project programs submitted by Student Leaders.',
             icon: Lightbulb,
             href: '/services/admin/proposals',
             tone: 'amber',
-            badge: '2 Under Review',
-            badgeType: 'warning'
         },
         {
             id: 'routes',
             label: 'Community Routes',
-            kicker: 'Transit Moderation',
             description: 'Review commuter route submissions, approve public listings, and keep the Local Guides queue accurate.',
             icon: MapPinned,
             href: '/services/admin/routes',
             tone: 'green',
-            badge: 'Needs Review',
-            badgeType: 'warning'
         },
     ];
 
@@ -80,21 +71,11 @@ export default function AdminHubPage() {
                                     transition={{ duration: 0.45, delay: 0.08 * index }}
                                 >
                                     <Link href={card.href} className={`services-card services-card-${card.tone} group h-full block no-underline p-7 md:p-8`}>
-                                        <div className="flex items-start justify-between gap-4 mb-2">
-                                            <p className="services-card-kicker">{card.kicker}</p>
-                                        </div>
-
-                                        <div className="services-icon-box mb-6 relative">
+                                        <div className="services-icon-box mb-8 relative">
                                             <div className="services-icon-tile">
-                                                <Icon size={24} />
+                                                <Icon size={34} />
                                             </div>
                                         </div>
-
-                                        {card.badge && (
-                                            <span className={`services-badge services-badge-${card.badgeType || 'default'} mb-4 inline-flex items-center gap-1.5`}>
-                                                <AlertCircle size={12} /> {card.badge}
-                                            </span>
-                                        )}
 
                                         <h2 className={`services-card-title`}>{card.label}</h2>
                                         <p className="services-card-description mt-3">{card.description}</p>
@@ -207,53 +188,26 @@ export default function AdminHubPage() {
                     opacity: 1;
                 }
 
-                .services-card-kicker {
-                    margin: 0;
-                    color: rgba(255, 255, 255, 0.5);
-                    font-size: 0.72rem;
-                    font-weight: 500;
-                    letter-spacing: 0.02em;
-                }
-
                 .services-icon-box {
-                    font-size: 2.2rem;
+                    font-size: 2.8rem;
                 }
 
                 .services-icon-tile {
-                    width: 3.5rem;
-                    height: 3.5rem;
+                    width: 5rem;
+                    height: 5rem;
                     display: grid;
                     place-items: center;
                     background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
                     border: 1px solid rgba(255, 255, 255, 0.15);
-                    border-radius: 1rem;
+                    border-radius: 1.15rem;
                     color: #ffffff;
-                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 4px 12px rgba(0,0,0,0.2);
+                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 14px 30px rgba(0,0,0,0.22);
                 }
 
                 .services-card-blue .services-icon-tile { color: #93c5fd; background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05)); border-color: rgba(59, 130, 246, 0.2); }
                 .services-card-amber .services-icon-tile { color: #fde047; background: linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(234, 179, 8, 0.05)); border-color: rgba(234, 179, 8, 0.2); }
                 .services-card-green .services-icon-tile { color: #86efac; background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.05)); border-color: rgba(34, 197, 94, 0.2); }
                 .services-card-gray .services-icon-tile { color: #cbd5e1; background: linear-gradient(135deg, rgba(100, 116, 139, 0.15), rgba(100, 116, 139, 0.05)); border-color: rgba(100, 116, 139, 0.2); }
-
-                .services-badge {
-                    margin: 0;
-                    border-radius: 0.5rem;
-                    font-size: 0.65rem;
-                    font-weight: 600;
-                    letter-spacing: 0.03em;
-                    padding: 0.4rem 0.75rem;
-                    background: rgba(247, 217, 150, 0.12);
-                    color: #f7d996;
-                    border: 1px solid rgba(247, 217, 150, 0.3);
-                    backdrop-filter: blur(4px);
-                }
-
-                .services-badge-warning {
-                    background: rgba(239, 68, 68, 0.12);
-                    color: #fca5a5;
-                    border: 1px solid rgba(239, 68, 68, 0.25);
-                }
 
                 .services-card-title {
                     font-size: clamp(1.4rem, 2vw, 1.8rem);

@@ -13,13 +13,52 @@ import { requireSameOriginRequest } from '@/lib/request-guards';
 const DEDUPE_TTL_MS = 90_000;
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
+function createClassroomRequestId(): string {
+    return `cls_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getGoogleErrorStatus(error: unknown): number | undefined {
+    if (!error || typeof error !== 'object') return undefined;
+
+    const candidate = error as {
+        code?: unknown;
+        status?: unknown;
+        response?: { status?: unknown };
+    };
+    const status = candidate.response?.status ?? candidate.status ?? candidate.code;
+
+    return typeof status === 'number' && Number.isFinite(status) ? status : undefined;
+}
+
+function getGoogleErrorReason(error: unknown): string | undefined {
+    if (!error || typeof error !== 'object') return undefined;
+
+    const candidate = error as {
+        errors?: Array<{ reason?: unknown }>;
+        response?: {
+            data?: {
+                error?: {
+                    status?: unknown;
+                    errors?: Array<{ reason?: unknown }>;
+                };
+            };
+        };
+    };
+    const directReason = candidate.errors?.find((item) => typeof item.reason === 'string')?.reason;
+    const responseReason = candidate.response?.data?.error?.errors?.find((item) => typeof item.reason === 'string')?.reason;
+    const responseStatus = candidate.response?.data?.error?.status;
+
+    return directReason || responseReason || (typeof responseStatus === 'string' ? responseStatus : undefined);
+}
+
 export async function POST(request: Request) {
     const ip = getClientIp(request);
+    const requestId = createClassroomRequestId();
 
     try {
         requireSameOriginRequest(request);
     } catch {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: NO_STORE_HEADERS });
+        return NextResponse.json({ error: 'Forbidden', errorCode: 'FORBIDDEN', requestId }, { status: 403, headers: NO_STORE_HEADERS });
     }
 
     const limit = await checkRateLimit(`classroom_submit_${ip}`, 12, 60_000);
@@ -27,27 +66,27 @@ export async function POST(request: Request) {
     if (!limit.success) {
         const retryAfter = limit.retryAfter ? Math.ceil(limit.retryAfter) : 60;
         return NextResponse.json(
-            { error: 'Too many requests. Please try again later.' },
+            { error: 'Too many requests. Please try again later.', errorCode: 'RATE_LIMITED', requestId },
             { status: 429, headers: { ...NO_STORE_HEADERS, 'Retry-After': String(retryAfter) } }
         );
     }
 
     const session = await auth();
     if (!session?.user?.email) {
-        return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: NO_STORE_HEADERS });
+        return NextResponse.json({ error: 'Authentication required', errorCode: 'AUTH_REQUIRED', requestId }, { status: 401, headers: NO_STORE_HEADERS });
     }
 
     const cookieStore = await cookies();
     const effectiveRole = deriveEffectivePortalRole(session.user.role, cookieStore.get(PORTAL_MODE_COOKIE)?.value);
 
     if (!hasLeaderPrivilege(effectiveRole)) {
-        return NextResponse.json({ error: 'Student leader access required' }, { status: 403, headers: NO_STORE_HEADERS });
+        return NextResponse.json({ error: 'Student leader access required', errorCode: 'LEADER_ACCESS_REQUIRED', requestId }, { status: 403, headers: NO_STORE_HEADERS });
     }
 
     const accessToken = session.accessToken;
     if (!accessToken) {
         return NextResponse.json(
-            { error: 'Google Classroom token missing. Please sign out and sign in again.' },
+            { error: 'Google Classroom token missing. Please sign out and sign in again.', errorCode: 'CLASSROOM_TOKEN_MISSING', requestId },
             { status: 401, headers: NO_STORE_HEADERS }
         );
     }
@@ -56,7 +95,7 @@ export async function POST(request: Request) {
     try {
         body = await request.json();
     } catch {
-        return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400, headers: NO_STORE_HEADERS });
+        return NextResponse.json({ error: 'Invalid JSON payload', errorCode: 'INVALID_JSON', requestId }, { status: 400, headers: NO_STORE_HEADERS });
     }
 
     const parsed = ClassroomSubmissionSchema.safeParse(body);
@@ -64,11 +103,14 @@ export async function POST(request: Request) {
         logAuditAction('SCHEMA_VALIDATION_FAILED', {
             source: 'api/classroom/submissions',
             ip,
+            requestId,
             reason: 'classroom_submission_payload',
         });
         return NextResponse.json(
             {
                 error: 'Validation failed',
+                errorCode: 'VALIDATION_FAILED',
+                requestId,
                 details: parsed.error.issues.map((issue) => ({
                     path: issue.path.join('.'),
                     message: issue.message,
@@ -96,10 +138,11 @@ export async function POST(request: Request) {
         logAuditAction('CLASSROOM_DUPLICATE_BLOCKED', {
             ip,
             source: 'api/classroom/submissions',
+            requestId,
             emailHash: createHash('sha256').update(session.user.email.toLowerCase().trim()).digest('hex').slice(0, 12),
         });
         return NextResponse.json(
-            { error: 'Duplicate submission detected. Please wait before retrying.', errorCode: 'DUPLICATE_SUBMISSION' },
+            { error: 'Duplicate submission detected. Please wait before retrying.', errorCode: 'DUPLICATE_SUBMISSION', requestId },
             { status: 409, headers: NO_STORE_HEADERS }
         );
     }
@@ -117,6 +160,7 @@ export async function POST(request: Request) {
         logAuditAction('CLASSROOM_SUBMISSION_SUCCEEDED', {
             ip,
             source: 'api/classroom/submissions',
+            requestId,
             courseId: parsed.data.courseId,
             courseWorkId: parsed.data.courseWorkId,
             turnIn: parsed.data.turnIn,
@@ -126,21 +170,41 @@ export async function POST(request: Request) {
         return NextResponse.json(
             {
                 success: true,
+                requestId,
                 data: result,
             },
             { headers: NO_STORE_HEADERS }
         );
     } catch (error) {
-        console.error('[Classroom API] Submission failed:', redactErrorForLog(error));
+        const googleStatus = getGoogleErrorStatus(error);
+        const googleReason = getGoogleErrorReason(error);
+
+        console.error('[Classroom API] Submission failed:', {
+            requestId,
+            googleStatus,
+            googleReason,
+            error: redactErrorForLog(error),
+        });
 
         const msg = error instanceof Error ? error.message : 'Unknown error';
-        const isPermissionIssue = /insufficient|forbidden|permission|scope|accessible/i.test(msg);
-        const isNotFoundIssue = /no classroom submission found|not found/i.test(msg);
+        const isPermissionIssue = /insufficient|forbidden|permission|scope|accessible/i.test(msg) || googleStatus === 401 || googleStatus === 403;
+        const isNotFoundIssue = /no classroom submission found|not found/i.test(msg) || googleStatus === 404;
+        const isTurnInIssue = /turnIn|turn in|turned in/i.test(msg);
+        const errorCode = isPermissionIssue
+            ? 'PERMISSION_DENIED'
+            : isNotFoundIssue
+                ? 'SUBMISSION_NOT_FOUND'
+                : isTurnInIssue
+                    ? 'TURN_IN_FAILED'
+                    : 'SUBMISSION_FAILED';
 
         logAuditAction('CLASSROOM_SUBMISSION_REJECTED', {
             ip,
             source: 'api/classroom/submissions',
-            reason: isPermissionIssue ? 'permission' : isNotFoundIssue ? 'not_found' : 'runtime_error',
+            requestId,
+            reason: isPermissionIssue ? 'permission' : isNotFoundIssue ? 'not_found' : isTurnInIssue ? 'turn_in_failed' : 'runtime_error',
+            googleStatus,
+            googleReason,
             emailHash: createHash('sha256').update(session.user.email.toLowerCase().trim()).digest('hex').slice(0, 12),
         });
 
@@ -150,8 +214,11 @@ export async function POST(request: Request) {
                     ? 'Google Classroom permission issue. Please re-login and verify class membership.'
                     : isNotFoundIssue
                         ? 'No active submission slot found for this coursework.'
-                        : 'Failed to submit to Google Classroom',
-                errorCode: isPermissionIssue ? 'PERMISSION_DENIED' : isNotFoundIssue ? 'SUBMISSION_NOT_FOUND' : 'SUBMISSION_FAILED',
+                        : isTurnInIssue
+                            ? 'Attachment may have succeeded, but Google Classroom failed to mark it as turned in.'
+                            : 'Failed to submit to Google Classroom',
+                errorCode,
+                requestId,
             },
             { status: isPermissionIssue ? 403 : isNotFoundIssue ? 404 : 500, headers: NO_STORE_HEADERS }
         );

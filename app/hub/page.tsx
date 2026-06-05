@@ -555,14 +555,14 @@ export default function HubPage() {
                                     <div className={`hub-shortcut-icon ${item.accentClassName}`}>
                                         <item.icon size={20} />
                                     </div>
-                                    <div className="mt-5 flex items-start justify-between gap-3">
+                                    <div className="hub-shortcut-body mt-5 flex items-start justify-between gap-3">
                                         <div>
                                             <p className="text-sm font-semibold text-white">{item.title}</p>
                                             <p className="mt-2 text-sm leading-relaxed text-slate-300">{item.summary}</p>
                                         </div>
                                         {item.isLocked ? <Lock size={16} className="text-slate-400 shrink-0 mt-1" /> : <ArrowRight size={16} className="text-amber-200 shrink-0 mt-1" />}
                                     </div>
-                                    <div className="mt-5">
+                                    <div className="hub-shortcut-meta mt-5">
                                         <span className="hub-shortcut-badge">{item.badge}</span>
                                     </div>
                                 </button>
@@ -1168,6 +1168,17 @@ export default function HubPage() {
 
                 .hub-actions-grid .hub-shortcut-card {
                     min-height: 100%;
+                    display: flex;
+                    flex-direction: column;
+                }
+
+                .hub-shortcut-body {
+                    flex: 1 1 auto;
+                }
+
+                .hub-shortcut-meta {
+                    margin-top: auto;
+                    padding-top: 1.25rem;
                 }
 
                 .hub-actions-grid .hub-shortcut-card:first-child {
@@ -1440,7 +1451,7 @@ export default function HubPage() {
 
                 @media (min-width: 1280px) {
                     .hub-actions-grid {
-                        grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+                        grid-template-columns: repeat(4, minmax(0, 1fr));
                     }
 
                     .hub-actions-grid .hub-shortcut-card:first-child {

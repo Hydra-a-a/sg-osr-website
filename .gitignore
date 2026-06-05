@@ -47,14 +47,21 @@ out_v2.txt
 /.adal
 /.agent
 /.agents
+/.aider-desk
 /.augment
+/.bob
 /.claude
 /.codebuddy
+/.codeartsdoer
+/.codemaker
+/.codestudio
 /.commandcode
 /.continue
 /.cortex
 /.crush
+/.devin
 /.factory
+/.forge
 /.goose
 /.iflow
 /.junie
@@ -70,10 +77,20 @@ out_v2.txt
 /.qoder
 /.qwen
 /.roo
+/.rovodev
+/.tabnine
 /.trae
 /.vibe
 /.windsurf
 /.zencoder
+
+# Local-only OSR bridge skills (redundant with /.agents, kept explicit)
+/.agents/skills/osr-superpowers-router/
+/.agents/skills/osr-legacy-agent-bridges/
+/.agents/skills/osr-execution-engineering/
+/.agents/skills/osr-ui-orchestration/
+/.agents/skills/osr-backend-orchestration/
+/.agents/skills/osr-automation-orchestration/
 
 # Agent Skills
 /skills/
@@ -99,6 +116,17 @@ testing-rtu-osr-website-*.json
 /artifacts/
 /scratch/
 /.anti-ai-design/
+/.lighthouseci/
+/.tmp-ci/
+/.worktrees/
+/output/
+/tmp/
+tmp-*.png
+tmp-*.log
+
+# Local workspace instruction files
+/AGENTS.md
+/custom-guidelines/PROJECT_AGENT_PROMPT.md
 
 # Local release scratch artifacts
 cmp-*.txt

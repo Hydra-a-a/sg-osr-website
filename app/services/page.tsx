@@ -54,9 +54,7 @@ export default function ServicesPage() {
             label: 'Student Grievances',
             description:
                 'Formally report academic, administrative, or disciplinary concerns to the Student Council. Your submission is handled with confidentiality and due process.',
-            badge: null,
             tone: 'blue',
-            kicker: 'Case Intake',
             visible: true,
         },
         {
@@ -66,9 +64,7 @@ export default function ServicesPage() {
             label: 'Project Proposals',
             description:
                 'Submit project and program proposals for consideration by the Student Council. For Student Leaders and Officers only.',
-            badge: 'Leaders & Officers',
             tone: 'amber',
-            kicker: 'Program Pipeline',
             visible: canSeeLeaderFeatures,
         },
         {
@@ -78,9 +74,7 @@ export default function ServicesPage() {
             label: 'Admin Hub',
             description:
                 'Access the central dashboard to manage grievances, review project proposals, and oversee portal operations.',
-            badge: 'Officer Access',
             tone: 'green',
-            kicker: 'Operations Deck',
             visible: canSeeOfficerFeatures,
         },
     ] as const;
@@ -149,8 +143,7 @@ export default function ServicesPage() {
                         <div className={`services-card-grid gap-6 ${visibleCardCount <= 2 ? 'services-card-grid-compact' : ''} ${visibleCardCount === 1 ? 'services-card-grid-single' : ''}`}>
                             {[0, 1].map((item) => (
                                 <div key={item} className="services-card services-card-skeleton p-7 md:p-8">
-                                    <div className="h-4 w-28 bg-white/20 rounded mb-5" />
-                                    <div className="h-12 w-12 rounded-lg bg-white/20 mb-5" />
+                                    <div className="h-20 w-20 rounded-[1.15rem] bg-white/20 mb-8" />
                                     <div className="h-7 w-2/3 bg-white/20 rounded mb-3" />
                                     <div className="h-4 w-full bg-white/15 rounded mb-2" />
                                     <div className="h-4 w-5/6 bg-white/15 rounded" />
@@ -170,22 +163,10 @@ export default function ServicesPage() {
                                         transition={{ duration: 0.45, delay: 0.08 * index }}
                                     >
                                         <Link href={card.href} className={`services-card services-card-${card.tone} group h-full block no-underline p-7 md:p-8`}>
-                                    <div className="flex items-start justify-between gap-4 mb-2">
-                                        <p className="services-card-kicker">{card.kicker}</p>
-                                    </div>
-                                    
-                                    <div className="services-icon-box mb-6 relative">
+                                    <div className="services-icon-box mb-8 relative">
                                         <div className="services-icon-tile">
-                                            <Icon size={24} />
+                                            <Icon size={34} />
                                         </div>
-                                    </div>
-
-                                    <div className="services-badge-slot mb-4">
-                                        {card.badge && (
-                                            <span className="services-badge inline-flex items-center gap-1.5">
-                                                <ShieldCheck size={12} /> {card.badge}
-                                            </span>
-                                        )}
                                     </div>
 
                                     <h2 className={`services-card-title`}>{card.label}</h2>
@@ -325,28 +306,20 @@ export default function ServicesPage() {
                     opacity: 0.85;
                 }
 
-                .services-card-kicker {
-                    margin: 0;
-                    color: rgba(255, 255, 255, 0.5);
-                    font-size: 0.72rem;
-                    font-weight: 500;
-                    letter-spacing: 0.02em;
-                }
-
                 .services-icon-box {
-                    font-size: 2.2rem;
+                    font-size: 2.8rem;
                 }
 
                 .services-icon-tile {
-                    width: 3.5rem;
-                    height: 3.5rem;
+                    width: 5rem;
+                    height: 5rem;
                     display: grid;
                     place-items: center;
                     background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
                     border: 1px solid rgba(255, 255, 255, 0.15);
-                    border-radius: 1rem;
+                    border-radius: 1.15rem;
                     color: #ffffff;
-                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 4px 12px rgba(0,0,0,0.2);
+                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 14px 30px rgba(0,0,0,0.22);
                 }
 
                 .services-card-blue .services-icon-tile { color: #93c5fd; background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05)); border-color: rgba(59, 130, 246, 0.2); }
@@ -358,25 +331,6 @@ export default function ServicesPage() {
                     background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
                     color: #fca5a5;
                     border-color: rgba(239, 68, 68, 0.2);
-                }
-
-                .services-badge {
-                    margin: 0;
-                    border-radius: 0.5rem;
-                    font-size: 0.65rem;
-                    font-weight: 600;
-                    letter-spacing: 0.03em;
-                    padding: 0.4rem 0.75rem;
-                    background: rgba(247, 217, 150, 0.12);
-                    color: #f7d996;
-                    border: 1px solid rgba(247, 217, 150, 0.3);
-                    backdrop-filter: blur(4px);
-                }
-
-                .services-badge-slot {
-                    min-height: 1.7rem;
-                    display: flex;
-                    align-items: flex-start;
                 }
 
                 .services-badge-locked {

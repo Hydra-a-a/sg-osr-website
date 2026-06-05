@@ -57,7 +57,7 @@ const utilityActions = [
     },
     {
         title: 'Services Console',
-        description: 'Go directly to the service modules and tracking entry points.',
+        description: 'Go directly to the services page and file grievances, or track submissions.',
         href: '/services',
         icon: UserGroupIcon,
     },
@@ -83,12 +83,11 @@ export default function HomeCoreActions() {
             <div className="portal-noise-overlay" aria-hidden="true" />
             <div className="container-main relative z-10">
                 <div>
-                    <span className="portal-kicker home-core-kicker">Core Actions</span>
-                    <h2 className="home-section-title mt-4">
-                        Start with <span className="home-section-title-accent">the actual task.</span>
+                    <h2 className="home-section-title">
+                        Choose where to go, <span className="home-section-title-accent">Rizaliano.</span>
                     </h2>
                     <p className="home-section-lead mt-4">
-                        Open the main service paths first: casework, proposals, and transparency records.
+                        Go to caseworks, proposals, and transparency records.
                     </p>
                     <div className="home-core-divider" aria-hidden="true">
                         <span className="home-core-divider-mark" />

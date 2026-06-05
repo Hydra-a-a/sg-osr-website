@@ -100,11 +100,11 @@ export default function StudentGovernmentPage() {
 
     return (
         <>
-            <section className="portal-section-slate section">
+            <section className="portal-section-slate section sg-hub-hero-section">
                 <div className="portal-noise-overlay" aria-hidden="true" />
                 <div className="container-main relative z-10">
                     <BackLink href="/" label="Back to Home" className="mb-8 text-slate-200 hover:text-white transition-colors sg-hub-back-link" />
-                    <div className="grid gap-8 md:grid-cols-[1.15fr_0.85fr] md:items-end">
+                    <div className="grid gap-8 md:grid-cols-[1.15fr_0.85fr] md:items-end sg-hub-hero-grid">
                         <div className="sg-hub-copy">
                             <span className="sg-hub-kicker-line">Student Government</span>
                             <h1 className="mt-6 portal-title">

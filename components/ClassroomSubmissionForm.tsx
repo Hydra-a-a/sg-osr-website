@@ -30,6 +30,13 @@ interface RecentClassroomSubmission {
     submittedAtIso: string;
 }
 
+interface ClassroomSubmissionStatus {
+    success: boolean;
+    message: string;
+    errorCode?: string;
+    requestId?: string;
+}
+
 const apiFetcher = async (url: string) => {
     const res = await fetch(url, { cache: 'no-store' });
     const json = await res.json().catch(() => ({}));
@@ -51,7 +58,7 @@ export default function ClassroomSubmissionForm() {
     const [reportTitle, setReportTitle] = useState('');
     const [turnInImmediately, setTurnInImmediately] = useState(true);
     const [classroomSubmitting, setClassroomSubmitting] = useState(false);
-    const [classroomResult, setClassroomResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [classroomResult, setClassroomResult] = useState<ClassroomSubmissionStatus | null>(null);
     const [recentClassroomSubmission, setRecentClassroomSubmission] = useState<RecentClassroomSubmission | null>(null);
 
     useEffect(() => {
@@ -138,10 +145,20 @@ export default function ClassroomSubmissionForm() {
 
             if (!res.ok) {
                 if (json?.errorCode === 'DUPLICATE_SUBMISSION') {
-                    setClassroomResult({ success: false, message: 'Duplicate submission detected. Please wait a moment before retrying.' });
+                    setClassroomResult({
+                        success: false,
+                        message: 'Duplicate submission detected. Please wait a moment before retrying.',
+                        errorCode: json?.errorCode,
+                        requestId: json?.requestId,
+                    });
                     return;
                 }
-                setClassroomResult({ success: false, message: json?.error || 'Submission failed' });
+                setClassroomResult({
+                    success: false,
+                    message: json?.error || 'Submission failed',
+                    errorCode: json?.errorCode,
+                    requestId: json?.requestId,
+                });
                 return;
             }
 
@@ -150,6 +167,7 @@ export default function ClassroomSubmissionForm() {
                 message: turnInImmediately
                     ? 'Report submitted and marked as turned in successfully.'
                     : 'Report attached successfully. You can turn it in from Google Classroom when ready.',
+                requestId: json?.requestId,
             });
 
             const selectedCourse = courses.find((course) => course.id === selectedCourseId);
@@ -311,7 +329,19 @@ export default function ClassroomSubmissionForm() {
                                 className={`p-4 rounded-xl flex items-start gap-3 text-sm ${classroomResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}
                             >
                                 {classroomResult.success ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
-                                <span>{classroomResult.message}</span>
+                                <div className="space-y-1">
+                                    <p>{classroomResult.message}</p>
+                                    {!classroomResult.success && (classroomResult.errorCode || classroomResult.requestId) && (
+                                        <p className="text-xs opacity-80">
+                                            {classroomResult.errorCode && <span>Code: {classroomResult.errorCode}</span>}
+                                            {classroomResult.errorCode && classroomResult.requestId && <span> </span>}
+                                            {classroomResult.requestId && <span>Ref: {classroomResult.requestId}</span>}
+                                        </p>
+                                    )}
+                                    {classroomResult.success && classroomResult.requestId && (
+                                        <p className="text-xs opacity-80">Ref: {classroomResult.requestId}</p>
+                                    )}
+                                </div>
                             </motion.div>
                         )}
                     </AnimatePresence>
