@@ -184,7 +184,6 @@ export async function submitCourseWorkLink(params: {
                 {
                     link: {
                         url: parsedUrl.toString(),
-                        title: linkTitle?.trim() || 'Submitted report',
                     },
                 },
             ],
