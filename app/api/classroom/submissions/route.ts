@@ -17,6 +17,10 @@ function createClassroomRequestId(): string {
     return `cls_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function asString(value: unknown): string | undefined {
+    return typeof value === 'string' ? value : undefined;
+}
+
 function getGoogleErrorStatus(error: unknown): number | undefined {
     if (!error || typeof error !== 'object') return undefined;
 
@@ -48,7 +52,7 @@ function getGoogleErrorReason(error: unknown): string | undefined {
     const responseReason = candidate.response?.data?.error?.errors?.find((item) => typeof item.reason === 'string')?.reason;
     const responseStatus = candidate.response?.data?.error?.status;
 
-    return directReason || responseReason || (typeof responseStatus === 'string' ? responseStatus : undefined);
+    return asString(directReason) || asString(responseReason) || asString(responseStatus);
 }
 
 export async function POST(request: Request) {
