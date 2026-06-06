@@ -22,6 +22,7 @@ interface ClassroomCourseWork {
     description?: string;
     alternateLink?: string;
     associatedWithDeveloper?: boolean;
+    state?: string;
     dueDate?: {
         year?: number;
         month?: number;
