@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { buildClassroomDueFieldsFromManilaInput } from '@/lib/date-time';
 import { sanitizeText } from '@/lib/security';
 import type { ClassroomCourseCreateInput, ClassroomCourseWorkCreateInput } from '@/schemas/classroom';
 
@@ -96,20 +97,6 @@ function normalizeCourseWork(item: {
         workType: item.workType || undefined,
         maxPoints: typeof item.maxPoints === 'number' ? item.maxPoints : undefined,
     };
-}
-
-function parseDueDate(value: string | undefined): ClassroomCourseWork['dueDate'] | undefined {
-    if (!value) return undefined;
-    const [year, month, day] = value.split('-').map(Number);
-    if (!year || !month || !day) return undefined;
-    return { year, month, day };
-}
-
-function parseDueTime(value: string | undefined): ClassroomCourseWork['dueTime'] | undefined {
-    if (!value) return undefined;
-    const [hours, minutes] = value.split(':').map(Number);
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return undefined;
-    return { hours, minutes, seconds: 0, nanos: 0 };
 }
 
 function getClassroomClient(accessToken: string) {
@@ -210,6 +197,7 @@ export async function createClassroomCourse(accessToken: string, input: Classroo
 
 export async function createClassroomCourseWork(accessToken: string, input: ClassroomCourseWorkCreateInput): Promise<ClassroomCourseWork> {
     const classroom = getClassroomClient(accessToken);
+    const classroomDueFields = buildClassroomDueFieldsFromManilaInput(input.dueDate || '', input.dueTime);
 
     const res = await classroom.courses.courseWork.create({
         courseId: input.courseId,
@@ -219,8 +207,28 @@ export async function createClassroomCourseWork(accessToken: string, input: Clas
             state: input.state,
             workType: 'ASSIGNMENT',
             maxPoints: input.maxPoints,
-            dueDate: parseDueDate(input.dueDate),
-            dueTime: parseDueTime(input.dueTime),
+            dueDate: classroomDueFields?.dueDate,
+            dueTime: classroomDueFields?.dueTime,
+        },
+    });
+
+    const courseWork = normalizeCourseWork(res.data);
+    if (!courseWork) {
+        throw new Error('Google Classroom did not return a usable coursework record.');
+    }
+
+    return courseWork;
+}
+
+export async function publishClassroomCourseWork(accessToken: string, courseId: string, courseWorkId: string): Promise<ClassroomCourseWork> {
+    const classroom = getClassroomClient(accessToken);
+
+    const res = await classroom.courses.courseWork.patch({
+        courseId,
+        id: courseWorkId,
+        updateMask: 'state',
+        requestBody: {
+            state: 'PUBLISHED',
         },
     });
 

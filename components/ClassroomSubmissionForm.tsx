@@ -7,6 +7,7 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { CheckCircle, AlertCircle, ExternalLink, GraduationCap, ClipboardCheck, Loader2 } from 'lucide-react';
 import { deriveEffectivePortalRole, hasLeaderPrivilege, normalizePortalRole, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
+import { formatClassroomDueDateTime } from '@/lib/date-time';
 
 interface ClassroomCourse {
     id: string;
@@ -21,6 +22,17 @@ interface ClassroomCourseWork {
     description?: string;
     alternateLink?: string;
     associatedWithDeveloper?: boolean;
+    dueDate?: {
+        year?: number;
+        month?: number;
+        day?: number;
+    };
+    dueTime?: {
+        hours?: number;
+        minutes?: number;
+        seconds?: number;
+        nanos?: number;
+    };
 }
 
 interface RecentClassroomSubmission {
@@ -363,6 +375,13 @@ export default function ClassroomSubmissionForm() {
                             <p className="text-xs text-amber-700 mt-2">
                                 This coursework was created outside the portal Google Cloud project. Google Classroom only allows portal attachments on coursework created by this same project.
                             </p>
+                        )}
+                        {selectedCoursework && (
+                            <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/35 p-3 text-xs leading-6 text-slate-300">
+                                <p className="font-semibold text-white">Selected coursework</p>
+                                <p className="mt-1">Due: {formatClassroomDueDateTime(selectedCoursework.dueDate, selectedCoursework.dueTime)}</p>
+                                {selectedCoursework.state && <p>Status: {selectedCoursework.state.toLowerCase()}</p>}
+                            </div>
                         )}
                         {courseworkError && (
                             <p className="text-xs text-red-600 mt-2">

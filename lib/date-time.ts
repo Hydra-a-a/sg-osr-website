@@ -1,6 +1,19 @@
 const MANILA_TIME_ZONE = 'Asia/Manila';
 const PHT_STORAGE_PATTERN = 'YYYY-MM-DD HH:mm:ss PHT';
 
+export interface ClassroomDueDateParts {
+    year?: number;
+    month?: number;
+    day?: number;
+}
+
+export interface ClassroomDueTimeParts {
+    hours?: number;
+    minutes?: number;
+    seconds?: number;
+    nanos?: number;
+}
+
 const longDateTimeFormatter = new Intl.DateTimeFormat('en-US', {
     timeZone: MANILA_TIME_ZONE,
     year: 'numeric',
@@ -99,6 +112,74 @@ export function formatManilaShortDate(value: string | undefined): string {
     }
 
     return shortDateFormatter.format(date);
+}
+
+export function buildClassroomDueFieldsFromManilaInput(
+    dueDateValue: string,
+    dueTimeValue?: string
+): { dueDate?: ClassroomDueDateParts; dueTime?: ClassroomDueTimeParts } | undefined {
+    const dateMatch = dueDateValue.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!dateMatch) return undefined;
+
+    const year = Number(dateMatch[1]);
+    const month = Number(dateMatch[2]);
+    const day = Number(dateMatch[3]);
+    if (!year || !month || !day) return undefined;
+
+    if (!dueTimeValue) {
+        return {
+            dueDate: { year, month, day },
+        };
+    }
+
+    const timeMatch = dueTimeValue.trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    if (!timeMatch) return undefined;
+
+    const hours = Number(timeMatch[1]);
+    const minutes = Number(timeMatch[2]);
+    const utcDate = new Date(Date.UTC(year, month - 1, day, hours - 8, minutes, 0));
+
+    if (Number.isNaN(utcDate.getTime())) {
+        return undefined;
+    }
+
+    return {
+        dueDate: {
+            year: utcDate.getUTCFullYear(),
+            month: utcDate.getUTCMonth() + 1,
+            day: utcDate.getUTCDate(),
+        },
+        dueTime: {
+            hours: utcDate.getUTCHours(),
+            minutes: utcDate.getUTCMinutes(),
+            seconds: 0,
+            nanos: 0,
+        },
+    };
+}
+
+export function formatClassroomDueDateTime(
+    dueDate?: ClassroomDueDateParts,
+    dueTime?: ClassroomDueTimeParts
+): string {
+    if (!dueDate?.year || !dueDate.month || !dueDate.day) {
+        return 'Date unavailable';
+    }
+
+    const date = new Date(Date.UTC(
+        dueDate.year,
+        dueDate.month - 1,
+        dueDate.day,
+        dueTime?.hours || 0,
+        dueTime?.minutes || 0,
+        dueTime?.seconds || 0
+    ));
+
+    if (Number.isNaN(date.getTime())) {
+        return 'Date unavailable';
+    }
+
+    return dueTime ? formatManilaDateTime(date.toISOString()) : formatManilaShortDate(date.toISOString());
 }
 
 export function formatPhtStorageTimestamp(value: string | Date): string {

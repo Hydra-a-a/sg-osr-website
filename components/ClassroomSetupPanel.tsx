@@ -6,6 +6,7 @@ import useSWR, { useSWRConfig } from 'swr';
 import Link from 'next/link';
 import { AlertCircle, BookPlus, CheckCircle, ExternalLink, FilePlus, Loader2 } from 'lucide-react';
 import { deriveEffectivePortalRole, hasOfficerPrivilege, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
+import { formatClassroomDueDateTime } from '@/lib/date-time';
 
 interface ClassroomCourse {
     id: string;
@@ -20,6 +21,24 @@ interface ClassroomSetupStatus {
     message: string;
     requestId?: string;
     alternateLink?: string;
+}
+
+interface ClassroomCourseWork {
+    id: string;
+    title: string;
+    state?: string;
+    alternateLink?: string;
+    dueDate?: {
+        year?: number;
+        month?: number;
+        day?: number;
+    };
+    dueTime?: {
+        hours?: number;
+        minutes?: number;
+        seconds?: number;
+        nanos?: number;
+    };
 }
 
 const apiFetcher = async (url: string) => {
@@ -78,7 +97,20 @@ export default function ClassroomSetupPanel() {
         { revalidateOnFocus: false }
     );
 
+    const { data: courseworkResponse, error: courseworkError, isLoading: courseworkLoading, mutate: mutateCoursework } = useSWR(
+        isAuthenticated && isOfficer && courseWorkCourseId
+            ? `/api/classroom/courses/${encodeURIComponent(courseWorkCourseId)}/coursework`
+            : null,
+        apiFetcher,
+        { revalidateOnFocus: false }
+    );
+
     const courses: ClassroomCourse[] = useMemo(() => coursesResponse?.data || [], [coursesResponse?.data]);
+    const courseworkItems: ClassroomCourseWork[] = useMemo(() => courseworkResponse?.data || [], [courseworkResponse?.data]);
+    const draftCourseworkItems = useMemo(
+        () => courseworkItems.filter((item) => String(item.state || '').toUpperCase() === 'DRAFT'),
+        [courseworkItems]
+    );
     const courseCreationBlocked = courseName.trim().length < 3;
     const courseWorkCreationBlocked = !courseWorkCourseId || courseWorkTitle.trim().length < 3;
 
@@ -201,6 +233,45 @@ export default function ClassroomSetupPanel() {
             setSetupStatus({ success: false, message: 'Network error while creating Classroom coursework.' });
         } finally {
             setCreatingCourseWork(false);
+        }
+    };
+
+    const handlePublishCoursework = async (courseWorkId: string) => {
+        if (!courseWorkCourseId) {
+            return;
+        }
+
+        setSetupStatus(null);
+
+        try {
+            const res = await fetch(
+                `/api/classroom/courses/${encodeURIComponent(courseWorkCourseId)}/coursework/${encodeURIComponent(courseWorkId)}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ state: 'PUBLISHED' }),
+                }
+            );
+
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setSetupStatus({
+                    success: false,
+                    message: json?.error || 'Failed to publish draft coursework.',
+                    requestId: json?.requestId,
+                });
+                return;
+            }
+
+            setSetupStatus({
+                success: true,
+                message: 'Draft coursework published in Google Classroom.',
+                requestId: json?.requestId,
+                alternateLink: json?.data?.alternateLink,
+            });
+            await mutateCoursework();
+        } catch {
+            setSetupStatus({ success: false, message: 'Network error while publishing draft coursework.' });
         }
     };
 
@@ -409,6 +480,58 @@ export default function ClassroomSetupPanel() {
                             {creatingCourseWork ? 'Creating draft...' : 'Create draft coursework'}
                         </button>
                     </form>
+                </div>
+
+                <div className="mt-6 border-t border-white/10 pt-5">
+                    <div className="flex flex-wrap items-baseline justify-between gap-3">
+                        <div>
+                            <p className="portal-kicker">Officer Drafts</p>
+                            <h4 className="mt-2 text-base font-semibold text-white">View and publish draft coursework</h4>
+                        </div>
+                        <p className="text-xs leading-6 text-slate-300">Select a class above to load its draft queue.</p>
+                    </div>
+
+                    {!courseWorkCourseId ? (
+                        <p className="mt-4 text-sm leading-6 text-slate-400">Choose a class to see its draft coursework.</p>
+                    ) : courseworkLoading ? (
+                        <p className="mt-4 text-sm leading-6 text-slate-400">Loading coursework drafts...</p>
+                    ) : courseworkError ? (
+                        <p className="mt-4 text-sm leading-6 text-rose-200">Failed to load coursework: {courseworkError.message}</p>
+                    ) : draftCourseworkItems.length === 0 ? (
+                        <p className="mt-4 text-sm leading-6 text-slate-400">No draft coursework exists for the selected class yet.</p>
+                    ) : (
+                        <div className="mt-4 grid gap-3">
+                            {draftCourseworkItems.map((item) => (
+                                <article key={item.id} className="rounded-xl border border-white/10 bg-slate-950/35 p-4">
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-semibold text-white">{item.title}</p>
+                                            <p className="mt-1 text-xs leading-6 text-slate-400">
+                                                Due: {formatClassroomDueDateTime(item.dueDate, item.dueTime)}
+                                            </p>
+                                        </div>
+                                        <span className="transparency-status-chip">Draft</span>
+                                    </div>
+
+                                    <div className="mt-4 flex flex-wrap gap-3">
+                                        {item.alternateLink && (
+                                            <a
+                                                href={item.alternateLink}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="btn-secondary inline-flex items-center gap-2"
+                                            >
+                                                Open in Classroom <ExternalLink size={14} />
+                                            </a>
+                                        )}
+                                        <button type="button" onClick={() => handlePublishCoursework(item.id)} className="btn-primary gap-2">
+                                            Publish draft
+                                        </button>
+                                    </div>
+                                </article>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {setupStatus && (
