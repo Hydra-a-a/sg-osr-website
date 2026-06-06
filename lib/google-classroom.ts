@@ -111,42 +111,36 @@ function getClassroomClient(accessToken: string) {
 
 export async function listMyClassroomCourses(accessToken: string): Promise<ClassroomCourse[]> {
     const classroom = getClassroomClient(accessToken);
-
-    const [studentRes, teacherRes] = await Promise.allSettled([
-        classroom.courses.list({
-            studentId: 'me',
-            courseStates: ['ACTIVE', 'PROVISIONED'],
-            pageSize: 100,
-        }),
-        classroom.courses.list({
-            teacherId: 'me',
-            courseStates: ['ACTIVE', 'PROVISIONED'],
-            pageSize: 100,
-        }),
-    ]);
-
     const merged = new Map<string, ClassroomCourse>();
 
-    if (studentRes.status === 'fulfilled') {
-        const courses = studentRes.value.data.courses || [];
-        for (const course of courses) {
-            if (!course.id || !course.name) continue;
-            const normalizedCourse = normalizeCourse(course);
-            if (!normalizedCourse) continue;
-            merged.set(normalizedCourse.id, normalizedCourse);
-        }
+    async function collectCourses(query: { studentId?: string; teacherId?: string }) {
+        let pageToken: string | undefined;
+
+        do {
+            const response = await classroom.courses.list({
+                ...query,
+                courseStates: ['ACTIVE', 'PROVISIONED'],
+                pageSize: 100,
+                pageToken,
+            });
+
+            for (const course of response.data.courses || []) {
+                if (!course.id || !course.name) continue;
+                const normalizedCourse = normalizeCourse(course);
+                if (!normalizedCourse) continue;
+                if (!merged.has(normalizedCourse.id)) {
+                    merged.set(normalizedCourse.id, normalizedCourse);
+                }
+            }
+
+            pageToken = response.data.nextPageToken || undefined;
+        } while (pageToken);
     }
 
-    if (teacherRes.status === 'fulfilled') {
-        const courses = teacherRes.value.data.courses || [];
-        for (const course of courses) {
-            if (!course.id || !course.name) continue;
-            if (merged.has(course.id)) continue;
-            const normalizedCourse = normalizeCourse(course);
-            if (!normalizedCourse) continue;
-            merged.set(normalizedCourse.id, normalizedCourse);
-        }
-    }
+    await Promise.all([
+        collectCourses({ studentId: 'me' }),
+        collectCourses({ teacherId: 'me' }),
+    ]);
 
     return Array.from(merged.values());
 }
@@ -154,20 +148,24 @@ export async function listMyClassroomCourses(accessToken: string): Promise<Class
 export async function listCourseWork(accessToken: string, courseId: string): Promise<ClassroomCourseWork[]> {
     const classroom = getClassroomClient(accessToken);
 
-    const res = await classroom.courses.courseWork.list({
-        courseId,
-        orderBy: 'updateTime desc',
-        pageSize: 100,
-    });
-
-    const workItems = res.data.courseWork || [];
-
     const sanitizedWorkItems: ClassroomCourseWork[] = [];
 
-    for (const item of workItems) {
-        const normalizedItem = normalizeCourseWork(item);
-        if (normalizedItem) sanitizedWorkItems.push(normalizedItem);
-    }
+    let pageToken: string | undefined;
+    do {
+        const res = await classroom.courses.courseWork.list({
+            courseId,
+            orderBy: 'updateTime desc',
+            pageSize: 100,
+            pageToken,
+        });
+
+        for (const item of res.data.courseWork || []) {
+            const normalizedItem = normalizeCourseWork(item);
+            if (normalizedItem) sanitizedWorkItems.push(normalizedItem);
+        }
+
+        pageToken = res.data.nextPageToken || undefined;
+    } while (pageToken);
 
     return sanitizedWorkItems;
 }

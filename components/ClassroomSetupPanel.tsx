@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR, { useSWRConfig } from 'swr';
 import Link from 'next/link';
-import { AlertCircle, BookPlus, CheckCircle, ExternalLink, FilePlus, Loader2 } from 'lucide-react';
+import { AlertCircle, BookPlus, CheckCircle, ChevronDown, ExternalLink, FilePlus, Loader2 } from 'lucide-react';
 import { deriveEffectivePortalRole, hasOfficerPrivilege, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
 import { formatClassroomDueDateTime } from '@/lib/date-time';
 
@@ -39,6 +39,144 @@ interface ClassroomCourseWork {
         seconds?: number;
         nanos?: number;
     };
+}
+
+function OfficerCourseworkClassCard({
+    course,
+    onPublishCoursework,
+}: {
+    course: ClassroomCourse;
+    onPublishCoursework: (courseId: string, courseWorkId: string) => void;
+}) {
+    const { data, error, isLoading } = useSWR(
+        course.id ? `/api/classroom/courses/${encodeURIComponent(course.id)}/coursework` : null,
+        apiFetcher,
+        { revalidateOnFocus: false }
+    );
+
+    const courseworkItems: ClassroomCourseWork[] = useMemo(() => data?.data || [], [data?.data]);
+    const draftItems = useMemo(
+        () => courseworkItems.filter((item) => String(item.state || '').toUpperCase() === 'DRAFT'),
+        [courseworkItems]
+    );
+    const publishedItems = useMemo(
+        () => courseworkItems.filter((item) => String(item.state || '').toUpperCase() === 'PUBLISHED'),
+        [courseworkItems]
+    );
+
+    return (
+        <article className="rounded-2xl border border-white/10 bg-slate-950/35 p-4 md:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <p className="text-sm font-semibold text-white">{course.name}</p>
+                    <p className="mt-1 text-xs leading-6 text-slate-400">
+                        {course.section ? `${course.section} · ` : ''}
+                        {course.courseState || 'ACTIVE'}
+                    </p>
+                </div>
+                <span className="transparency-status-chip">
+                    {courseworkItems.length} item{courseworkItems.length === 1 ? '' : 's'}
+                </span>
+            </div>
+
+            {isLoading ? (
+                <p className="mt-4 text-sm leading-6 text-slate-400">Loading coursework...</p>
+            ) : error ? (
+                <p className="mt-4 text-sm leading-6 text-rose-200">Failed to load coursework: {error.message}</p>
+            ) : courseworkItems.length === 0 ? (
+                <p className="mt-4 text-sm leading-6 text-slate-400">No coursework has been created for this class yet.</p>
+            ) : (
+                <div className="mt-4 grid gap-4">
+                    <details className="transparency-classroom-section" open={draftItems.length > 0}>
+                        <summary className="transparency-classroom-section-summary">
+                            <span>
+                                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-200">Drafts</span>
+                                <span className="mt-1 block text-sm text-slate-300">{draftItems.length} item{draftItems.length === 1 ? '' : 's'}</span>
+                            </span>
+                            <ChevronDown className="transparency-classroom-section-chevron h-4 w-4" aria-hidden="true" />
+                        </summary>
+                        <div className="mt-3">
+                            {draftItems.length === 0 ? (
+                                <p className="text-sm leading-6 text-slate-400">No drafts in this class.</p>
+                            ) : (
+                                <div className="grid gap-3">
+                                    {draftItems.map((item) => (
+                                        <div key={item.id} className="rounded-xl border border-white/10 bg-slate-900/50 p-3">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold text-white">{item.title}</p>
+                                                    <p className="mt-1 text-xs leading-6 text-slate-400">
+                                                        Due: {formatClassroomDueDateTime(item.dueDate, item.dueTime)}
+                                                    </p>
+                                                </div>
+                                                <span className="transparency-status-chip">Draft</span>
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                {item.alternateLink && (
+                                                    <a
+                                                        href={item.alternateLink}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="btn-secondary inline-flex items-center gap-2"
+                                                    >
+                                                        Open <ExternalLink size={14} />
+                                                    </a>
+                                                )}
+                                                <button type="button" onClick={() => onPublishCoursework(course.id, item.id)} className="btn-primary gap-2">
+                                                    Publish
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </details>
+
+                    <details className="transparency-classroom-section">
+                        <summary className="transparency-classroom-section-summary">
+                            <span>
+                                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-200">Published</span>
+                                <span className="mt-1 block text-sm text-slate-300">{publishedItems.length} item{publishedItems.length === 1 ? '' : 's'}</span>
+                            </span>
+                            <ChevronDown className="transparency-classroom-section-chevron h-4 w-4" aria-hidden="true" />
+                        </summary>
+                        <div className="mt-3">
+                            {publishedItems.length === 0 ? (
+                                <p className="text-sm leading-6 text-slate-400">No published coursework in this class yet.</p>
+                            ) : (
+                                <div className="grid gap-3">
+                                    {publishedItems.map((item) => (
+                                        <div key={item.id} className="rounded-xl border border-white/8 bg-slate-900/35 p-3">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold text-white">{item.title}</p>
+                                                    <p className="mt-1 text-xs leading-6 text-slate-400">
+                                                        Due: {formatClassroomDueDateTime(item.dueDate, item.dueTime)}
+                                                    </p>
+                                                </div>
+                                                <span className="transparency-status-chip">Published</span>
+                                            </div>
+                                            {item.alternateLink && (
+                                                <a
+                                                    href={item.alternateLink}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="mt-3 inline-flex items-center gap-2 text-sm text-sky-200 underline"
+                                                >
+                                                    Open in Classroom <ExternalLink size={14} />
+                                                </a>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </details>
+                </div>
+            )}
+        </article>
+    );
 }
 
 const apiFetcher = async (url: string) => {
@@ -107,10 +245,6 @@ export default function ClassroomSetupPanel() {
 
     const courses: ClassroomCourse[] = useMemo(() => coursesResponse?.data || [], [coursesResponse?.data]);
     const courseworkItems: ClassroomCourseWork[] = useMemo(() => courseworkResponse?.data || [], [courseworkResponse?.data]);
-    const draftCourseworkItems = useMemo(
-        () => courseworkItems.filter((item) => String(item.state || '').toUpperCase() === 'DRAFT'),
-        [courseworkItems]
-    );
     const courseCreationBlocked = courseName.trim().length < 3;
     const courseWorkCreationBlocked = !courseWorkCourseId || courseWorkTitle.trim().length < 3;
 
@@ -236,8 +370,8 @@ export default function ClassroomSetupPanel() {
         }
     };
 
-    const handlePublishCoursework = async (courseWorkId: string) => {
-        if (!courseWorkCourseId) {
+    const handlePublishCoursework = async (courseId: string, courseWorkId: string) => {
+        if (!courseId) {
             return;
         }
 
@@ -245,7 +379,7 @@ export default function ClassroomSetupPanel() {
 
         try {
             const res = await fetch(
-                `/api/classroom/courses/${encodeURIComponent(courseWorkCourseId)}/coursework/${encodeURIComponent(courseWorkId)}`,
+                `/api/classroom/courses/${encodeURIComponent(courseId)}/coursework/${encodeURIComponent(courseWorkId)}`,
                 {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
@@ -486,49 +620,25 @@ export default function ClassroomSetupPanel() {
                     <div className="flex flex-wrap items-baseline justify-between gap-3">
                         <div>
                             <p className="portal-kicker">Officer Drafts</p>
-                            <h4 className="mt-2 text-base font-semibold text-white">View and publish draft coursework</h4>
+                            <h4 className="mt-2 text-base font-semibold text-white">Coursework by class</h4>
                         </div>
-                        <p className="text-xs leading-6 text-slate-300">Select a class above to load its draft queue.</p>
+                        <p className="text-xs leading-6 text-slate-300">Each class keeps its own draft and published coursework grouped together.</p>
                     </div>
 
-                    {!courseWorkCourseId ? (
-                        <p className="mt-4 text-sm leading-6 text-slate-400">Choose a class to see its draft coursework.</p>
-                    ) : courseworkLoading ? (
-                        <p className="mt-4 text-sm leading-6 text-slate-400">Loading coursework drafts...</p>
-                    ) : courseworkError ? (
-                        <p className="mt-4 text-sm leading-6 text-rose-200">Failed to load coursework: {courseworkError.message}</p>
-                    ) : draftCourseworkItems.length === 0 ? (
-                        <p className="mt-4 text-sm leading-6 text-slate-400">No draft coursework exists for the selected class yet.</p>
+                    {coursesLoading ? (
+                        <p className="mt-4 text-sm leading-6 text-slate-400">Loading classes...</p>
+                    ) : coursesError ? (
+                        <p className="mt-4 text-sm leading-6 text-rose-200">Failed to load officer classes: {coursesError.message}</p>
+                    ) : courses.length === 0 ? (
+                        <p className="mt-4 text-sm leading-6 text-slate-400">No officer classes are available yet.</p>
                     ) : (
-                        <div className="mt-4 grid gap-3">
-                            {draftCourseworkItems.map((item) => (
-                                <article key={item.id} className="rounded-xl border border-white/10 bg-slate-950/35 p-4">
-                                    <div className="flex flex-wrap items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-semibold text-white">{item.title}</p>
-                                            <p className="mt-1 text-xs leading-6 text-slate-400">
-                                                Due: {formatClassroomDueDateTime(item.dueDate, item.dueTime)}
-                                            </p>
-                                        </div>
-                                        <span className="transparency-status-chip">Draft</span>
-                                    </div>
-
-                                    <div className="mt-4 flex flex-wrap gap-3">
-                                        {item.alternateLink && (
-                                            <a
-                                                href={item.alternateLink}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="btn-secondary inline-flex items-center gap-2"
-                                            >
-                                                Open in Classroom <ExternalLink size={14} />
-                                            </a>
-                                        )}
-                                        <button type="button" onClick={() => handlePublishCoursework(item.id)} className="btn-primary gap-2">
-                                            Publish draft
-                                        </button>
-                                    </div>
-                                </article>
+                        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                            {courses.map((course) => (
+                                <OfficerCourseworkClassCard
+                                    key={course.id}
+                                    course={course}
+                                    onPublishCoursework={handlePublishCoursework}
+                                />
                             ))}
                         </div>
                     )}

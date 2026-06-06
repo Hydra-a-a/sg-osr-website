@@ -26,6 +26,8 @@
     "test:ticket-comments-appeals": "node tests/test-ticket-comments-appeals.js",
     "test:ticket-lookup-comments-boundaries": "node tests/test-ticket-lookup-comments-boundaries.js",
     "test:ticket-update-notification-sync": "node tests/test-ticket-update-notification-sync.js",
+    "test:classroom-pagination": "node tests/test-classroom-pagination.js",
+    "test:classroom-timezone": "node tests/test-classroom-timezone.js",
     "test:proposal-feature-boundaries": "node tests/test-proposal-feature-boundaries.js",
     "test:portal-mode-behavior": "node --no-warnings tests/test-portal-mode-behavior.js",
     "test:object-access-contracts": "node tests/test-object-access-contracts.js",
