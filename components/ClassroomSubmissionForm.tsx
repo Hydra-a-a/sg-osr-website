@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
@@ -20,6 +20,7 @@ interface ClassroomCourseWork {
     title: string;
     description?: string;
     alternateLink?: string;
+    associatedWithDeveloper?: boolean;
 }
 
 interface RecentClassroomSubmission {
@@ -35,6 +36,8 @@ interface ClassroomSubmissionStatus {
     message: string;
     errorCode?: string;
     requestId?: string;
+    retryAfterSeconds?: number;
+    retryAt?: string;
 }
 
 const apiFetcher = async (url: string) => {
@@ -60,6 +63,8 @@ export default function ClassroomSubmissionForm() {
     const [classroomSubmitting, setClassroomSubmitting] = useState(false);
     const [classroomResult, setClassroomResult] = useState<ClassroomSubmissionStatus | null>(null);
     const [recentClassroomSubmission, setRecentClassroomSubmission] = useState<RecentClassroomSubmission | null>(null);
+    const [duplicateRetryUntil, setDuplicateRetryUntil] = useState<number | null>(null);
+    const [duplicateCountdown, setDuplicateCountdown] = useState(0);
 
     useEffect(() => {
         if (typeof document === 'undefined') {
@@ -96,6 +101,71 @@ export default function ClassroomSubmissionForm() {
     );
 
     const courseworkItems: ClassroomCourseWork[] = courseworkResponse?.data || [];
+    const selectedCoursework = courseworkItems.find((item) => item.id === selectedCourseWorkId);
+    const selectedCourseworkProjectMismatch = selectedCoursework?.associatedWithDeveloper === false;
+    const trimmedReportLink = reportLink.trim();
+
+    useEffect(() => {
+        if (!duplicateRetryUntil) {
+            setDuplicateCountdown(0);
+            return;
+        }
+
+        const updateCountdown = () => {
+            const nextCountdown = Math.max(0, Math.ceil((duplicateRetryUntil - Date.now()) / 1000));
+            setDuplicateCountdown(nextCountdown);
+            if (nextCountdown === 0) {
+                setDuplicateRetryUntil(null);
+            }
+        };
+
+        updateCountdown();
+        const timer = window.setInterval(updateCountdown, 1000);
+        return () => window.clearInterval(timer);
+    }, [duplicateRetryUntil]);
+
+    const reportLinkIssue = useMemo(() => {
+        if (!trimmedReportLink) return 'Add the report or correspondence link.';
+        if (!/^https:\/\//i.test(trimmedReportLink)) return 'Report link must start with https://.';
+
+        try {
+            const parsedUrl = new URL(trimmedReportLink);
+            if (parsedUrl.protocol !== 'https:') return 'Report link must use HTTPS.';
+        } catch {
+            return 'Enter a complete, valid report URL.';
+        }
+
+        return '';
+    }, [trimmedReportLink]);
+
+    const incompleteSubmissionReason = useMemo(() => {
+        if (duplicateCountdown > 0) return `Duplicate submission lock expires in ${duplicateCountdown} seconds.`;
+        if (coursesLoading) return 'Loading Classroom courses.';
+        if (coursesError) return 'Resolve the Classroom course loading error.';
+        if (courses.length === 0) return 'No active Classroom courses are available for this account.';
+        if (!selectedCourseId) return 'Select a Classroom course.';
+        if (courseworkLoading) return 'Loading coursework for the selected course.';
+        if (courseworkError) return 'Resolve the coursework loading error.';
+        if (courseworkItems.length === 0) return 'No coursework is available for this course yet.';
+        if (!selectedCourseWorkId) return 'Select a coursework item.';
+        if (selectedCourseworkProjectMismatch) return 'Select coursework created through this portal project.';
+        if (reportLinkIssue) return reportLinkIssue;
+        return '';
+    }, [
+        duplicateCountdown,
+        coursesLoading,
+        coursesError,
+        courses.length,
+        selectedCourseId,
+        courseworkLoading,
+        courseworkError,
+        courseworkItems.length,
+        selectedCourseWorkId,
+        selectedCourseworkProjectMismatch,
+        reportLinkIssue,
+    ]);
+
+    const submitDisabled = classroomSubmitting || Boolean(incompleteSubmissionReason);
 
     const handleClassroomSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -107,6 +177,15 @@ export default function ClassroomSubmissionForm() {
 
         if (!selectedCourseId || !selectedCourseWorkId) {
             setClassroomResult({ success: false, message: 'Please select both a course and a coursework item.' });
+            return;
+        }
+
+        if (selectedCourseworkProjectMismatch) {
+            setClassroomResult({
+                success: false,
+                message: 'This coursework was created outside this portal project, so Google Classroom will not allow portal attachments.',
+                errorCode: 'PROJECT_PERMISSION_DENIED',
+            });
             return;
         }
 
@@ -145,11 +224,17 @@ export default function ClassroomSubmissionForm() {
 
             if (!res.ok) {
                 if (json?.errorCode === 'DUPLICATE_SUBMISSION') {
+                    const retryAfterSeconds = Number(json?.retryAfterSeconds || res.headers.get('Retry-After') || 90);
+                    const safeRetryAfterSeconds = Number.isFinite(retryAfterSeconds) ? Math.max(1, Math.ceil(retryAfterSeconds)) : 90;
+                    const retryUntil = json?.retryAt ? new Date(json.retryAt).getTime() : Date.now() + safeRetryAfterSeconds * 1000;
+                    setDuplicateRetryUntil(Number.isFinite(retryUntil) ? retryUntil : Date.now() + safeRetryAfterSeconds * 1000);
                     setClassroomResult({
                         success: false,
-                        message: 'Duplicate submission detected. Please wait a moment before retrying.',
+                        message: `Duplicate submission detected. You can resubmit in ${safeRetryAfterSeconds} seconds.`,
                         errorCode: json?.errorCode,
                         requestId: json?.requestId,
+                        retryAfterSeconds: safeRetryAfterSeconds,
+                        retryAt: json?.retryAt,
                     });
                     return;
                 }
@@ -171,7 +256,6 @@ export default function ClassroomSubmissionForm() {
             });
 
             const selectedCourse = courses.find((course) => course.id === selectedCourseId);
-            const selectedCoursework = courseworkItems.find((item) => item.id === selectedCourseWorkId);
             setRecentClassroomSubmission({
                 courseName: selectedCourse?.name || selectedCourseId,
                 courseworkTitle: selectedCoursework?.title || selectedCourseWorkId,
@@ -190,7 +274,7 @@ export default function ClassroomSubmissionForm() {
     };
 
     return (
-        <div className="card p-8">
+        <div className="card transparency-classroom-surface p-8">
             <div className="flex items-center gap-3 mb-3">
                 <GraduationCap size={22} className="text-rtu-blue" />
                 <h3 className="text-xl font-bold text-strong">Google Classroom Report Submission</h3>
@@ -271,10 +355,15 @@ export default function ClassroomSubmissionForm() {
                             </option>
                             {courseworkItems.map((item) => (
                                 <option key={item.id} value={item.id}>
-                                    {item.title}
+                                    {item.title}{item.associatedWithDeveloper === false ? ' - not portal-managed' : ''}
                                 </option>
                             ))}
                         </select>
+                        {selectedCourseworkProjectMismatch && (
+                            <p className="text-xs text-amber-700 mt-2">
+                                This coursework was created outside the portal Google Cloud project. Google Classroom only allows portal attachments on coursework created by this same project.
+                            </p>
+                        )}
                         {courseworkError && (
                             <p className="text-xs text-red-600 mt-2">
                                 Failed to load coursework: {courseworkError.message}
@@ -289,10 +378,17 @@ export default function ClassroomSubmissionForm() {
                             required
                             placeholder="https://docs.google.com/document/d/..."
                             value={reportLink}
-                            onChange={(e) => setReportLink(e.target.value)}
+                            onChange={(e) => {
+                                setReportLink(e.target.value);
+                                setClassroomResult(null);
+                            }}
                             disabled={classroomSubmitting}
                             className="field-input text-sm"
+                            aria-invalid={Boolean(trimmedReportLink && reportLinkIssue)}
                         />
+                        {trimmedReportLink && reportLinkIssue && (
+                            <p className="text-xs text-amber-200 mt-2">{reportLinkIssue}</p>
+                        )}
                     </div>
 
                     <div>
@@ -304,10 +400,14 @@ export default function ClassroomSubmissionForm() {
                             maxLength={150}
                             placeholder="March Transparency Report"
                             value={reportTitle}
-                            onChange={(e) => setReportTitle(e.target.value)}
+                            onChange={(e) => {
+                                setReportTitle(e.target.value);
+                                setClassroomResult(null);
+                            }}
                             disabled={classroomSubmitting}
                             className="field-input text-sm"
                         />
+                        <p className="mt-2 text-xs text-subtle">{reportTitle.length}/150 characters</p>
                     </div>
 
                     <label className="flex items-center gap-2 text-sm text-body">
@@ -337,6 +437,9 @@ export default function ClassroomSubmissionForm() {
                                             {classroomResult.errorCode && classroomResult.requestId && <span> </span>}
                                             {classroomResult.requestId && <span>Ref: {classroomResult.requestId}</span>}
                                         </p>
+                                    )}
+                                    {!classroomResult.success && classroomResult.errorCode === 'DUPLICATE_SUBMISSION' && duplicateCountdown > 0 && (
+                                        <p className="text-xs opacity-90">Retry opens in {duplicateCountdown} seconds.</p>
                                     )}
                                     {classroomResult.success && classroomResult.requestId && (
                                         <p className="text-xs opacity-80">Ref: {classroomResult.requestId}</p>
@@ -374,18 +477,17 @@ export default function ClassroomSubmissionForm() {
 
                     <button
                         type="submit"
-                        disabled={
-                            classroomSubmitting ||
-                            !selectedCourseId ||
-                            !selectedCourseWorkId ||
-                            !reportLink.trim() ||
-                            courseworkLoading
-                        }
+                        disabled={submitDisabled}
                         className={`btn-primary w-full gap-2 text-base ${classroomSubmitting ? 'is-submitting' : ''}`}
                     >
                         {classroomSubmitting ? <Loader2 size={18} className="animate-spin" /> : <ClipboardCheck size={18} />}
                         {classroomSubmitting ? 'Submitting to Classroom...' : 'Submit to Google Classroom'}
                     </button>
+                    {incompleteSubmissionReason && !classroomSubmitting && (
+                        <p className="text-xs leading-6 text-slate-300">
+                            {incompleteSubmissionReason}
+                        </p>
+                    )}
                 </form>
             )}
         </div>

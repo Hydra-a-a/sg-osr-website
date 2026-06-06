@@ -139,15 +139,25 @@ export async function POST(request: Request) {
 
     const dedupeLimit = await checkRateLimit(`classroom_submit_dedupe_${dedupeKey}`, 1, DEDUPE_TTL_MS);
     if (!dedupeLimit.success) {
+        const retryAfterSeconds = dedupeLimit.retryAfter ? Math.ceil(dedupeLimit.retryAfter) : Math.ceil(DEDUPE_TTL_MS / 1000);
+        const retryAt = new Date(Date.now() + retryAfterSeconds * 1000).toISOString();
+
         logAuditAction('CLASSROOM_DUPLICATE_BLOCKED', {
             ip,
             source: 'api/classroom/submissions',
             requestId,
+            retryAfterSeconds,
             emailHash: createHash('sha256').update(session.user.email.toLowerCase().trim()).digest('hex').slice(0, 12),
         });
         return NextResponse.json(
-            { error: 'Duplicate submission detected. Please wait before retrying.', errorCode: 'DUPLICATE_SUBMISSION', requestId },
-            { status: 409, headers: NO_STORE_HEADERS }
+            {
+                error: 'Duplicate submission detected. Please wait before retrying.',
+                errorCode: 'DUPLICATE_SUBMISSION',
+                requestId,
+                retryAfterSeconds,
+                retryAt,
+            },
+            { status: 409, headers: { ...NO_STORE_HEADERS, 'Retry-After': String(retryAfterSeconds) } }
         );
     }
 
@@ -191,22 +201,25 @@ export async function POST(request: Request) {
         });
 
         const msg = error instanceof Error ? error.message : 'Unknown error';
+        const isProjectPermissionIssue = /ProjectPermissionDenied|Developer Console project|associated with this Developer Console project/i.test(msg);
         const isPermissionIssue = /insufficient|forbidden|permission|scope|accessible/i.test(msg) || googleStatus === 401 || googleStatus === 403;
         const isNotFoundIssue = /no classroom submission found|not found/i.test(msg) || googleStatus === 404;
         const isTurnInIssue = /turnIn|turn in|turned in/i.test(msg);
-        const errorCode = isPermissionIssue
-            ? 'PERMISSION_DENIED'
-            : isNotFoundIssue
-                ? 'SUBMISSION_NOT_FOUND'
-                : isTurnInIssue
-                    ? 'TURN_IN_FAILED'
-                    : 'SUBMISSION_FAILED';
+        const errorCode = isProjectPermissionIssue
+            ? 'PROJECT_PERMISSION_DENIED'
+            : isPermissionIssue
+                ? 'PERMISSION_DENIED'
+                : isNotFoundIssue
+                    ? 'SUBMISSION_NOT_FOUND'
+                    : isTurnInIssue
+                        ? 'TURN_IN_FAILED'
+                        : 'SUBMISSION_FAILED';
 
         logAuditAction('CLASSROOM_SUBMISSION_REJECTED', {
             ip,
             source: 'api/classroom/submissions',
             requestId,
-            reason: isPermissionIssue ? 'permission' : isNotFoundIssue ? 'not_found' : isTurnInIssue ? 'turn_in_failed' : 'runtime_error',
+            reason: isProjectPermissionIssue ? 'project_permission' : isPermissionIssue ? 'permission' : isNotFoundIssue ? 'not_found' : isTurnInIssue ? 'turn_in_failed' : 'runtime_error',
             googleStatus,
             googleReason,
             emailHash: createHash('sha256').update(session.user.email.toLowerCase().trim()).digest('hex').slice(0, 12),
@@ -214,17 +227,19 @@ export async function POST(request: Request) {
 
         return NextResponse.json(
             {
-                error: isPermissionIssue
-                    ? 'Google Classroom permission issue. Please re-login and verify class membership.'
-                    : isNotFoundIssue
-                        ? 'No active submission slot found for this coursework.'
-                        : isTurnInIssue
-                            ? 'Attachment may have succeeded, but Google Classroom failed to mark it as turned in.'
-                            : 'Failed to submit to Google Classroom',
+                error: isProjectPermissionIssue
+                    ? 'This coursework was not created through this portal project, so Google Classroom will not allow portal attachments.'
+                    : isPermissionIssue
+                        ? 'Google Classroom permission issue. Please re-login and verify class membership.'
+                        : isNotFoundIssue
+                            ? 'No active submission slot found for this coursework.'
+                            : isTurnInIssue
+                                ? 'Attachment may have succeeded, but Google Classroom failed to mark it as turned in.'
+                                : 'Failed to submit to Google Classroom',
                 errorCode,
                 requestId,
             },
-            { status: isPermissionIssue ? 403 : isNotFoundIssue ? 404 : 500, headers: NO_STORE_HEADERS }
+            { status: isProjectPermissionIssue || isPermissionIssue ? 403 : isNotFoundIssue ? 404 : 500, headers: NO_STORE_HEADERS }
         );
     }
 }

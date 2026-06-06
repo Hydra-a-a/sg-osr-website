@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { sanitizeText } from '@/lib/security';
+import type { ClassroomCourseCreateInput, ClassroomCourseWorkCreateInput } from '@/schemas/classroom';
 
 type ClassroomCourse = {
     id: string;
@@ -7,6 +8,7 @@ type ClassroomCourse = {
     section?: string;
     room?: string;
     descriptionHeading?: string;
+    description?: string;
     alternateLink?: string;
     courseState?: string;
 };
@@ -17,6 +19,7 @@ type ClassroomCourseWork = {
     description?: string;
     state?: string;
     alternateLink?: string;
+    associatedWithDeveloper?: boolean;
     dueDate?: {
         year?: number;
         month?: number;
@@ -31,6 +34,83 @@ type ClassroomCourseWork = {
     workType?: string;
     maxPoints?: number;
 };
+
+function sanitizeOptional(value: string | null | undefined): string | undefined {
+    if (!value) return undefined;
+    return sanitizeText(value) || undefined;
+}
+
+function normalizeCourse(course: {
+    id?: string | null;
+    name?: string | null;
+    section?: string | null;
+    room?: string | null;
+    descriptionHeading?: string | null;
+    description?: string | null;
+    alternateLink?: string | null;
+    courseState?: string | null;
+}): ClassroomCourse | null {
+    if (!course.id || !course.name) return null;
+
+    const safeName = sanitizeText(course.name);
+    if (!safeName) return null;
+
+    return {
+        id: course.id,
+        name: safeName,
+        section: sanitizeOptional(course.section),
+        room: sanitizeOptional(course.room),
+        descriptionHeading: sanitizeOptional(course.descriptionHeading),
+        description: sanitizeOptional(course.description),
+        alternateLink: course.alternateLink || undefined,
+        courseState: course.courseState || undefined,
+    };
+}
+
+function normalizeCourseWork(item: {
+    id?: string | null;
+    title?: string | null;
+    description?: string | null;
+    state?: string | null;
+    alternateLink?: string | null;
+    associatedWithDeveloper?: boolean | null;
+    dueDate?: ClassroomCourseWork['dueDate'];
+    dueTime?: ClassroomCourseWork['dueTime'];
+    workType?: string | null;
+    maxPoints?: number | null;
+}): ClassroomCourseWork | null {
+    if (!item.id || !item.title) return null;
+
+    const safeTitle = sanitizeText(item.title);
+    if (!safeTitle) return null;
+
+    return {
+        id: item.id,
+        title: safeTitle,
+        description: sanitizeOptional(item.description),
+        state: item.state || undefined,
+        alternateLink: item.alternateLink || undefined,
+        associatedWithDeveloper: typeof item.associatedWithDeveloper === 'boolean' ? item.associatedWithDeveloper : undefined,
+        dueDate: item.dueDate || undefined,
+        dueTime: item.dueTime || undefined,
+        workType: item.workType || undefined,
+        maxPoints: typeof item.maxPoints === 'number' ? item.maxPoints : undefined,
+    };
+}
+
+function parseDueDate(value: string | undefined): ClassroomCourseWork['dueDate'] | undefined {
+    if (!value) return undefined;
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return undefined;
+    return { year, month, day };
+}
+
+function parseDueTime(value: string | undefined): ClassroomCourseWork['dueTime'] | undefined {
+    if (!value) return undefined;
+    const [hours, minutes] = value.split(':').map(Number);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return undefined;
+    return { hours, minutes, seconds: 0, nanos: 0 };
+}
 
 function getClassroomClient(accessToken: string) {
     const oauth2 = new google.auth.OAuth2();
@@ -48,12 +128,12 @@ export async function listMyClassroomCourses(accessToken: string): Promise<Class
     const [studentRes, teacherRes] = await Promise.allSettled([
         classroom.courses.list({
             studentId: 'me',
-            courseStates: ['ACTIVE'],
+            courseStates: ['ACTIVE', 'PROVISIONED'],
             pageSize: 100,
         }),
         classroom.courses.list({
             teacherId: 'me',
-            courseStates: ['ACTIVE'],
+            courseStates: ['ACTIVE', 'PROVISIONED'],
             pageSize: 100,
         }),
     ]);
@@ -64,17 +144,9 @@ export async function listMyClassroomCourses(accessToken: string): Promise<Class
         const courses = studentRes.value.data.courses || [];
         for (const course of courses) {
             if (!course.id || !course.name) continue;
-            const safeName = sanitizeText(course.name);
-            if (!safeName) continue;
-            merged.set(course.id, {
-                id: course.id,
-                name: safeName,
-                section: course.section ? sanitizeText(course.section) || undefined : undefined,
-                room: course.room ? sanitizeText(course.room) || undefined : undefined,
-                descriptionHeading: course.descriptionHeading ? sanitizeText(course.descriptionHeading) || undefined : undefined,
-                alternateLink: course.alternateLink || undefined,
-                courseState: course.courseState || undefined,
-            });
+            const normalizedCourse = normalizeCourse(course);
+            if (!normalizedCourse) continue;
+            merged.set(normalizedCourse.id, normalizedCourse);
         }
     }
 
@@ -83,17 +155,9 @@ export async function listMyClassroomCourses(accessToken: string): Promise<Class
         for (const course of courses) {
             if (!course.id || !course.name) continue;
             if (merged.has(course.id)) continue;
-            const safeName = sanitizeText(course.name);
-            if (!safeName) continue;
-            merged.set(course.id, {
-                id: course.id,
-                name: safeName,
-                section: course.section ? sanitizeText(course.section) || undefined : undefined,
-                room: course.room ? sanitizeText(course.room) || undefined : undefined,
-                descriptionHeading: course.descriptionHeading ? sanitizeText(course.descriptionHeading) || undefined : undefined,
-                alternateLink: course.alternateLink || undefined,
-                courseState: course.courseState || undefined,
-            });
+            const normalizedCourse = normalizeCourse(course);
+            if (!normalizedCourse) continue;
+            merged.set(normalizedCourse.id, normalizedCourse);
         }
     }
 
@@ -114,29 +178,58 @@ export async function listCourseWork(accessToken: string, courseId: string): Pro
     const sanitizedWorkItems: ClassroomCourseWork[] = [];
 
     for (const item of workItems) {
-        if (!item.id || !item.title) {
-            continue;
-        }
-
-        const safeTitle = sanitizeText(item.title);
-        if (!safeTitle) {
-            continue;
-        }
-
-        sanitizedWorkItems.push({
-            id: item.id,
-            title: safeTitle,
-            description: item.description ? sanitizeText(item.description) || undefined : undefined,
-            state: item.state || undefined,
-            alternateLink: item.alternateLink || undefined,
-            dueDate: item.dueDate || undefined,
-            dueTime: item.dueTime || undefined,
-            workType: item.workType || undefined,
-            maxPoints: typeof item.maxPoints === 'number' ? item.maxPoints : undefined,
-        });
+        const normalizedItem = normalizeCourseWork(item);
+        if (normalizedItem) sanitizedWorkItems.push(normalizedItem);
     }
 
     return sanitizedWorkItems;
+}
+
+export async function createClassroomCourse(accessToken: string, input: ClassroomCourseCreateInput): Promise<ClassroomCourse> {
+    const classroom = getClassroomClient(accessToken);
+
+    const res = await classroom.courses.create({
+        requestBody: {
+            name: input.name,
+            section: input.section,
+            room: input.room,
+            descriptionHeading: input.descriptionHeading,
+            description: input.description,
+            ownerId: 'me',
+            courseState: 'ACTIVE',
+        },
+    });
+
+    const course = normalizeCourse(res.data);
+    if (!course) {
+        throw new Error('Google Classroom did not return a usable course record.');
+    }
+
+    return course;
+}
+
+export async function createClassroomCourseWork(accessToken: string, input: ClassroomCourseWorkCreateInput): Promise<ClassroomCourseWork> {
+    const classroom = getClassroomClient(accessToken);
+
+    const res = await classroom.courses.courseWork.create({
+        courseId: input.courseId,
+        requestBody: {
+            title: input.title,
+            description: input.description,
+            state: input.state,
+            workType: 'ASSIGNMENT',
+            maxPoints: input.maxPoints,
+            dueDate: parseDueDate(input.dueDate),
+            dueTime: parseDueTime(input.dueTime),
+        },
+    });
+
+    const courseWork = normalizeCourseWork(res.data);
+    if (!courseWork) {
+        throw new Error('Google Classroom did not return a usable coursework record.');
+    }
+
+    return courseWork;
 }
 
 export async function submitCourseWorkLink(params: {
@@ -158,6 +251,12 @@ export async function submitCourseWorkLink(params: {
     const userCourseIds = new Set(accessibleCourses.map((course) => course.id));
     if (!userCourseIds.has(courseId)) {
         throw new Error('Course is not accessible for the authenticated leader.');
+    }
+
+    const courseWorkItems = await listCourseWork(accessToken, courseId);
+    const courseWork = courseWorkItems.find((item) => item.id === courseWorkId);
+    if (courseWork?.associatedWithDeveloper === false) {
+        throw new Error('Coursework is not associated with this Developer Console project.');
     }
 
     const classroom = getClassroomClient(accessToken);

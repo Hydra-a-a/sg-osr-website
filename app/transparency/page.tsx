@@ -1,4 +1,5 @@
 import { BookOpen, ClipboardCheck, DollarSign, FileText, Lock, ShieldCheck } from 'lucide-react';
+import ClassroomSetupPanel from '@/components/ClassroomSetupPanel';
 import ClassroomSubmissionForm from '@/components/ClassroomSubmissionForm';
 
 const sections = [
@@ -100,8 +101,11 @@ export default function TransparencyPage() {
                     </div>
 
                     <div className="transparency-submission-grid">
-                        <div className="transparency-submission-shell">
-                            <ClassroomSubmissionForm />
+                        <div className="transparency-submission-stack">
+                            <ClassroomSetupPanel />
+                            <div className="transparency-submission-shell">
+                                <ClassroomSubmissionForm />
+                            </div>
                         </div>
 
                         <aside className="portal-panel-soft p-6 transparency-status-rail">

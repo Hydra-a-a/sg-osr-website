@@ -48,11 +48,19 @@ export function rateLimit(identifier: string, limit: number, windowMs: number): 
     }
 
     if (record.count >= limit) {
-        return { success: false, remaining: 0 };
+        return {
+            success: false,
+            remaining: 0,
+            retryAfter: Math.max(1, Math.ceil((record.resetTime - now) / 1000)),
+        };
     }
 
     record.count += 1;
-    return { success: true, remaining: limit - record.count };
+    return {
+        success: true,
+        remaining: limit - record.count,
+        retryAfter: Math.max(1, Math.ceil((record.resetTime - now) / 1000)),
+    };
 }
 
 async function upstashIncrAndExpire(key: string, windowSeconds: number): Promise<number | null> {
