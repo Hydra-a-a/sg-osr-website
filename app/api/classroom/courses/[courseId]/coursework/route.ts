@@ -54,7 +54,18 @@ export async function GET(
     }
 
     try {
-        const coursework = await listCourseWork(accessToken, validatedCourseId.data);
+        let coursework = await listCourseWork(accessToken, validatedCourseId.data);
+
+        // Do not expose publish/state information to non-officer roles.
+        // Leaders only need to attach/submit their own work; publishing metadata
+        // is considered an officer-level detail.
+        if (!hasOfficerPrivilege(effectiveRole)) {
+            coursework = coursework.map((item) => {
+                const { state, ...rest } = item as any;
+                return rest as typeof item;
+            });
+        }
+
         return NextResponse.json({ data: coursework }, { headers: NO_STORE_HEADERS });
     } catch (error) {
         console.error('[Classroom API] Failed to fetch coursework:', redactErrorForLog(error));
