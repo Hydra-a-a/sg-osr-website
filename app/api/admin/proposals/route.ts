@@ -37,7 +37,7 @@ const ALLOWED_REVIEW_ATTACHMENT_MIME_TYPES = new Set([
     'application/pdf',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-]);
+
 
 const ProposalAdminUpdateSchema = z.object({
     rowNumber: z.number().int().positive(),

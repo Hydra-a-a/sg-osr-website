@@ -20,7 +20,6 @@ function createSlug(text: string): string {
 
 /**
  * goes through the google slides and turns them into fake dynamic pages
- * somehow this is cleaner than managing a full CMS for a college org
  */
 export async function getSlidePages(): Promise<SlidePage[]> {
     try {

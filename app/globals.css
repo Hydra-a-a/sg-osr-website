@@ -1094,8 +1094,8 @@ h3 {
 
 .home-ops-list {
   display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
   border-top: 1px solid rgba(148, 163, 184, 0.24);
   padding-top: 1rem;
 }
@@ -5572,6 +5572,11 @@ html[data-mobile-desktop-mode='true'] .directory-result-actions {
 @media (min-width: 768px) {
   .home-hero-utility-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .home-ops-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
   }
 }
 
