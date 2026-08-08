@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import dns from 'node:dns/promises';
 import path from 'node:path';
 import process from 'node:process';
-import nodemailer from 'nodemailer';
+import nodemailer from 'nodemailer-patched';
 import { google } from 'googleapis';
 
 const NEWS_SOURCE_HEADERS = ['pageId', 'pageName', 'pageSlug', 'enabled', 'defaultTargetPages', 'tokenAlias', 'defaultSection', 'syncLimit', 'notes'];

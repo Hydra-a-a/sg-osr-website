@@ -11,9 +11,10 @@ export async function generateStaticParams() {
     }));
 }
 
-export default async function DynamicSlidePage({ params }: { params: { slug: string } }) {
+export default async function DynamicSlidePage({ params }: { params: Promise<{ slug: string }> }) {
     const pages = await getSlidePages();
-    const currentPage = pages.find((p) => p.slug === params.slug);
+    const { slug } = await params;
+    const currentPage = pages.find((p) => p.slug === slug);
 
     if (!currentPage) {
         notFound();

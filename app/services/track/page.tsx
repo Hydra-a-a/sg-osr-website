@@ -198,22 +198,6 @@ function getNextStepGuidance(ticket: TrackTicket): string {
     }
 }
 
-export function saveTicketToHistory(ticket: StoredTicket, accessToken?: string) {
-    try {
-        if (ticket.id.toUpperCase() === FAKE_TICKET_ID) return;
-        if (accessToken) {
-            saveStoredAccessToken(ticket.id, accessToken);
-        }
-
-        const existing = loadStoredTickets();
-        if (existing.some((current) => current.id === ticket.id)) return;
-        const updated = [ticket, ...existing].slice(0, 10);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch {
-        // local storage unavailable
-    }
-}
-
 function FollowUpThread({ ticketId, detailsRedacted }: { ticketId: string; detailsRedacted: boolean }) {
     const [comments, setComments] = useState<Array<{
         commentId?: string;

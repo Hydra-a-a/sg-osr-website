@@ -14,7 +14,7 @@ import {
     type CollegeInstitute,
     type GrievanceCategory,
 } from '@/lib/ticket-constants';
-import { saveTicketToHistory } from '@/app/services/track/page';
+import { saveTicketToHistory } from '@/lib/ticket-history';
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 

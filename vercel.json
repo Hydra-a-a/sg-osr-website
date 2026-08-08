@@ -11,6 +11,10 @@
     {
       "path": "/api/tickets/sync-updates",
       "schedule": "25 1 * * *"
+    },
+    {
+      "path": "/api/cron/directory-export",
+      "schedule": "30 2 * * *"
     }
   ]
 }

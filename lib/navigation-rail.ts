@@ -14,6 +14,7 @@ const PATH_LABELS: Record<string, string> = {
     '/about': 'About',
     '/directory': 'Directory',
     '/hub': 'Student Hub',
+    '/hub/lost-found': 'Lost and Found',
     '/hub/commute': 'Commute Guide',
     '/hub/commute/contribute': 'Contribute Route',
     '/hub/commute/leaderboard': 'Route Leaderboard',
@@ -53,6 +54,7 @@ const SECTION_QUICK_LINKS: NavigationRailSection[] = [
         label: 'Student Hub',
         links: [
             { href: '/hub', label: 'Overview' },
+            { href: '/hub/lost-found', label: 'Lost and Found' },
             { href: '/hub/commute', label: 'Commute Guide' },
             { href: '/hub/commute/contribute', label: 'Contribute Route' },
             { href: '/hub/commute/leaderboard', label: 'Leaderboard' },

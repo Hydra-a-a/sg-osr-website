@@ -68,6 +68,7 @@ export async function getDriveImageStreamById(fileId: string, resourceKey?: stri
     stream: Readable;
     fileName?: string | null;
     mimeType?: string | null;
+    sizeBytes?: number | null;
     parents?: string[];
 } | null> {
     const normalizedFileId = (fileId || '').trim();
@@ -80,7 +81,7 @@ export async function getDriveImageStreamById(fileId: string, resourceKey?: stri
     try {
         const metadataResponse = await drive.files.get({
             fileId: normalizedFileId,
-            fields: 'id,name,mimeType,parents',
+            fields: 'id,name,mimeType,size,parents',
             supportsAllDrives: true,
             resourceKey,
         } as any);
@@ -110,6 +111,7 @@ export async function getDriveImageStreamById(fileId: string, resourceKey?: stri
             stream: mediaResponse.data as Readable,
             fileName: metadataResponse.data.name || null,
             mimeType,
+            sizeBytes: metadataResponse.data.size ? Number(metadataResponse.data.size) : null,
             parents: metadataResponse.data.parents || [],
         };
     } catch (error) {
@@ -170,6 +172,61 @@ export function extractGoogleDriveResourceKey(url: string): string | undefined {
 export function getOrganizationLogosFolderId(): string {
     const folderId = (process.env.GOOGLE_DRIVE_ORGANIZATION_LOGOS_FOLDER_ID || '').trim();
     return folderId;
+}
+
+export async function getDriveMediaStreamById(fileId: string, resourceKey?: string): Promise<{
+    stream: Readable;
+    fileName?: string | null;
+    mimeType?: string | null;
+    parents?: string[];
+    sizeBytes?: number | null;
+} | null> {
+    const normalizedFileId = (fileId || '').trim();
+    if (!normalizedFileId) {
+        return null;
+    }
+
+    const drive = getDriveClient();
+
+    try {
+        const metadataResponse = await drive.files.get({
+            fileId: normalizedFileId,
+            fields: 'id,name,mimeType,size,parents',
+            supportsAllDrives: true,
+            resourceKey,
+        } as any);
+
+        const mimeType = metadataResponse.data?.mimeType || '';
+        const isAllowedMedia = mimeType.startsWith('image/') || mimeType === 'video/mp4' || mimeType === 'video/webm';
+        if (!metadataResponse.data || !isAllowedMedia) {
+            return null;
+        }
+
+        const mediaResponse = await drive.files.get(
+            {
+                fileId: normalizedFileId,
+                alt: 'media',
+                supportsAllDrives: true,
+                resourceKey,
+            } as any,
+            { responseType: 'stream' },
+        );
+
+        if (!mediaResponse.data) {
+            return null;
+        }
+
+        return {
+            stream: mediaResponse.data as Readable,
+            fileName: metadataResponse.data.name || null,
+            mimeType,
+            parents: metadataResponse.data.parents || [],
+            sizeBytes: Number.isFinite(Number(metadataResponse.data.size)) ? Number(metadataResponse.data.size) : null,
+        };
+    } catch (error) {
+        console.error('[Drive Media] Failed to stream media:', redactErrorForLog(error));
+        return null;
+    }
 }
 
 export async function getDriveFileMetadataById(fileId: string, resourceKey?: string): Promise<{
@@ -265,6 +322,141 @@ function getProposalsFolderId(): string {
         throw new Error('GOOGLE_DRIVE_PROPOSALS_FOLDER_ID is not configured in the environment.');
     }
     return id;
+}
+
+export function getLostFoundFolderId(): string {
+    const id = (process.env.GOOGLE_DRIVE_LOST_FOUND_FOLDER_ID || '').trim();
+    if (!id) {
+        throw new Error('GOOGLE_DRIVE_LOST_FOUND_FOLDER_ID is not configured in the environment.');
+    }
+    return id;
+}
+
+export async function uploadLostFoundAttachmentToDrive(params: {
+    itemId: string;
+    attachmentId: string;
+    fileName: string;
+    mimeType: string;
+    buffer: Buffer;
+}): Promise<{ fileId: string; resourceKey: string }> {
+    const drive = getDriveClient();
+    const folderId = getLostFoundFolderId();
+    const driveFileName = `[LOST_FOUND] ${params.itemId} - ${params.attachmentId}`;
+
+    try {
+        const response = await drive.files.create({
+            requestBody: {
+                name: driveFileName,
+                parents: [folderId],
+            },
+            media: {
+                mimeType: params.mimeType,
+                body: Readable.from(params.buffer),
+            },
+            fields: 'id,resourceKey,mimeType,size,parents',
+            supportsAllDrives: true,
+        });
+
+        const fileId = response.data.id;
+        if (!fileId) {
+            throw new Error('Google Drive did not return a file ID for lost-and-found attachment.');
+        }
+
+        const remoteSize = Number(response.data.size);
+        const metadataMatches = response.data.mimeType === params.mimeType
+            && Number.isFinite(remoteSize)
+            && remoteSize === params.buffer.length
+            && (response.data.parents || []).includes(folderId);
+        if (!metadataMatches) {
+            await trashDriveFileById(fileId, folderId, 'lost-and-found folder');
+            throw new Error('Google Drive returned unexpected metadata for lost-and-found attachment.');
+        }
+
+        return {
+            fileId,
+            resourceKey: response.data.resourceKey || '',
+        };
+    } catch (error) {
+        console.error('[Drive Upload] Failed to upload lost-and-found attachment:', redactErrorForLog(error));
+        throw new Error('Failed to upload lost-and-found attachment to Google Drive.');
+    }
+}
+
+export async function trashLostFoundAttachmentById(fileId: string): Promise<void> {
+    await trashDriveFileById(fileId, getLostFoundFolderId(), 'lost-and-found folder');
+}
+
+export async function uploadOrganizationLogoToDrive(params: {
+    directoryKey: string;
+    fileName: string;
+    mimeType: string;
+    buffer: Buffer;
+}): Promise<{ fileId: string; resourceKey: string; fileName: string }> {
+    const drive = getDriveClient();
+    const folderId = getOrganizationLogosFolderId().trim();
+    if (!folderId) {
+        throw new Error('GOOGLE_DRIVE_ORGANIZATION_LOGOS_FOLDER_ID is not configured in the environment.');
+    }
+
+    const safeName = sanitizeFileBaseName(params.fileName);
+    const driveFileName = `[DIRECTORY] ${params.directoryKey} - ${safeName}`;
+
+    try {
+        const response = await drive.files.create({
+            requestBody: {
+                name: driveFileName,
+                parents: [folderId],
+            },
+            media: {
+                mimeType: params.mimeType,
+                body: Readable.from(params.buffer),
+            },
+            fields: 'id,name,resourceKey',
+            supportsAllDrives: true,
+        });
+
+        const fileId = response.data.id;
+        if (!fileId) {
+            throw new Error('Google Drive did not return a file ID for the organization logo.');
+        }
+
+        return {
+            fileId,
+            resourceKey: response.data.resourceKey || '',
+            fileName: response.data.name || driveFileName,
+        };
+    } catch (error) {
+        console.error('[Drive Upload] Failed to upload organization logo:', redactErrorForLog(error));
+        throw new Error('Failed to upload organization logo to Google Drive.');
+    }
+}
+
+export async function trashDriveFileById(fileId: string, expectedParentId?: string, folderLabel = 'expected folder'): Promise<void> {
+    const normalizedFileId = (fileId || '').trim();
+    if (!normalizedFileId) return;
+
+    try {
+        const drive = getDriveClient();
+        if (expectedParentId) {
+            const metadata = await drive.files.get({
+                fileId: normalizedFileId,
+                fields: 'id,parents',
+                supportsAllDrives: true,
+            });
+            if (!(metadata.data.parents || []).includes(expectedParentId)) {
+                console.warn(`[Drive Cleanup] Skipped file outside the ${folderLabel}.`);
+                return;
+            }
+        }
+        await drive.files.update({
+            fileId: normalizedFileId,
+            requestBody: { trashed: true },
+            supportsAllDrives: true,
+            fields: 'id,trashed',
+        } as any);
+    } catch (error) {
+        console.warn(`[Drive Cleanup] Failed to trash file in the ${folderLabel}:`, redactErrorForLog(error));
+    }
 }
 
 export async function uploadProposalAttachmentToDrive(params: {

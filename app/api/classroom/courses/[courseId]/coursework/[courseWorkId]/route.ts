@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
-import { auth } from '@/lib/auth';
+import { authWithGoogleToken } from '@/lib/auth';
 import { publishClassroomCourseWork } from '@/lib/google-classroom';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
@@ -38,7 +38,7 @@ export async function PATCH(
         );
     }
 
-    const session = await auth();
+    const session = await authWithGoogleToken();
     if (!session?.user?.email) {
         return NextResponse.json({ error: 'Authentication required', errorCode: 'AUTH_REQUIRED', requestId }, { status: 401, headers: NO_STORE_HEADERS });
     }

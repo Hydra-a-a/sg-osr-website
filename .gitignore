@@ -37,6 +37,9 @@ lint_output.json
 lint_output.txt
 out.txt
 out_v2.txt
+.codex-next*.log
+.playwright-cli/
+output-*.png
 
 # env files
 .env*
@@ -44,6 +47,7 @@ out_v2.txt
 .env.local
 
 # AI Agent folders
+/.codex
 /.adal
 /.agent
 /.agents
@@ -127,6 +131,17 @@ tmp-*.log
 # Local workspace instruction files
 /AGENTS.md
 /custom-guidelines/PROJECT_AGENT_PROMPT.md
+
+# Local integration metadata
+/.neon
+
+# OSR maintainer wiki local state and private ingest inbox
+/docs/wiki/.obsidian/
+/docs/wiki/raw/*
+!/docs/wiki/raw/README.md
+
+# Internal implementation plans and design drafts
+/docs/superpowers/
 
 # Local release scratch artifacts
 cmp-*.txt

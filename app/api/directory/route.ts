@@ -5,6 +5,7 @@ import { OfficerSchema, OfficeSchema } from '@/schemas/directory';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp, isSafeNavigationHref, redactErrorForLog } from '@/lib/security';
 import { extractGoogleDriveFileId, extractGoogleDriveResourceKey } from '@/lib/google-drive';
+import { resolveDirectoryData, type DirectoryPayload } from '@/lib/directory-repository';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
 
 // cache for an hour. don't hit google sheets every time or they ban us.
@@ -538,7 +539,7 @@ function parseWorkbookOffices(rows: string[][]) {
     return parsed;
 }
 
-export async function fetchDirectoryData() {
+async function fetchDirectoryDataFromSheets(): Promise<DirectoryPayload> {
     // Expose the directory-building logic so other endpoints can reuse it.
     // This function mirrors the behavior previously implemented in GET.
     try {
@@ -763,6 +764,10 @@ export async function fetchDirectoryData() {
         console.error('Directory API Error:', redactErrorForLog(error));
         throw error;
     }
+}
+
+export async function fetchDirectoryData(): Promise<DirectoryPayload> {
+    return resolveDirectoryData(fetchDirectoryDataFromSheets);
 }
 
 export async function GET(request: Request) {

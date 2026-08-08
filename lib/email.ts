@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer from 'nodemailer-patched';
 import { redactErrorForLog } from '@/lib/security';
 
 // Standard Nodemailer transporter using Gmail SMTP

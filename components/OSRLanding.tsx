@@ -35,13 +35,18 @@ export async function OSRLanding() {
                     <div className="hero-dot-grid" />
                 </div>
                 <div className="container-main relative z-10 py-20 md:py-28">
-                    <BackLink href="/student-government" label="Back to Student Government" className="mb-8 text-white/80 hover:text-white transition-colors" />
+                    <BackLink href="/student-government" label="Back to Student Government" className="mb-8 text-white/80 hover:text-white transition-colors mx-auto md:mx-0" />
                     <div className="osr-hero-shell">
                         <div className="osr-hero-copy text-center md:text-left">
-                            <div
-                                className="badge-accent-gold inline-block rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-widest mb-6"
-                            >
-                                Office of the Student Regent
+                            <div className="mb-6 flex flex-col items-center gap-2 text-center md:items-start md:text-left">
+                                <div className="flex items-center gap-3" aria-hidden="true">
+                                    <span className="h-px w-10 bg-gradient-to-r from-transparent via-[rgba(247,217,150,0.82)] to-[rgba(247,217,150,0)]" />
+                                    <span className="h-2 w-2 rotate-45 border border-sky-300/70 bg-sky-300/15" />
+                                    <span className="h-px w-14 bg-gradient-to-r from-[rgba(125,211,252,0.78)] to-transparent" />
+                                </div>
+                                <span className="text-[0.72rem] font-bold uppercase tracking-[0.28em] text-[rgba(247,217,150,0.92)]">
+                                    Office of the Student Regent
+                                </span>
                             </div>
                             <h1 className="mb-5 text-4xl font-bold leading-tight text-white md:text-5xl">
                                 The Voice of <span className="text-gradient-gold">Every Rizaliano</span>
@@ -85,7 +90,12 @@ export async function OSRLanding() {
                 <div className="container-main relative z-10">
                     <div className="osr-principle-grid">
                         <article className="osr-principle-card" data-tone="gold">
-                            <span className="portal-kicker">Mission</span>
+                            <div className="flex items-center gap-3" aria-hidden="true">
+                                <span className="h-px w-10 bg-gradient-to-r from-transparent via-[rgba(247,217,150,0.82)] to-[rgba(247,217,150,0)]" />
+                                <span className="h-2 w-2 rotate-45 border border-sky-300/70 bg-sky-300/15" />
+                                <span className="h-px w-14 bg-gradient-to-r from-[rgba(125,211,252,0.78)] to-transparent" />
+                            </div>
+                            <span className="portal-kicker mt-3 block">Mission</span>
                             <h2 className="osr-principle-title">Advocate student interests at the regent level.</h2>
                             <p className="osr-principle-copy">
                                 The office brings student concerns into university governance, turns campus sentiment into formal policy input,
@@ -93,7 +103,12 @@ export async function OSRLanding() {
                             </p>
                         </article>
                         <article className="osr-principle-card" data-tone="sky">
-                            <span className="portal-kicker">Vision</span>
+                            <div className="flex items-center gap-3" aria-hidden="true">
+                                <span className="h-px w-10 bg-gradient-to-r from-transparent via-[rgba(247,217,150,0.82)] to-[rgba(247,217,150,0)]" />
+                                <span className="h-2 w-2 rotate-45 border border-sky-300/70 bg-sky-300/15" />
+                                <span className="h-px w-14 bg-gradient-to-r from-[rgba(125,211,252,0.78)] to-transparent" />
+                            </div>
+                            <span className="portal-kicker mt-3 block">Vision</span>
                             <h2 className="osr-principle-title">A responsive and accountable governance channel.</h2>
                             <p className="osr-principle-copy">
                                 The goal is practical representation: visible advocacy, transparent updates, and a direct line between the

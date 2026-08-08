@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import Image from 'next/image';
-import { Facebook, Mail, Search, Users } from 'lucide-react';
+import { ChevronDown, Facebook, Mail, Search, Users } from 'lucide-react';
 import BackLink from '@/components/BackLink';
+import DirectoryCorrectionGuidance from '@/components/DirectoryCorrectionGuidance';
+import { SectionPlaceholderIcon } from '@/components/SectionPlaceholderIcon';
 import {
     entryMatchesQuery,
     getInitials,
@@ -50,6 +52,8 @@ async function fetchDirectoryPayload(url: string) {
 function getOrganizationGroup(entry: OrganizationEntry): string {
     const raw = entry.category || entry.branch || 'Other';
     const normalizedRaw = normalizeSearchToken(raw);
+    const normalizedName = normalizeSearchToken(entry.name || '');
+
     if (
         normalizedRaw.includes('office_of_the_student_regent')
         || normalizedRaw.includes('office of the student regent')
@@ -57,6 +61,16 @@ function getOrganizationGroup(entry: OrganizationEntry): string {
     ) {
         return 'Supreme Student Council';
     }
+
+    if (
+        normalizedRaw.includes('college / institute student council')
+        || normalizedRaw.includes('college student council')
+        || normalizedRaw.includes('institute student council')
+        || ((normalizedName.includes('college') || normalizedName.includes('institute')) && normalizedName.includes('student council'))
+    ) {
+        return 'College / Institute Student Council';
+    }
+
     return normalizeGroupLabel(raw);
 }
 
@@ -108,7 +122,7 @@ function getGroupTone(groupKey: string): string {
 export default function StudentOrganizationsPage() {
     const { data, error, isLoading } = useSWR('/api/directory/student-organizations', fetchDirectoryPayload, DIRECTORY_SWR_OPTIONS);
     const [search, setSearch] = useState('');
-    const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+    const [openGroups, setOpenGroups] = useState<Set<string> | null>(null);
     const [targetSlug, setTargetSlug] = useState<string | null>(null);
     const didHydrateHashRef = useRef(false);
 
@@ -131,8 +145,7 @@ export default function StudentOrganizationsPage() {
     const totalCount = leaders.length;
     const visibleCount = groupedOrganizations.reduce((sum, group) => sum + group.count, 0);
 
-    // On first render with data, open either the hash-targeted group or the
-    // first visible one so the page never appears empty.
+    // Scroll to a hash-targeted group once after the first data load.
     useEffect(() => {
         if (didHydrateHashRef.current) return;
         if (groupedOrganizations.length === 0) return;
@@ -147,7 +160,7 @@ export default function StudentOrganizationsPage() {
 
     const handleJump = useCallback((slug: string) => {
         setOpenGroups((prev) => {
-            const next = new Set(prev);
+            const next = new Set(prev ?? (defaultOpenSlug ? [defaultOpenSlug] : []));
             next.add(slug);
             return next;
         });
@@ -156,11 +169,11 @@ export default function StudentOrganizationsPage() {
         window.requestAnimationFrame(() => {
             document.getElementById(`group-${slug}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
         });
-    }, []);
+    }, [defaultOpenSlug]);
 
     const handleToggle = useCallback((slug: string, open: boolean) => {
         setOpenGroups((prev) => {
-            const next = new Set(prev);
+            const next = new Set(prev ?? (defaultOpenSlug ? [defaultOpenSlug] : []));
             if (open) next.add(slug);
             else next.delete(slug);
             return next;
@@ -169,10 +182,10 @@ export default function StudentOrganizationsPage() {
             setTargetSlug(null);
             writeGroupHash(null);
         }
-    }, [targetSlug]);
+    }, [defaultOpenSlug, targetSlug]);
 
     return (
-        <section className="portal-section-slate relative overflow-hidden">
+        <section className="student-organizations-page directory-detail-page portal-section-slate relative overflow-hidden">
             <div className="portal-noise-overlay" aria-hidden="true" />
 
             <div className="relative z-10 pt-20 pb-16 md:pt-28 md:pb-20">
@@ -180,17 +193,17 @@ export default function StudentOrganizationsPage() {
                     <BackLink href="/directory" label="Back to Directory" className="mb-8 text-slate-200 hover:text-white transition-colors" />
 
                     <div className="mx-auto max-w-5xl text-center">
-                        <span className="portal-eyebrow inline-flex items-center gap-2 px-4 py-1.5 rounded-full shadow-sm mb-4">
+                        <span className="directory-page-kicker">
                             <Users size={14} className="text-rtu-gold" /> Student Organizations
                         </span>
                         <h1 className="portal-title">Browse Student Organizations</h1>
-                        <p className="portal-lead mt-5 mx-auto">
+                        <p className="portal-lead mx-auto mt-5 max-w-3xl">
                             Recognized student-led bodies grouped by organizational family. Use the jump rail to move between councils, academic orgs, and non-academic orgs, or search by name, acronym, branch, or contact.
                         </p>
-                        <p className="mt-4 text-sm text-slate-300">{totalCount} organizations currently listed.</p>
+                        <p className="mt-5 text-sm text-slate-300">{totalCount} organizations currently listed.</p>
                     </div>
 
-                    <div className="portal-panel mt-8 p-5 md:p-6">
+                    <div className="directory-detail-search mx-auto mt-10 max-w-3xl">
                         <label className="directory-glass-field" htmlFor="organization-search">
                             <Search size={18} />
                             <input
@@ -207,7 +220,9 @@ export default function StudentOrganizationsPage() {
                         <nav className="directory-jump-rail" aria-label="Jump to organization category">
                             <span className="directory-jump-rail-label">Jump to</span>
                             {groupedOrganizations.map((group) => {
-                                const isActive = openGroups.has(group.slug);
+                                const isActive = openGroups === null
+                                    ? defaultOpenSlug === group.slug
+                                    : openGroups.has(group.slug);
                                 return (
                                     <button
                                         key={group.slug}
@@ -225,20 +240,22 @@ export default function StudentOrganizationsPage() {
                     )}
 
                     <div className="mt-6">
-                        {isLoading && <div className="portal-panel-soft p-6 text-slate-300">Loading organizations…</div>}
-                        {error && <div className="portal-notice portal-notice-red">Failed to load organizations</div>}
+                        {isLoading && <div className="directory-state-line text-slate-300">Loading organizations...</div>}
+                        {error && <div className="directory-state-line directory-state-line-error">Failed to load organizations</div>}
 
                         {!isLoading && !error && (
                             <div className="directory-accordion-list">
                                 {groupedOrganizations.length === 0 ? (
-                                    <div className="portal-panel-soft p-6 text-slate-300">
+                                    <div className="directory-state-line text-slate-300">
                                         No organizations matched your search.
                                     </div>
                                 ) : (
                                     groupedOrganizations.map((group) => {
-                                        const isOpen = hasActiveSearch
-                                            || openGroups.has(group.slug)
-                                            || (!hasActiveSearch && openGroups.size === 0 && defaultOpenSlug === group.slug);
+                                        const isOpen = hasActiveSearch || (
+                                            openGroups === null
+                                                ? defaultOpenSlug === group.slug
+                                                : openGroups.has(group.slug)
+                                        );
                                         const isTarget = targetSlug === group.slug;
                                         return (
                                             <details
@@ -256,11 +273,7 @@ export default function StudentOrganizationsPage() {
                                                         </div>
                                                     </div>
                                                     <div className="directory-accordion-meta">
-                                                        <span
-                                                            className="directory-restored-chip directory-restored-chip--dot"
-                                                            data-tone={getGroupTone(group.key)}
-                                                            aria-hidden="true"
-                                                        />
+                                                        <ChevronDown className="directory-accordion-chevron" size={20} aria-hidden="true" />
                                                     </div>
                                                 </summary>
 
@@ -286,7 +299,15 @@ export default function StudentOrganizationsPage() {
                                                                                 unoptimized
                                                                             />
                                                                         ) : (
-                                                                            <span>{getInitials(organization.name, 'OR')}</span>
+                                                                            <div className="flex h-full w-full items-center justify-center text-slate-300">
+                                                                                <SectionPlaceholderIcon
+                                                                                    groupKey={group.key}
+                                                                                    category={organization.category}
+                                                                                    branch={organization.branch}
+                                                                                    name={organization.name}
+                                                                                    size={22}
+                                                                                />
+                                                                            </div>
                                                                         )}
                                                                     </div>
 
@@ -323,6 +344,7 @@ export default function StudentOrganizationsPage() {
                                                                                 </a>
                                                                             )}
                                                                         </div>
+                                                                        <DirectoryCorrectionGuidance />
                                                                     </div>
                                                                 </article>
                                                             );

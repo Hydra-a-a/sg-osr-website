@@ -7,10 +7,7 @@ const { GET, POST: nextAuthPOST } = handlers;
 
 export { GET };
 
-/**
- * Wrap the NextAuth POST handler with IP-based rate limiting.
- * Allows 5 sign-in attempts per IP per 15-minute window.
- */
+
 export async function POST(req: NextRequest) {
     const pathname = req.nextUrl.pathname;
     const isCallbackPost = pathname.includes('/api/auth/callback/');

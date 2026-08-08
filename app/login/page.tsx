@@ -5,7 +5,7 @@ import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldCheck, AlertTriangle, BadgeCheck, GraduationCap } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, BadgeCheck, GraduationCap, LogIn } from 'lucide-react';
 import { LEADER_ATTEMPT_COOKIE, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
 import BackLink from '@/components/BackLink';
 
@@ -209,9 +209,6 @@ function LoginContent() {
 
     return (
         <section className="portal-section-dark login-portal-shell min-h-screen flex items-center justify-center relative overflow-hidden py-10 md:py-14" aria-label="Login section">
-            <div className="portal-noise-overlay" aria-hidden="true" />
-            <div className="login-portal-glow login-portal-glow-blue" aria-hidden="true" />
-
             <div className="container-main relative z-10 flex justify-center">
                 <motion.div
                     className="w-full max-w-xl"
@@ -225,16 +222,10 @@ function LoginContent() {
 
                     <div className="login-portal-layout">
                         <div className="login-portal-copy text-center">
-                            <span className="portal-eyebrow mb-6 block">Institutional Account Access</span>
-                            <div className="relative mx-auto h-20 w-20 md:h-24 md:w-24 aspect-square">
-                                <Image
-                                    src="/images/OSR_LOGO.jpg"
-                                    alt="RTU OSR logo"
-                                    fill
-                                    sizes="96px"
-                                    className="object-cover rounded-full shadow-lg ring-1 ring-white/10"
-                                />
+                            <div className="login-access-mark mx-auto" aria-hidden="true">
+                                <LogIn size={30} strokeWidth={1.7} />
                             </div>
+                            <p className="portal-kicker mt-6 mb-3">Account access</p>
                             <h1 className="portal-title portal-title-fluid mb-4">
                                 RTU Account <span className="portal-title-accent">Sign In</span>
                             </h1>
@@ -244,7 +235,7 @@ function LoginContent() {
                             </p>
                         </div>
 
-                        <div className="portal-panel sg-hover-card login-portal-card p-6 sm:p-8 md:p-9">
+                        <div className="login-portal-card p-6 sm:p-8 md:p-9">
                             <AnimatePresence mode="wait">
                                 <motion.div
                                     key="login-step"
@@ -252,11 +243,9 @@ function LoginContent() {
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, x: 20 }}
                                 >
-                                    <div className="mb-7 text-center">
-                                        <span className="pill-label pill-label-tight mb-4 border border-sky-400/15 bg-sky-400/10 text-sky-100">
-                                            Institutional Authentication
-                                        </span>
-                                        <h2 className="text-2xl font-semibold text-white leading-tight mb-2">Select Access Type</h2>
+                                    <div className="mb-7 border-b border-white/10 pb-6 text-center">
+                                        <p className="login-form-kicker mb-3">Institutional authentication</p>
+                                        <h2 className="mb-2 text-2xl font-semibold leading-tight text-white">Choose an access route</h2>
                                         <p className="text-sm text-slate-300 leading-relaxed">
                                             Select the appropriate sign-in route for your account. Access privileges are determined after authentication based on your verified RTU credentials and institutional authorization policies.
                                         </p>
@@ -267,7 +256,7 @@ function LoginContent() {
                                         <motion.div
                                             initial={{ opacity: 0, y: -10 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            className="login-alert-panel login-alert-panel-danger mb-6 flex items-start gap-3 rounded-2xl p-4"
+                                            className="login-alert-panel login-alert-panel-danger mb-6 flex items-start gap-3 p-4"
                                         >
                                             <AlertTriangle className="mt-0.5 shrink-0 text-red-200" size={18} />
                                             <p className="text-sm text-red-50">{errorMessage}</p>
@@ -278,7 +267,7 @@ function LoginContent() {
                                         <motion.div
                                             initial={{ opacity: 0, y: -10 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            className="login-alert-panel login-alert-panel-warn mb-6 rounded-2xl p-4"
+                                            className="login-alert-panel login-alert-panel-warn mb-6 p-4"
                                         >
                                             <p className="text-sm font-semibold text-amber-50">Facebook Lite Sign-In Guidance</p>
                                             <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-amber-100">
@@ -343,9 +332,9 @@ function LoginContent() {
 
                                     {localDevLoginEnabled && (
                                         <div className="mt-6 border-t border-white/10 pt-5">
-                                            <h4 className="pill-label pill-label-tight mb-3 border border-amber-300/15 bg-amber-500/10 text-amber-100">
+                                            <p className="login-form-kicker mb-3 text-amber-100">
                                                 Local Development Sign-In Simulation
-                                            </h4>
+                                            </p>
                                             <div className="space-y-3">
                                                 <input
                                                     type="email"
@@ -396,10 +385,10 @@ function LoginContent() {
                                     )}
 
                                     <div className="mt-8 border-t border-white/10 pt-6">
-                                        <div className="login-alert-panel login-alert-panel-info flex items-start gap-3 rounded-2xl p-4">
+                                        <div className="login-alert-panel login-alert-panel-info flex items-start gap-3 p-4">
                                             <ShieldCheck className="mt-0.5 shrink-0 text-sky-200" size={18} />
                                             <div>
-                                                <h4 className="pill-label pill-label-tight border border-sky-300/15 bg-sky-400/10 text-sky-100">Security Notice</h4>
+                                                <p className="login-form-kicker text-sky-100">Security notice</p>
                                                 <p className="micro-note mt-1 text-sky-100/80">
                                                     Authentication is managed through Google Sign-In. This portal does not store user passwords, and all access levels are enforced after authentication.
                                                 </p>

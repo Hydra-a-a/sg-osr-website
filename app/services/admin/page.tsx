@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ShieldCheck, Ticket, Lightbulb, ArrowRight, Shield, MapPinned } from 'lucide-react';
+import { Ticket, Lightbulb, ArrowRight, Shield, MapPinned, UserCog, PackageSearch, ImageUp } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import BackLink from '@/components/BackLink';
@@ -35,6 +35,30 @@ export default function AdminHubPage() {
             href: '/services/admin/routes',
             tone: 'green',
         },
+        {
+            id: 'access',
+            label: 'Access Management',
+            description: 'Grant, update, or revoke leader and officer access. (LOGGED, UNAUTHORIZED ACCESS WILL BE REPORTED).',
+            icon: UserCog,
+            href: '/services/admin/users',
+            tone: 'gray',
+        },
+        {
+            id: 'lost-found',
+            label: 'Lost and Found',
+            description: 'MOD: Manage lost and found items in RTU from Security Offices, and posted by students.',
+            icon: PackageSearch,
+            href: '/services/admin/lost-found',
+            tone: 'amber',
+        },
+        {
+            id: 'directory',
+            label: 'Directory Logos',
+            description: 'Upload, replace, or update protected logos for CSCs, CISCs, AOs, and University Offices.',
+            icon: ImageUp,
+            href: '/services/admin/directory',
+            tone: 'blue',
+        },
     ];
 
     return (
@@ -54,7 +78,7 @@ export default function AdminHubPage() {
                                 Operations <span className="services-display-accent">Deck</span>
                             </h1>
                             <p className="services-lead mt-5 max-w-2xl">
-                                Central dashboard for administrative review work. Manage portal activity and moderate submissions, while backend-only controls stay outside the admin hub.
+                                Central dashboard for administrative review work, moderation, and officer-managed role access.
                             </p>
                         </div>
                     </div>

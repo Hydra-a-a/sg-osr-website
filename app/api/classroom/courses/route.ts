@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
-import { auth } from '@/lib/auth';
+import { authWithGoogleToken } from '@/lib/auth';
 import { createClassroomCourse, listMyClassroomCourses } from '@/lib/google-classroom';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: NO_STORE_HEADERS });
     }
 
-    const session = await auth();
+    const session = await authWithGoogleToken();
     if (!session?.user?.email) {
         return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: NO_STORE_HEADERS });
     }
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
         );
     }
 
-    const session = await auth();
+    const session = await authWithGoogleToken();
     if (!session?.user?.email) {
         return NextResponse.json({ error: 'Authentication required', errorCode: 'AUTH_REQUIRED', requestId }, { status: 401, headers: NO_STORE_HEADERS });
     }

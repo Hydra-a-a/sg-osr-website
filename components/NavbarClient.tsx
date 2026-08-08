@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LogOut, Menu, Shield, ShieldAlert, User, X } from 'lucide-react';
+import { ChevronRight, LogOut, Menu, Shield, ShieldAlert, User, X } from 'lucide-react';
 import AlertBanner from './AlertBanner';
 import { SiteConfig } from '@/lib/slideConfig';
 import { getAccessVisibilityState } from '@/lib/access-visibility';
@@ -223,8 +223,8 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
             <nav className={`portal-nav-shell portal-nav-shell-framed relative transition-[background,box-shadow] duration-300 ${scrolled ? 'portal-nav-shell-scrolled' : ''}`}>
                 <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[rgba(247,217,150,0.32)] to-transparent" />
 
-                <div className="container-main flex h-[4.1rem] items-center justify-between gap-3">
-                    <Link href="/" className="flex min-w-0 flex-1 items-center gap-3 pr-1 no-underline" onClick={() => { setMobileOpen(false); setProfileOpen(false); }}>
+                <div className="container-main portal-nav-bar flex min-h-[4.1rem] items-center justify-between gap-3 py-2 md:py-0">
+                    <Link href="/" className="portal-brand-link flex min-w-0 flex-1 items-center gap-3 pr-1 no-underline" onClick={() => { setMobileOpen(false); setProfileOpen(false); }}>
                         <div className="relative h-10 w-10 overflow-hidden rounded-full border border-[rgba(247,217,150,0.46)] bg-[rgba(247,217,150,0.08)] shadow-[0_14px_35px_-26px_rgba(247,217,150,0.65)]">
                             <Image
                                 src="/images/RTU_SSC.jpg"
@@ -234,16 +234,16 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                 className="object-contain"
                             />
                         </div>
-                        <div className="min-w-0">
+                        <div className="portal-brand-copy min-w-0">
                             <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-[rgba(203,213,225,0.78)]">RTU</p>
-                            <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold text-[rgba(241,245,249,0.95)] md:text-[0.97rem]">
+                            <span className="portal-brand-title block text-sm font-semibold text-[rgba(241,245,249,0.95)] md:text-[0.97rem]">
                                 Student Government Portal
                             </span>
                         </div>
                     </Link>
 
                     {!forceMobileLayout && (
-                        <div className="hidden md:flex items-center gap-2">
+                        <div className="hidden lg:flex items-center gap-2">
                         {navLinks.map((link) => (
                             <Link
                                 key={link.href}
@@ -286,61 +286,69 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                             animate={{ opacity: 1, y: 0, scale: 1 }}
                                             exit={{ opacity: 0, y: -8, scale: 0.98 }}
                                             transition={{ duration: 0.16 }}
-                                            className="portal-dropdown absolute right-0 mt-3 w-72 overflow-hidden rounded-2xl"
+                                            className="portal-dropdown portal-account-menu absolute right-0 mt-3 w-72 overflow-hidden"
                                         >
-                                            <div className="border-b border-white/8 bg-white/4 p-4">
-                                                <p className="truncate text-sm font-semibold text-white">{session.user.name || 'Student'}</p>
-                                                <p className="mt-0.5 truncate text-xs text-slate-400">{session.user.email}</p>
-                                                {isOfficer ? (
-                                                    <span className="pill-label pill-label-tight mt-3 bg-red-500/12 text-red-200 border border-red-400/20">
-                                                        <ShieldAlert size={10} /> Officer
-                                                    </span>
-                                                ) : isLeader ? (
-                                                    <span className="pill-label pill-label-tight mt-3 bg-amber-500/12 text-amber-100 border border-amber-300/18">
-                                                        <Shield size={10} /> Student Leader
-                                                    </span>
-                                                ) : null}
+                                            <div className="flex items-center gap-3 border-b border-white/8 bg-white/4 p-4">
+                                                {session.user.image ? (
+                                                    <Image src={session.user.image} alt="" width={36} height={36} className="rounded-full" />
+                                                ) : (
+                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
+                                                        <User size={16} />
+                                                    </div>
+                                                )}
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-semibold text-white">{session.user.name || 'Student'}</p>
+                                                    <p className="mt-0.5 truncate text-xs text-slate-400">{session.user.email}</p>
+                                                    {isOfficer ? (
+                                                        <p className="portal-account-role portal-account-role-officer"><ShieldAlert size={13} /> Officer access</p>
+                                                    ) : isLeader ? (
+                                                        <p className="portal-account-role portal-account-role-leader"><Shield size={13} /> Student leader access</p>
+                                                    ) : null}
+                                                </div>
                                             </div>
 
                                             {isPrivilegedAccount && (
-                                                <div className="border-b border-white/8 px-4 py-3">
-                                                    <p className="text-[11px] uppercase tracking-wide text-slate-400">Access Mode</p>
-                                                    <div className="mt-3 flex gap-2">
+                                                <fieldset className="portal-account-mode">
+                                                    <legend>Access mode</legend>
+                                                    <div className="portal-account-mode-list">
                                                         <button
                                                             type="button"
                                                             onClick={() => switchPortalMode('student')}
                                                             disabled={effectiveRole === 'student'}
-                                                            className="flex-1 rounded-xl border border-white/8 bg-white/4 px-2 py-2 text-xs font-medium text-slate-200 disabled:opacity-60 disabled:cursor-default"
+                                                            className={`portal-account-mode-button ${effectiveRole === 'student' ? 'portal-account-mode-button-active' : ''}`}
                                                         >
-                                                            Student
+                                                            Student mode
+                                                            {effectiveRole === 'student' ? <span>Current</span> : null}
                                                         </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => switchPortalMode('leader')}
                                                             disabled={effectiveRole === 'leader'}
-                                                            className="flex-1 rounded-xl border border-amber-300/20 bg-amber-500/10 px-2 py-2 text-xs font-medium text-amber-100 disabled:opacity-60 disabled:cursor-default"
+                                                            className={`portal-account-mode-button portal-account-mode-button-leader ${effectiveRole === 'leader' ? 'portal-account-mode-button-active' : ''}`}
                                                         >
-                                                            Leader
+                                                            Leader mode
+                                                            {effectiveRole === 'leader' ? <span>Current</span> : null}
                                                         </button>
                                                         {isOfficerAccount && (
                                                             <button
                                                                 type="button"
                                                                 onClick={() => switchPortalMode('officer')}
                                                                 disabled={effectiveRole === 'officer'}
-                                                                className="flex-1 rounded-xl border border-red-400/22 bg-red-500/10 px-2 py-2 text-xs font-medium text-red-100 disabled:opacity-60 disabled:cursor-default"
+                                                                className={`portal-account-mode-button portal-account-mode-button-officer ${effectiveRole === 'officer' ? 'portal-account-mode-button-active' : ''}`}
                                                             >
-                                                                Officer
+                                                                Officer mode
+                                                                {effectiveRole === 'officer' ? <span>Current</span> : null}
                                                             </button>
                                                         )}
                                                     </div>
-                                                </div>
+                                                </fieldset>
                                             )}
 
-                                            <div className="p-2">
+                                            <div className="px-4 pb-3">
                                                 <button
                                                     type="button"
                                                     onClick={handleSignOut}
-                                                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-red-200 transition-colors hover:bg-red-500/10"
+                                                    className="portal-account-signout"
                                                 >
                                                     <LogOut size={16} />
                                                     Sign Out
@@ -360,7 +368,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
 
                     <button
                         type="button"
-                        className={`${forceMobileLayout ? 'flex' : 'md:hidden flex'} h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white`}
+                        className={`${forceMobileLayout ? 'flex' : 'lg:hidden flex'} h-10 w-10 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white transition-colors hover:border-[rgba(247,217,150,0.35)] hover:bg-white/10`}
                         onClick={() => setMobileOpen((open) => !open)}
                         aria-label="Toggle navigation"
                         aria-expanded={mobileOpen}
@@ -376,7 +384,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                             <motion.button
                                 type="button"
                                 aria-label="Close mobile navigation"
-                                className={`${forceMobileLayout ? '' : 'md:hidden'} fixed inset-0 top-[4.75rem] z-40 bg-[#07111d]/45`}
+                                className={`${forceMobileLayout ? '' : 'lg:hidden'} fixed inset-0 top-[4.75rem] z-40 bg-[#07111d]/45`}
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
@@ -387,23 +395,26 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                 initial={{ opacity: 0, y: -8 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -8 }}
-                                className={`portal-mobile-panel ${forceMobileLayout ? '' : 'md:hidden'} relative z-50 overflow-hidden border-t border-white/8`}
+                                className={`portal-mobile-panel ${forceMobileLayout ? '' : 'lg:hidden'} relative z-50 overflow-hidden border-t border-white/8`}
                             >
-                                <div className="container-main flex flex-col gap-2 py-4">
-                                    {navLinks.map((link) => (
-                                        <Link
-                                            key={link.href}
-                                            href={link.href}
-                                            className={`portal-nav-link text-base ${isActiveNavLink(link.href) ? 'portal-nav-link-active' : ''}`}
-                                            aria-current={isActiveNavLink(link.href) ? 'page' : undefined}
-                                            onClick={() => setMobileOpen(false)}
-                                        >
-                                            {link.label}
-                                        </Link>
-                                    ))}
+                                <div className="container-main py-2">
+                                    <nav className="portal-mobile-nav-list" aria-label="Mobile primary navigation">
+                                        {navLinks.map((link) => (
+                                            <Link
+                                                key={link.href}
+                                                href={link.href}
+                                                className={`portal-mobile-nav-link ${isActiveNavLink(link.href) ? 'portal-mobile-nav-link-active' : ''}`}
+                                                aria-current={isActiveNavLink(link.href) ? 'page' : undefined}
+                                                onClick={() => setMobileOpen(false)}
+                                            >
+                                                <span>{link.label}</span>
+                                                <ChevronRight size={16} aria-hidden="true" />
+                                            </Link>
+                                        ))}
+                                    </nav>
 
                                     {session?.user ? (
-                                        <div className="mt-2 rounded-2xl border border-white/8 bg-white/4 p-4">
+                                        <section className="portal-mobile-account" aria-labelledby="mobile-account-heading">
                                             <div className="flex items-center gap-3">
                                                 {session.user.image ? (
                                                     <Image src={session.user.image} alt="" width={36} height={36} className="rounded-full" />
@@ -412,58 +423,64 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                                         <User size={16} />
                                                     </div>
                                                 )}
-                                                <div>
-                                                    <p className="text-sm font-semibold text-white">{session.user.name || 'Student'}</p>
+                                                <div className="min-w-0">
+                                                    <p id="mobile-account-heading" className="truncate text-sm font-semibold text-white">{session.user.name || 'Student'}</p>
                                                     {isOfficer ? (
-                                                        <span className="pill-label pill-label-tight mt-1 bg-red-500/12 text-red-200 border border-red-400/20">Officer</span>
+                                                        <p className="portal-account-role portal-account-role-officer"><ShieldAlert size={13} /> Officer access</p>
                                                     ) : isLeader ? (
-                                                        <span className="pill-label pill-label-tight mt-1 bg-amber-500/12 text-amber-100 border border-amber-300/18">Student Leader</span>
+                                                        <p className="portal-account-role portal-account-role-leader"><Shield size={13} /> Student leader access</p>
                                                     ) : null}
                                                 </div>
                                             </div>
 
                                             {isPrivilegedAccount && (
-                                                <div className="mt-4 grid grid-cols-2 gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => switchPortalMode('student')}
-                                                        disabled={effectiveRole === 'student'}
-                                                        className="rounded-xl border border-white/8 bg-white/4 px-2 py-2 text-xs font-medium text-slate-200 disabled:opacity-60 disabled:cursor-default"
-                                                    >
-                                                        Student Mode
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => switchPortalMode('leader')}
-                                                        disabled={effectiveRole === 'leader'}
-                                                        className="rounded-xl border border-amber-300/20 bg-amber-500/10 px-2 py-2 text-xs font-medium text-amber-100 disabled:opacity-60 disabled:cursor-default"
-                                                    >
-                                                        Leader Mode
-                                                    </button>
-                                                    {isOfficerAccount && (
+                                                <fieldset className="portal-account-mode">
+                                                    <legend>Access mode</legend>
+                                                    <div className="portal-account-mode-list">
                                                         <button
                                                             type="button"
-                                                            onClick={() => switchPortalMode('officer')}
-                                                            disabled={effectiveRole === 'officer'}
-                                                            className="col-span-2 rounded-xl border border-red-400/22 bg-red-500/10 px-2 py-2 text-xs font-medium text-red-100 disabled:opacity-60 disabled:cursor-default"
+                                                            onClick={() => switchPortalMode('student')}
+                                                            disabled={effectiveRole === 'student'}
+                                                            className={`portal-account-mode-button ${effectiveRole === 'student' ? 'portal-account-mode-button-active' : ''}`}
                                                         >
-                                                            Officer Mode
+                                                            Student mode
+                                                            {effectiveRole === 'student' ? <span>Current</span> : null}
                                                         </button>
-                                                    )}
-                                                </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => switchPortalMode('leader')}
+                                                            disabled={effectiveRole === 'leader'}
+                                                            className={`portal-account-mode-button portal-account-mode-button-leader ${effectiveRole === 'leader' ? 'portal-account-mode-button-active' : ''}`}
+                                                        >
+                                                            Leader mode
+                                                            {effectiveRole === 'leader' ? <span>Current</span> : null}
+                                                        </button>
+                                                        {isOfficerAccount && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => switchPortalMode('officer')}
+                                                                disabled={effectiveRole === 'officer'}
+                                                                className={`portal-account-mode-button portal-account-mode-button-officer ${effectiveRole === 'officer' ? 'portal-account-mode-button-active' : ''}`}
+                                                            >
+                                                                Officer mode
+                                                                {effectiveRole === 'officer' ? <span>Current</span> : null}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </fieldset>
                                             )}
 
                                             <button
                                                 type="button"
                                                 onClick={() => { setMobileOpen(false); handleSignOut(); }}
-                                                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/18 bg-red-500/10 py-2 text-sm text-red-100"
+                                                className="portal-account-signout"
                                             >
                                                 <LogOut size={16} />
                                                 Sign Out
                                             </button>
-                                        </div>
+                                        </section>
                                     ) : (
-                                        <Link href="/login" className="btn-primary mt-2 text-center text-sm no-underline" onClick={() => setMobileOpen(false)}>
+                                        <Link href="/login" className="portal-mobile-login" onClick={() => setMobileOpen(false)}>
                                             Sign In
                                         </Link>
                                     )}

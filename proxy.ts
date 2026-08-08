@@ -162,6 +162,7 @@ export default auth((req) => {
         '/services/track',
         '/transparency',
         '/hub',
+        '/hub/lost-found',
         '/hub/commute',
         '/hub/commute/leaderboard',
         '/osr',

@@ -140,12 +140,13 @@ async function readLegacyPosts(spreadsheetId: string, titles: string[]): Promise
                     return startIdx >= row.length ? [] : row.slice(startIdx);
                 })
                 .filter((row) => row.length > 0)
+                .filter((row) => [0, 1, 2, 4].every((index) => String(row[index] || '').trim()))
                 .filter((row) => LegacyNewsPostSchema.safeParse({
                     id: String(row[0] || ''),
-                    source: String(row[1] || 'OSR'),
+                    source: String(row[1] || ''),
                     caption: String(row[2] || ''),
                     imageUrl: row[3] || '',
-                    publishedAt: String(row[4] || new Date().toISOString()),
+                    publishedAt: String(row[4] || ''),
                     fbLink: row[5] || 'https://www.facebook.com/rtu.osr',
                 }).success)
                 .map((row, index) => normalizeLegacyNewsPostRow(row, index));

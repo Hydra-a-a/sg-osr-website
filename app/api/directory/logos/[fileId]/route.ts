@@ -6,6 +6,13 @@ import { getDriveImageStreamById, getOrganizationLogosFolderId } from '@/lib/goo
 
 const LOGO_MEMORY_CACHE_TTL_MS = 10 * 60 * 1000;
 const LOGO_MEMORY_CACHE_MAX_ITEMS = 120;
+const MANAGED_LOGO_LOOKUP_TTL_MS = 60 * 1000;
+const ALLOWED_LOGO_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+type ManagedLogoLookup = {
+    managed: boolean;
+    expiresAt: number;
+};
 
 type CachedLogoResponse = {
     body: ArrayBuffer;
@@ -17,6 +24,43 @@ type CachedLogoResponse = {
 };
 
 const logoResponseCache = new Map<string, CachedLogoResponse>();
+const managedLogoLookupCache = new Map<string, ManagedLogoLookup>();
+
+async function isNeonManagedLogo(fileId: string): Promise<boolean> {
+    const cached = managedLogoLookupCache.get(fileId);
+    if (cached && Date.now() <= cached.expiresAt) {
+        return cached.managed;
+    }
+
+    try {
+        const { prisma } = await import('@/lib/prisma');
+        const logo = await prisma.directoryLogo.findFirst({
+            where: { driveFileId: fileId },
+            select: { driveFileId: true, uploadedBy: true },
+        });
+        const managed = Boolean(logo && logo.uploadedBy !== 'sheets-import');
+        managedLogoLookupCache.set(fileId, {
+            managed,
+            expiresAt: Date.now() + MANAGED_LOGO_LOOKUP_TTL_MS,
+        });
+        return managed;
+    } catch {
+        // Fallback mode must remain usable when Neon is unavailable; strict
+        // validation still applies to every logo when DIRECTORY_SOURCE=db.
+        return false;
+    }
+}
+
+async function shouldEnforceManagedLogoPolicy(fileId: string): Promise<boolean> {
+    const directorySource = (process.env.DIRECTORY_SOURCE || 'sheet').trim().toLowerCase();
+    if (directorySource === 'db') {
+        return true;
+    }
+    if (directorySource === 'db-with-sheets-fallback') {
+        return isNeonManagedLogo(fileId);
+    }
+    return false;
+}
 
 function getCacheKey(fileId: string, resourceKey?: string): string {
     return `${fileId}:${resourceKey || ''}`;
@@ -131,6 +175,21 @@ function buildCacheHeaders(contentType: string, contentDisposition: string, etag
     };
 }
 
+function matchesLogoSignature(buffer: Buffer, mimeType: string): boolean {
+    if (mimeType === 'image/png') {
+        return buffer.length >= 8
+            && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
+            && buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a;
+    }
+    if (mimeType === 'image/jpeg') {
+        return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    }
+    return mimeType === 'image/webp'
+        && buffer.length >= 12
+        && buffer.toString('ascii', 0, 4) === 'RIFF'
+        && buffer.toString('ascii', 8, 12) === 'WEBP';
+}
+
 export async function GET(
     request: Request,
     context: { params: Promise<{ fileId: string }> }
@@ -174,12 +233,34 @@ export async function GET(
         return toApiResponse(new ApiError(404, 'NOT_FOUND', 'Logo unavailable'));
     }
 
-    const expectedFolderId = getOrganizationLogosFolderId().trim();
-    if (expectedFolderId && !file.parents?.includes(expectedFolderId)) {
-        return toApiResponse(new ApiError(404, 'NOT_FOUND', 'Logo unavailable'));
+    // Keep legacy Sheet-backed image URLs working during the migration. The
+    // restricted-folder and raster checks apply once the directory is served
+    // from Neon; upload validation already enforces them for managed logos.
+    const enforceManagedLogoPolicy = await shouldEnforceManagedLogoPolicy(normalizedFileId);
+
+    let buffer: Buffer;
+    if (enforceManagedLogoPolicy) {
+        if (!ALLOWED_LOGO_MIME_TYPES.has(file.mimeType || '')) {
+            return toApiResponse(new ApiError(404, 'NOT_FOUND', 'Logo unavailable'));
+        }
+
+        const expectedFolderId = getOrganizationLogosFolderId().trim();
+        if (!expectedFolderId || !file.parents?.includes(expectedFolderId)) {
+            return toApiResponse(new ApiError(404, 'NOT_FOUND', 'Logo unavailable'));
+        }
+
+        if (file.sizeBytes && file.sizeBytes > 5 * 1024 * 1024) {
+            return toApiResponse(new ApiError(404, 'NOT_FOUND', 'Logo unavailable'));
+        }
+
+        buffer = await nodeReadableToBuffer(file.stream);
+        if (!matchesLogoSignature(buffer, file.mimeType || '')) {
+            return toApiResponse(new ApiError(404, 'NOT_FOUND', 'Logo unavailable'));
+        }
+    } else {
+        buffer = await nodeReadableToBuffer(file.stream);
     }
 
-    const buffer = await nodeReadableToBuffer(file.stream);
     const filename = sanitizeInlineFilename(file.fileName || 'organization-logo', file.mimeType || 'image/png');
     const mimeType = file.mimeType || 'image/png';
     const contentDisposition = `inline; filename="${filename}"`;

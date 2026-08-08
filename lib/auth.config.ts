@@ -1,4 +1,5 @@
-import type { NextAuthConfig } from 'next-auth';
+import type { NextAuthConfig, Session } from 'next-auth';
+import type { JWT } from 'next-auth/jwt';
 import Google from 'next-auth/providers/google';
 import Credentials from 'next-auth/providers/credentials';
 import { logAuditAction } from '@/lib/audit';
@@ -317,12 +318,7 @@ export const authConfig = {
          * session callback — expose role and basic profile safely
          */
         async session({ session, token }) {
-            if (session.user) {
-                session.user.role = token.role as string;
-                session.user.email = token.email as string;
-            }
-            session.accessToken = token.accessToken as string | undefined;
-            return session;
+            return applySessionFields(session, token);
         },
     },
     session: {
@@ -331,3 +327,17 @@ export const authConfig = {
     },
     trustHost: true,
 } satisfies NextAuthConfig;
+
+/**
+ * Project only non-secret identity fields into a browser-visible session.
+ * OAuth access/refresh tokens remain JWT claims for server-side consumers.
+ */
+export function applySessionFields(session: Session, token: JWT): Session {
+    if (session.user) {
+        session.user.role = token.role as string;
+        session.user.email = token.email as string;
+        session.user.isDevSim = token.isDevSim === true;
+    }
+
+    return session;
+}

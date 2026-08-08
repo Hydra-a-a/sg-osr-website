@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import Image from 'next/image';
-import { Building2, Mail, MapPin, Search } from 'lucide-react';
+import { Building2, ChevronDown, Mail, MapPin, Search } from 'lucide-react';
 import BackLink from '@/components/BackLink';
+import { SectionPlaceholderIcon } from '@/components/SectionPlaceholderIcon';
 import {
     entryMatchesQuery,
     getInitials,
@@ -103,7 +104,7 @@ function getGroupTone(groupKey: string): string {
 export default function UniversityOfficesPage() {
     const { data, error, isLoading } = useSWR('/api/directory/offices', fetchDirectoryPayload, DIRECTORY_SWR_OPTIONS);
     const [search, setSearch] = useState('');
-    const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+    const [openGroups, setOpenGroups] = useState<Set<string> | null>(null);
     const [targetSlug, setTargetSlug] = useState<string | null>(null);
     const didHydrateHashRef = useRef(false);
 
@@ -140,7 +141,7 @@ export default function UniversityOfficesPage() {
 
     const handleJump = useCallback((slug: string) => {
         setOpenGroups((prev) => {
-            const next = new Set(prev);
+            const next = new Set(prev ?? (defaultOpenSlug ? [defaultOpenSlug] : []));
             next.add(slug);
             return next;
         });
@@ -149,11 +150,11 @@ export default function UniversityOfficesPage() {
         window.requestAnimationFrame(() => {
             document.getElementById(`group-${slug}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
         });
-    }, []);
+    }, [defaultOpenSlug]);
 
     const handleToggle = useCallback((slug: string, open: boolean) => {
         setOpenGroups((prev) => {
-            const next = new Set(prev);
+            const next = new Set(prev ?? (defaultOpenSlug ? [defaultOpenSlug] : []));
             if (open) next.add(slug);
             else next.delete(slug);
             return next;
@@ -162,10 +163,10 @@ export default function UniversityOfficesPage() {
             setTargetSlug(null);
             writeGroupHash(null);
         }
-    }, [targetSlug]);
+    }, [defaultOpenSlug, targetSlug]);
 
     return (
-        <section className="portal-section-slate relative overflow-hidden">
+        <section className="university-offices-page directory-detail-page portal-section-slate relative overflow-hidden">
             <div className="portal-noise-overlay" aria-hidden="true" />
 
             <div className="relative z-10 pt-20 pb-16 md:pt-28 md:pb-20">
@@ -173,17 +174,17 @@ export default function UniversityOfficesPage() {
                     <BackLink href="/directory" label="Back to Directory" className="mb-8 text-slate-200 hover:text-white transition-colors" />
 
                     <div className="mx-auto max-w-5xl text-center">
-                        <span className="portal-eyebrow inline-flex items-center gap-2 px-4 py-1.5 rounded-full shadow-sm mb-4">
+                        <span className="directory-page-kicker">
                             <Building2 size={14} className="text-rtu-gold" /> University Offices
                         </span>
                         <h1 className="portal-title">Browse University Offices</h1>
-                        <p className="portal-lead mt-5 mx-auto">
+                        <p className="portal-lead mx-auto mt-5 max-w-3xl">
                             Administrative offices grouped by reporting branch. Use the jump rail to move between the President&apos;s office, Vice Presidents, and supporting units, or search by office, director, or location.
                         </p>
-                        <p className="mt-4 text-sm text-slate-300">{totalCount} offices currently listed.</p>
+                        <p className="mt-5 text-sm text-slate-300">{totalCount} offices currently listed.</p>
                     </div>
 
-                    <div className="portal-panel mt-8 p-5 md:p-6">
+                    <div className="directory-detail-search mx-auto mt-10 max-w-3xl">
                         <label className="directory-glass-field" htmlFor="office-search">
                             <Search size={18} />
                             <input
@@ -200,7 +201,9 @@ export default function UniversityOfficesPage() {
                         <nav className="directory-jump-rail" aria-label="Jump to office branch">
                             <span className="directory-jump-rail-label">Jump to</span>
                             {groupedOffices.map((group) => {
-                                const isActive = openGroups.has(group.slug);
+                                const isActive = openGroups === null
+                                    ? defaultOpenSlug === group.slug
+                                    : openGroups.has(group.slug);
                                 return (
                                     <button
                                         key={group.slug}
@@ -218,20 +221,22 @@ export default function UniversityOfficesPage() {
                     )}
 
                     <div className="mt-6">
-                        {isLoading && <div className="portal-panel-soft p-6 text-slate-300">Loading offices…</div>}
-                        {error && <div className="portal-notice portal-notice-red">Failed to load offices</div>}
+                        {isLoading && <div className="directory-state-line text-slate-300">Loading offices...</div>}
+                        {error && <div className="directory-state-line directory-state-line-error">Failed to load offices</div>}
 
                         {!isLoading && !error && (
                             <div className="directory-accordion-list">
                                 {groupedOffices.length === 0 ? (
-                                    <div className="portal-panel-soft p-6 text-slate-300">
+                                    <div className="directory-state-line text-slate-300">
                                         No offices matched your search.
                                     </div>
                                 ) : (
                                     groupedOffices.map((group) => {
-                                        const isOpen = hasActiveSearch
-                                            || openGroups.has(group.slug)
-                                            || (!hasActiveSearch && openGroups.size === 0 && defaultOpenSlug === group.slug);
+                                        const isOpen = hasActiveSearch || (
+                                            openGroups === null
+                                                ? defaultOpenSlug === group.slug
+                                                : openGroups.has(group.slug)
+                                        );
                                         const isTarget = targetSlug === group.slug;
                                         return (
                                             <details
@@ -249,11 +254,7 @@ export default function UniversityOfficesPage() {
                                                         </div>
                                                     </div>
                                                     <div className="directory-accordion-meta">
-                                                        <span
-                                                            className="directory-restored-chip directory-restored-chip--dot"
-                                                            data-tone={getGroupTone(group.key)}
-                                                            aria-hidden="true"
-                                                        />
+                                                        <ChevronDown className="directory-accordion-chevron" size={20} aria-hidden="true" />
                                                     </div>
                                                 </summary>
 
@@ -272,7 +273,13 @@ export default function UniversityOfficesPage() {
                                                                             unoptimized
                                                                         />
                                                                     ) : (
-                                                                        <span>{getInitials(office.officeName, 'OF')}</span>
+                                                                        <div className="flex h-full w-full items-center justify-center text-slate-300">
+                                                                            <SectionPlaceholderIcon
+                                                                                section="university-office"
+                                                                                name={office.officeName}
+                                                                                size={22}
+                                                                            />
+                                                                        </div>
                                                                     )}
                                                                 </div>
 

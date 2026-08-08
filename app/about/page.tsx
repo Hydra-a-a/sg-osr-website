@@ -7,6 +7,7 @@ import useSWR from 'swr';
 import { motion } from 'framer-motion';
 import { Share2, ExternalLink } from 'lucide-react';
 import { applyCouncilLogoOverrides, type DirectoryLogoSource } from '@/lib/council-logos';
+import { SectionPlaceholderIcon } from '@/components/SectionPlaceholderIcon';
 
 type DirectoryResponsePayload = {
     leaders?: DirectoryLogoSource[];
@@ -55,7 +56,12 @@ function isConstitutionalCommissionEntry(source: DirectoryLogoSource): boolean {
     const position = normalizeForMatch(source.position);
 
     const combined = `${category} ${branch} ${name} ${position}`;
-    const hasConstitutionalSignal = combined.includes('constitutional commission') || combined.includes('constitutional commissions');
+    const hasConstitutionalSignal =
+        combined.includes('constitutional commission') ||
+        combined.includes('constitutional commissions') ||
+        combined.includes('commission on') ||
+        combined.includes('comselec') ||
+        name.includes('commission');
 
     if (!hasConstitutionalSignal) {
         return false;
@@ -509,8 +515,8 @@ export default function AboutPage() {
                                                     className="object-contain p-1"
                                                 />
                                             ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-sm font-bold text-subtle">
-                                                    {abbr}
+                                                <div className="w-full h-full flex items-center justify-center text-subtle">
+                                                    <SectionPlaceholderIcon section="constitutional-commission" size={24} />
                                                 </div>
                                             )}
                                         </div>
@@ -553,8 +559,8 @@ export default function AboutPage() {
                                             className="object-contain p-8 md:p-12"
                                         />
                                     ) : (
-                                        <div className="absolute inset-0 flex items-center justify-center text-5xl font-bold text-subtle">
-                                            {activeCommission.abbr}
+                                        <div className="absolute inset-0 flex items-center justify-center text-subtle">
+                                            <SectionPlaceholderIcon section="constitutional-commission" size={64} />
                                         </div>
                                     )}
                                 </div>

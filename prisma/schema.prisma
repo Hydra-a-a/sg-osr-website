@@ -1,0 +1,508 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PortalRole {
+  student
+  leader
+  officer
+}
+
+enum TicketStatus {
+  Open
+  InProgress
+  Resolved
+  Closed
+  Appealed
+}
+
+enum ProposalStatus {
+  PendingReview
+  UnderReview
+  Approved
+  Rejected
+  NeedsRevision
+}
+
+enum NotificationStatus {
+  pending
+  retry
+  sent
+  skipped
+  dead_letter
+}
+
+enum NotificationEntityType {
+  ticket
+  proposal
+  commute_route
+  public_content
+}
+
+enum TicketCommentRole {
+  STUDENT
+  LEADER
+  OFFICER
+}
+
+enum ProposalCommentRole {
+  LEADER
+  OFFICER
+}
+
+enum CommuteReviewStatus {
+  Pending
+  Approved
+  Rejected
+  FlaggedForReview
+  ApprovedWithWarning
+}
+
+enum CommuteVoteType {
+  UPVOTE
+  DOWNVOTE
+}
+
+enum LostFoundSource {
+  CSO
+  STUDENT
+}
+
+enum LostFoundReportType {
+  LOST
+  FOUND
+}
+
+enum LostFoundStatus {
+  PENDING_REVIEW
+  PUBLISHED
+  RESOLVED
+  REJECTED
+  ARCHIVED
+}
+
+enum LostFoundCommentRole {
+  STUDENT
+  OFFICER
+}
+
+enum LostFoundAttachmentKind {
+  IMAGE
+  VIDEO
+}
+
+model AuthorizedUser {
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  name                String    @default("")
+  council             String    @default("")
+  role                PortalRole
+  accessEnabled       Boolean   @default(true)
+  approvedBy          String    @default("")
+  lastAccessAt        DateTime?
+  sessionVersion      Int       @default(1)
+  revokedAfter        DateTime?
+  legacySheetRow      Int?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([role, accessEnabled])
+}
+
+model Ticket {
+  id                              String          @id @default(cuid())
+  ticketId                        String          @unique
+  submittedAt                     DateTime
+  status                          TicketStatus    @default(Open)
+  studentId                       String
+  studentName                     String
+  studentEmail                    String
+  campus                          String
+  college                         String
+  category                        String
+  subject                         String          @default("")
+  complaintNarrative              String
+  attachmentUrl                   String          @default("")
+  resolutionNotes                 String          @default("")
+  trackingTokenHash               String
+  lastNotifiedSignature           String          @default("")
+  lastNotifiedAt                  DateTime?
+  officerStatusDraft              String          @default("")
+  officerResolutionDraft          String          @default("")
+  officerSendControl              String          @default("")
+  officerUpdatedBy                String          @default("")
+  officerUpdatedAt                DateTime?
+  officerPublishNote              String          @default("")
+  officerLastPublishedAt          DateTime?
+  officerLastPublishedBy          String          @default("")
+  optionalUpdateOptIn             Boolean         @default(false)
+  optionalUpdateChannel           String          @default("None")
+  optionalUpdateDestination       String          @default("")
+  optionalUpdateDestinationStatus String          @default("Unverified")
+  optionalUpdateVerifiedAt        DateTime?
+  optionalUpdateVerifiedBy        String          @default("")
+  optionalUpdateLastNotifiedAt    DateTime?
+  optionalUpdateNotes             String          @default("")
+  legacySheetRow                  Int?
+  createdAt                       DateTime        @default(now())
+  updatedAt                       DateTime        @updatedAt
+  comments                        TicketComment[]
+  statusEvents                    TicketStatusEvent[]
+
+  @@index([studentEmail, submittedAt])
+  @@index([status, submittedAt])
+  @@index([category, submittedAt])
+}
+
+model TicketComment {
+  id            String            @id @default(cuid())
+  commentId     String            @unique
+  ticketId      String
+  ticket        Ticket            @relation(fields: [ticketId], references: [ticketId], onDelete: Cascade)
+  timestamp     DateTime
+  authorEmail   String
+  authorRole    TicketCommentRole @default(STUDENT)
+  message       String
+  attachmentUrl String            @default("")
+  isAppeal      Boolean           @default(false)
+  createdAt     DateTime          @default(now())
+
+  @@index([ticketId, timestamp])
+  @@index([authorEmail])
+}
+
+model TicketStatusEvent {
+  id          String       @id @default(cuid())
+  ticketId    String
+  ticket      Ticket       @relation(fields: [ticketId], references: [ticketId], onDelete: Cascade)
+  previous    TicketStatus?
+  next        TicketStatus
+  actorEmail  String
+  note        String       @default("")
+  published   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([actorEmail, createdAt])
+}
+
+model Proposal {
+  id                String          @id @default(cuid())
+  proposalId        String          @unique
+  submittedAt       DateTime
+  submitterEmail    String
+  submitterName     String
+  category          String
+  title             String
+  status            ProposalStatus  @default(PendingReview)
+  attachmentUrl     String
+  description       String
+  projectType       String
+  reviewNotes       String          @default("")
+  updatedBy         String          @default("")
+  updatedAt         DateTime?
+  trackingTokenHash String
+  legacySheetRow    Int?            @unique
+  createdAt         DateTime        @default(now())
+  modifiedAt        DateTime        @updatedAt
+  comments          ProposalComment[]
+  statusEvents      ProposalStatusEvent[]
+
+  @@index([submitterEmail, submittedAt])
+  @@index([status, submittedAt])
+  @@index([category, submittedAt])
+}
+
+model ProposalComment {
+  id            String              @id @default(cuid())
+  commentId     String              @unique
+  proposalId    String
+  proposal      Proposal            @relation(fields: [proposalId], references: [proposalId], onDelete: Cascade)
+  timestamp     DateTime
+  authorEmail   String
+  authorRole    ProposalCommentRole
+  message       String
+  attachmentUrl String              @default("")
+  createdAt     DateTime            @default(now())
+
+  @@index([proposalId, timestamp])
+  @@index([authorEmail])
+}
+
+model ProposalStatusEvent {
+  id          String          @id @default(cuid())
+  proposalId  String
+  proposal    Proposal        @relation(fields: [proposalId], references: [proposalId], onDelete: Cascade)
+  previous    ProposalStatus?
+  next        ProposalStatus
+  actorEmail  String
+  note        String          @default("")
+  createdAt   DateTime        @default(now())
+
+  @@index([proposalId, createdAt])
+  @@index([actorEmail, createdAt])
+}
+
+model NotificationJob {
+  id             String                 @id @default(cuid())
+  notificationId String                 @unique
+  eventName      String
+  entityType     NotificationEntityType
+  entityId       String
+  recipientEmail String
+  routeId        String
+  templateId     String
+  payloadJson    Json
+  dedupeKey      String                 @unique
+  status         NotificationStatus     @default(pending)
+  attempts       Int                    @default(0)
+  nextRetryAt    DateTime?
+  createdAt      DateTime               @default(now())
+  processedAt    DateTime?
+  error          String                 @default("")
+
+  @@index([status, nextRetryAt, createdAt])
+  @@index([entityType, entityId])
+  @@index([recipientEmail])
+}
+
+model CommuteRoute {
+  id                       String              @id @default(cuid())
+  routeId                  String              @unique @default(cuid())
+  origin                   String
+  destination              String
+  stepsJson                Json
+  fareEstimateRange        String              @default("")
+  durationMinutes          Int?
+  notes                    String              @default("")
+  visible                  Boolean             @default(false)
+  contributorName          String
+  contributorStudentId     String
+  contributorDisplayMode   String
+  contributorDisplayLabel  String
+  upvotes                  Int                 @default(0)
+  downvotes                Int                 @default(0)
+  reviewStatus             CommuteReviewStatus @default(Pending)
+  reviewedBy               String              @default("")
+  reviewedAt               DateTime?
+  reviewNotes              String              @default("")
+  submittedAt              DateTime            @default(now())
+  originLat                Decimal?            @db.Decimal(9, 6)
+  originLng                Decimal?            @db.Decimal(9, 6)
+  destinationLat           Decimal?            @db.Decimal(9, 6)
+  destinationLng           Decimal?            @db.Decimal(9, 6)
+  stopPointsJson           Json?
+  routeGeometryJson        Json?
+  legacySheetRow           Int?                @unique
+  votes                    CommuteVote[]
+  reports                  CommuteReport[]
+
+  @@index([visible, reviewStatus])
+  @@index([contributorStudentId, submittedAt])
+  @@index([origin, destination])
+}
+
+model CommuteVote {
+  id        String          @id @default(cuid())
+  routeId   String
+  route     CommuteRoute    @relation(fields: [routeId], references: [routeId], onDelete: Cascade)
+  voterHash String
+  voteType  CommuteVoteType
+  createdAt DateTime        @default(now())
+
+  @@unique([routeId, voterHash])
+  @@index([voteType, createdAt])
+}
+
+model CommuteReport {
+  id            String       @id @default(cuid())
+  routeId       String
+  route         CommuteRoute @relation(fields: [routeId], references: [routeId], onDelete: Cascade)
+  reporterEmail String
+  reportType    String
+  message       String
+  createdAt     DateTime     @default(now())
+
+  @@index([routeId, createdAt])
+  @@index([reporterEmail, createdAt])
+}
+
+model NewsPost {
+  id              String   @id
+  sourcePageId    String
+  sourcePageName  String
+  sourcePageSlug  String
+  message         String
+  imageUrl        String   @default("")
+  publishedAt     DateTime
+  fbLink          String   @default("")
+  targetPagesJson Json
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([enabled, publishedAt])
+  @@index([sourcePageSlug, publishedAt])
+}
+
+model NewsSource {
+  id                 String   @id @default(cuid())
+  pageId             String   @unique
+  pageName           String
+  pageSlug           String
+  tokenAlias         String
+  defaultTargetsJson Json
+  syncLimit          Int      @default(10)
+  enabled            Boolean  @default(true)
+  updatedAt          DateTime @updatedAt
+}
+
+model NewsRoutingRule {
+  id              String   @id @default(cuid())
+  hashtag         String   @unique
+  targetPagesJson Json
+  enabled         Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+}
+
+model DirectoryEntry {
+  id              String   @id @default(cuid())
+  directoryKey    String   @unique
+  entryType       String
+  name            String
+  roleOrOffice    String   @default("")
+  councilOrUnit   String   @default("")
+  email           String   @default("")
+  imageUrl        String   @default("")
+  profileUrl      String   @default("")
+  publicDataJson  Json
+  enabled         Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  updatedAt       DateTime @updatedAt
+  logo            DirectoryLogo?
+
+  @@index([entryType, enabled, sortOrder])
+}
+
+model DirectoryLogo {
+  id              String        @id @default(cuid())
+  directoryEntryId String       @unique
+  directoryEntry  DirectoryEntry @relation(fields: [directoryEntryId], references: [id], onDelete: Cascade)
+  driveFileId     String
+  resourceKey     String        @default("")
+  fileName        String
+  mimeType        String
+  sizeBytes       Int
+  uploadedBy      String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([driveFileId])
+}
+
+model DirectoryExportState {
+  id              String   @id
+  status          String   @default("pending")
+  lastAttemptAt   DateTime?
+  lastSucceededAt DateTime?
+  lastError       String   @default("")
+  requestedBy     String   @default("")
+  updatedAt       DateTime @updatedAt
+}
+
+model QuickLink {
+  id          String   @id @default(cuid())
+  label       String
+  href        String
+  category    String   @default("")
+  description String   @default("")
+  enabled     Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  @@index([enabled, sortOrder])
+}
+
+model HubGuide {
+  id             String   @id @default(cuid())
+  title          String
+  description    String   @default("")
+  fileUrl        String
+  driveFileId    String   @default("")
+  resourceKey    String   @default("")
+  category       String   @default("")
+  publicDataJson Json
+  enabled        Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  @@index([enabled, sortOrder])
+  @@index([driveFileId])
+}
+
+model LostFoundItem {
+  id             String             @id @default(cuid())
+  itemId         String             @unique
+  source         LostFoundSource
+  reportType     LostFoundReportType
+  title          String
+  description    String
+  location       String
+  eventDate      DateTime?
+  reportedAt     DateTime           @default(now())
+  submitterEmail String             @default("")
+  submitterName  String             @default("")
+  csoReference   String             @default("")
+  status         LostFoundStatus    @default(PENDING_REVIEW)
+  reviewedBy     String             @default("")
+  reviewedAt     DateTime?
+  reviewNotes    String             @default("")
+  resolvedAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  attachments    LostFoundAttachment[]
+  comments       LostFoundComment[]
+
+  @@index([source, status, reportedAt])
+  @@index([status, updatedAt])
+}
+
+model LostFoundAttachment {
+  id           String               @id @default(cuid())
+  attachmentId String               @unique
+  itemId       String
+  item         LostFoundItem        @relation(fields: [itemId], references: [itemId], onDelete: Cascade)
+  driveFileId  String
+  resourceKey  String               @default("")
+  fileName     String
+  mimeType     String
+  kind         LostFoundAttachmentKind
+  sizeBytes    Int
+  createdAt    DateTime             @default(now())
+
+  @@index([itemId, createdAt])
+  @@index([driveFileId])
+}
+
+model LostFoundComment {
+  id                String              @id @default(cuid())
+  commentId         String              @unique
+  itemId            String
+  item              LostFoundItem       @relation(fields: [itemId], references: [itemId], onDelete: Cascade)
+  timestamp         DateTime            @default(now())
+  authorEmail       String
+  authorRole        LostFoundCommentRole
+  message           String
+  isHidden          Boolean             @default(false)
+  moderatedBy       String              @default("")
+  moderatedAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([itemId, timestamp])
+  @@index([itemId, isHidden, timestamp])
+}

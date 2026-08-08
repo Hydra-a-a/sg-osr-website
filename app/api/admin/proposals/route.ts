@@ -22,7 +22,6 @@ import { triggerProposalQueueInBackground } from '@/lib/queue-trigger';
 import { safeProcessImmediateNotifications } from '@/lib/immediate-notification-processing';
 import { uploadProposalAttachmentToDrive } from '@/lib/google-drive';
 
-// enqueueProposalNotificationEvent is superseded by emitProposalAdminUpdateNotifications.
 const PROPOSAL_RANGE = 'Project_Proposals!A2:L';
 const STATUS_OPTIONS = ['Pending Review', 'Under Review', 'Approved', 'Rejected', 'Needs Revision'] as const;
 const PROPOSAL_NOTIFICATION_QUEUE_TAB = process.env.PROPOSAL_NOTIFICATION_QUEUE_SHEET_TAB || 'Project_Proposal_Notification_Queue';
@@ -37,6 +36,7 @@ const ALLOWED_REVIEW_ATTACHMENT_MIME_TYPES = new Set([
     'application/pdf',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
 
 
 const ProposalAdminUpdateSchema = z.object({

@@ -1,0 +1,8 @@
+{
+  "rows": [
+    ["Email", "Name", "Council", "LastLogin", "AccessEnabled", "Role", "ApprovedBy", "Officer_Access"],
+    ["", "", "", "", "", "", "", ""],
+    ["external.only@example.com", "External Only", "External", "", "TRUE", "Officer", "OSR Admin", ""],
+    ["not-an-email", "Malformed Email", "External", "", "TRUE", "Leader", "OSR Admin", ""]
+  ]
+}

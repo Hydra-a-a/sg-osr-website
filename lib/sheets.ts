@@ -246,3 +246,50 @@ export async function batchUpdateSheetData(
         throw new Error('Failed to batch update data in Google Sheets');
     }
 }
+
+export async function clearSheetData(spreadsheetId: string, range: string) {
+    const sheets = getSheetsClient();
+
+    try {
+        const response = await sheets.spreadsheets.values.clear(
+            {
+                spreadsheetId,
+                range,
+                requestBody: {},
+            },
+            {
+                timeout: 8000,
+            },
+        );
+
+        return response.data;
+    } catch (error) {
+        console.error('Error clearing Google Sheets data:', redactErrorForLog(error));
+        throw new Error('Failed to clear Google Sheets data');
+    }
+}
+
+export async function ensureSpreadsheetTab(spreadsheetId: string, title: string): Promise<void> {
+    const sheets = getSheetsClient();
+    const existingTitles = await getSpreadsheetSheetTitles(spreadsheetId);
+    if (existingTitles.includes(title)) {
+        return;
+    }
+
+    try {
+        await sheets.spreadsheets.batchUpdate(
+            {
+                spreadsheetId,
+                requestBody: {
+                    requests: [{ addSheet: { properties: { title } } }],
+                },
+            },
+            {
+                timeout: 8000,
+            },
+        );
+    } catch (error) {
+        console.error('Error creating Google Sheets tab:', redactErrorForLog(error));
+        throw new Error('Failed to create Google Sheets tab');
+    }
+}

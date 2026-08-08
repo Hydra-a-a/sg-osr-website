@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
@@ -8,6 +8,7 @@ import useSWR from 'swr';
 import { ExternalLink } from 'lucide-react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import BackLink from '@/components/BackLink';
+import { SectionPlaceholderIcon } from '@/components/SectionPlaceholderIcon';
 import type { DirectoryLogoSource } from '@/lib/council-logos';
 import {
     buildCommissionProfiles,
@@ -31,9 +32,25 @@ export default function StudentGovernmentCommissionsPage() {
     const commissions = useMemo(() => buildCommissionProfiles(directoryLeaders), [directoryLeaders]);
     const [selectedCommission, setSelectedCommission] = useState(0);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [scrollRequestId, setScrollRequestId] = useState(0);
+    const commissionProfileRef = useRef<HTMLDivElement | null>(null);
 
     const selectedCommissionIndex = commissions.length > 0 ? selectedCommission % commissions.length : 0;
     const activeCommission = commissions[selectedCommissionIndex];
+
+    useEffect(() => {
+        if (!isProfileOpen || !scrollRequestId || !commissionProfileRef.current) {
+            return;
+        }
+
+        const prefersReducedMotion = typeof window !== 'undefined'
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        commissionProfileRef.current.scrollIntoView({
+            behavior: prefersReducedMotion ? 'auto' : 'smooth',
+            block: 'center',
+        });
+    }, [isProfileOpen, selectedCommissionIndex, scrollRequestId]);
 
     useEffect(() => {
         if (!isProfileOpen) {
@@ -63,17 +80,22 @@ export default function StudentGovernmentCommissionsPage() {
                 <div className="portal-noise-overlay" aria-hidden="true" />
                 <div className="container-main relative z-10">
                     <div className="commission-showcase-shell">
-                        <div className="commission-showcase-head">
-                            <div className="flex flex-col items-start gap-4">
+                        <div className="commission-showcase-head text-center md:text-left">
+                            <div className="flex flex-col items-center gap-4 text-center md:items-start md:text-left">
                                 <BackLink
                                     href="/student-government"
                                     label="Back to Student Government"
-                                    className="text-slate-200 hover:text-white transition-colors"
+                                    className="text-slate-200 hover:text-white transition-colors md:mx-0 mx-auto"
                                 />
-                                <span className="portal-eyebrow">Student Government</span>
+                                <div className="flex items-center gap-3" aria-hidden="true">
+                                    <span className="h-px w-10 bg-gradient-to-r from-transparent via-[rgba(247,217,150,0.82)] to-[rgba(247,217,150,0)]" />
+                                    <span className="h-2 w-2 rotate-45 border border-sky-300/70 bg-sky-300/15" />
+                                    <span className="h-px w-14 bg-gradient-to-r from-[rgba(125,211,252,0.78)] to-transparent" />
+                                </div>
+                                <span className="portal-kicker block">Constitutional Commissions</span>
                             </div>
-                            <h1 className="portal-title mt-6 max-w-3xl">Oversight and governance bodies under the SSC.</h1>
-                            <p className="commission-showcase-lead">
+                            <h1 className="portal-title mt-6 max-w-3xl mx-auto md:mx-0">Oversight and governance bodies under the SSC.</h1>
+                            <p className="commission-showcase-lead mx-auto md:mx-0">
                                 Constitutional commissions safeguarding fairness, accountability, and due process in student governance.
                             </p>
                         </div>
@@ -120,6 +142,7 @@ export default function StudentGovernmentCommissionsPage() {
                                             onClick={() => {
                                                 setSelectedCommission(index);
                                                 setIsProfileOpen(true);
+                                                setScrollRequestId((current) => current + 1);
                                             }}
                                             className="commission-selector-card"
                                             data-active={isActive}
@@ -139,8 +162,8 @@ export default function StudentGovernmentCommissionsPage() {
                                                         className="object-contain p-1.5"
                                                     />
                                                 ) : (
-                                                    <div className="flex h-full w-full items-center justify-center text-xs font-bold text-slate-300">
-                                                        {fallbackAbbreviation}
+                                                    <div className="flex h-full w-full items-center justify-center text-sky-300">
+                                                        <SectionPlaceholderIcon section="constitutional-commission" size={26} />
                                                     </div>
                                                 )}
                                             </div>
@@ -162,67 +185,25 @@ export default function StudentGovernmentCommissionsPage() {
             {commissions.length > 0 && activeCommission && isProfileOpen &&
                 createPortal(
                     <div
+                        ref={commissionProfileRef}
                         className="commission-modal-wrap"
                         role="dialog"
                         aria-modal="true"
                         aria-label={activeCommission.name}
-                        style={{
-                            position: 'fixed',
-                            inset: 0,
-                            zIndex: 140,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: 'clamp(0.75rem, 3vw, 1.5rem)',
-                        }}
                     >
                         <div
                             className="commission-modal-backdrop"
                             onClick={() => setIsProfileOpen(false)}
                             aria-hidden="true"
-                            style={{
-                                position: 'absolute',
-                                inset: 0,
-                                background:
-                                    'radial-gradient(120% 120% at 50% 0%, rgba(30, 64, 103, 0.45) 0%, rgba(2, 8, 23, 0.84) 50%, rgba(2, 8, 23, 0.9) 100%)',
-                                backdropFilter: 'blur(10px) saturate(120%)',
-                            }}
                         />
                         <div
                             className="commission-feature-shell commission-feature-shell-modal grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-10"
-                            style={{
-                                position: 'relative',
-                                zIndex: 141,
-                                marginTop: 0,
-                                width: 'min(74rem, calc(100vw - 2rem))',
-                                maxHeight: 'calc(100vh - 2rem)',
-                                overflow: 'auto',
-                                padding: 'clamp(1rem, 2.4vw, 1.5rem)',
-                                border: '1px solid rgba(226, 232, 240, 0.2)',
-                                borderRadius: '1rem',
-                                background:
-                                    'linear-gradient(155deg, rgba(6, 19, 34, 0.97) 0%, rgba(10, 28, 46, 0.95) 52%, rgba(7, 18, 32, 0.97) 100%)',
-                                boxShadow:
-                                    '0 35px 90px -38px rgba(2, 8, 23, 0.95), inset 0 1px 0 rgba(248, 226, 171, 0.14)',
-                            }}
                         >
                             <button
                                 type="button"
                                 className="commission-modal-close"
                                 onClick={() => setIsProfileOpen(false)}
                                 aria-label="Close commission profile"
-                                style={{
-                                    position: 'absolute',
-                                    top: '0.9rem',
-                                    right: '0.9rem',
-                                    zIndex: 2,
-                                    width: '2rem',
-                                    height: '2rem',
-                                    borderRadius: '999px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}
                             >
                                 <XMarkIcon className="h-5 w-5" aria-hidden="true" />
                             </button>
@@ -238,8 +219,8 @@ export default function StudentGovernmentCommissionsPage() {
                                             className="object-contain p-8 md:p-12"
                                         />
                                     ) : (
-                                        <div className="flex h-full w-full items-center justify-center text-5xl font-bold text-slate-300">
-                                            {activeCommission.abbr}
+                                        <div className="flex h-full w-full items-center justify-center text-sky-300">
+                                            <SectionPlaceholderIcon section="constitutional-commission" size={64} />
                                         </div>
                                     )}
                                 </div>

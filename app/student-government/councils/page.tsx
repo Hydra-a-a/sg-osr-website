@@ -55,20 +55,25 @@ export default function StudentGovernmentCouncilsPage() {
                 <div className="portal-noise-overlay" aria-hidden="true" />
                 <div className="container-main relative z-10">
                     <motion.div
-                        className="max-w-4xl"
+                        className="mx-auto max-w-4xl text-center md:text-left"
                         initial="hidden"
                         animate="visible"
                         variants={fadeInUp}
                         transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
                     >
-                        <div className="mb-8 flex flex-col items-start gap-3">
-                            <BackLink href="/student-government" label="Back to Student Government" className="text-slate-200 hover:text-white transition-colors" />
-                            <span className="portal-eyebrow">Councils and Institutes</span>
+                        <div className="mb-8 flex flex-col items-center gap-3 text-center md:items-start md:text-left">
+                            <BackLink href="/student-government" label="Back to Student Government" className="text-slate-200 hover:text-white transition-colors md:mx-0 mx-auto" />
+                            <div className="flex items-center gap-3" aria-hidden="true">
+                                <span className="h-px w-10 bg-gradient-to-r from-transparent via-[rgba(247,217,150,0.82)] to-[rgba(247,217,150,0)]" />
+                                <span className="h-2 w-2 rotate-45 border border-sky-300/70 bg-sky-300/15" />
+                                <span className="h-px w-14 bg-gradient-to-r from-[rgba(125,211,252,0.78)] to-transparent" />
+                            </div>
+                            <span className="portal-kicker block">Councils and Institutes</span>
                         </div>
-                        <h1 className="mt-6 portal-title">
+                        <h1 className="mt-6 portal-title mx-auto md:mx-0">
                             Representation across campuses, colleges, and institutes.
                         </h1>
-                        <p className="mt-6 portal-lead">
+                        <p className="mt-6 portal-lead mx-auto md:mx-0">
                             Browse the councils currently represented in the portal, review their governance scope, and jump to the live
                             directory when you need contacts and officers.
                         </p>
@@ -119,9 +124,12 @@ export default function StudentGovernmentCouncilsPage() {
                                 exit="exit"
                                 transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1], delay: 0.03 }}
                             >
-                                <span
-                                    className="sg-council-badge inline-flex rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-[0.22em]"
-                                >
+                                <div className="mt-5 flex items-center gap-3" aria-hidden="true">
+                                    <span className="h-px w-10 bg-gradient-to-r from-transparent via-[rgba(247,217,150,0.82)] to-[rgba(247,217,150,0)]" />
+                                    <span className="h-2 w-2 rotate-45 border border-sky-300/70 bg-sky-300/15" />
+                                    <span className="h-px w-14 bg-gradient-to-r from-[rgba(125,211,252,0.78)] to-transparent" />
+                                </div>
+                                <span className="mt-3 block text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">
                                     {activeCouncil.abbr}
                                 </span>
                                 <h2 className="mt-5 text-3xl font-bold text-white md:text-4xl">{activeCouncil.name}</h2>
@@ -143,10 +151,10 @@ export default function StudentGovernmentCouncilsPage() {
             <section className="portal-section-slate section">
                 <div className="portal-noise-overlay" aria-hidden="true" />
                 <div className="container-main relative z-10">
-                    <div className="max-w-2xl">
-                        <span className="portal-kicker">Council Selector</span>
-                        <h2 className="mt-4 text-3xl font-bold text-white">All councils in the current governance map</h2>
-                        <p className="mt-4 portal-lead">
+                    <div className="mx-auto max-w-2xl text-center md:text-left">
+                        <span className="portal-kicker block">Council Selector</span>
+                        <h2 className="mt-4 text-3xl font-bold text-white md:text-4xl">All councils in the current governance map</h2>
+                        <p className="mt-4 portal-lead mx-auto md:mx-0">
                             Select a card to swap the featured council. Logos use the curated image set from the public directory assets.
                         </p>
                     </div>

@@ -52,6 +52,8 @@ jobs:
           npm run test:inline-style-scan
           tests=(
             tests/test-forms-auth-guard.js
+            tests/test-session-token-boundary.js
+            tests/test-email-transport-boundary.js
             tests/test-api-error-envelope.js
             tests/test-csp-policy.js
             tests/test-redacted-logging.js

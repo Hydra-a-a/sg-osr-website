@@ -15,7 +15,11 @@ export default function BackLink({
             href={href}
             className={`portal-back-link inline-flex items-center gap-2 no-underline ${className}`.trim()}
         >
-            <ArrowLeft size={15} />
+            <span className="portal-back-link-line" aria-hidden="true">
+                <span className="portal-back-link-line-lead" />
+                <ArrowLeft size={15} />
+                <span className="portal-back-link-line-tail" />
+            </span>
             <span>{label}</span>
         </Link>
     );

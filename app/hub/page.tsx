@@ -13,7 +13,6 @@ import {
     MapPin,
     RotateCcw,
     Search,
-    Sparkles,
     X,
     ZoomIn,
     ZoomOut,
@@ -376,6 +375,17 @@ export default function HubPage() {
             badge: 'New',
         },
         {
+            id: 'lost-found',
+            title: 'Lost and found',
+            summary: 'Check the CSO bulletin and student reports awaiting review.',
+            icon: Search,
+            accentClassName: 'hub-accent-gold',
+            onClick: () => {
+                window.location.href = '/hub/lost-found';
+            },
+            badge: '',
+        },
+        {
             id: 'campus-wayfinding',
             title: 'Campus wayfinding',
             summary: 'Temporary office relocations make a live campus map unreliable right now.',
@@ -497,34 +507,13 @@ export default function HubPage() {
                     <div className="hub-masthead p-6 md:p-8">
                         <div className="hub-hero-layout">
                             <div className="hub-hero-copy">
-                                <span className="hub-eyebrow inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-5">
-                                <Sparkles size={14} className="text-amber-300" />
-                                Information Hub
-                            </span>
                                 <h1 className="hub-display w-full text-white">
                                 Academic Resource <span className="hub-display-accent">Dashboard</span>
                             </h1>
                                 <p className="hub-lead mt-5 max-w-2xl text-slate-200">
                                 Access official student references, published guides, and the academic calendar from one page.
                             </p>
-                            </div>
-
-                            <div className="hub-stats-strip">
-                                <div className="hub-stat-card hub-stat-card-primary">
-                                    <p className="hub-stat-label">Live Guides</p>
-                                    <p className="hub-stat-value">{guides.length}</p>
-                                    <p className="hub-stat-note">Published PDFs ready for preview or download</p>
-                                </div>
-                                <div className="hub-stat-card">
-                                    <p className="hub-stat-label">Featured Focus</p>
-                                    <p className="hub-stat-value text-lg">{featuredGuides[0]?.title || 'Awaiting guide'}</p>
-                                    <p className="hub-stat-note">Highlighted as a starting point for students</p>
-                                </div>
-                                <div className="hub-stat-card">
-                                    <p className="hub-stat-label">Calendar View</p>
-                                    <p className="hub-stat-value">SY 2026-2027</p>
-                                    <p className="hub-stat-note">Zoomable academic snapshot built into the hub</p>
-                                </div>
+                                <p className="hub-academic-year mt-7">Academic Year 2026 - 2027</p>
                             </div>
                         </div>
                     </div>
@@ -981,7 +970,8 @@ export default function HubPage() {
                     border-radius: 0.9rem;
                     border: 1px solid rgba(255, 255, 255, 0.12);
                     background:
-                        linear-gradient(135deg, rgba(8, 20, 36, 0.58), rgba(8, 20, 36, 0.24)),
+                        linear-gradient(90deg, rgba(8, 20, 36, 0.86) 0%, rgba(8, 20, 36, 0.58) 58%, rgba(8, 20, 36, 0.72) 100%),
+                        url('/images/BONI_AVE.svg') center 46% / cover no-repeat,
                         linear-gradient(145deg, rgba(16, 34, 55, 0.8), rgba(10, 22, 36, 0.62));
                     box-shadow: 0 24px 58px rgba(4, 10, 22, 0.3);
                     clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
@@ -1023,27 +1013,10 @@ export default function HubPage() {
                 .hub-hero-layout {
                     position: relative;
                     z-index: 2;
-                    display: grid;
-                    gap: 1.1rem;
                 }
 
                 .hub-hero-copy {
-                    max-width: 48rem;
-                }
-
-                .hub-stats-strip {
-                    display: grid;
-                    gap: 0.75rem;
-                }
-
-                .hub-eyebrow {
-                    background: rgba(244, 192, 82, 0.12);
-                    border: 1px solid rgba(244, 192, 82, 0.2);
-                    color: #fde68a;
-                    font-size: 0.8rem;
-                    font-weight: 600;
-                    border-radius: 0.5rem;
-                    backdrop-filter: blur(8px);
+                    max-width: 58rem;
                 }
 
                 .hub-display {
@@ -1065,62 +1038,10 @@ export default function HubPage() {
                     line-height: 1.75;
                 }
 
-                .hub-stat-card {
-                    position: relative;
-                    overflow: hidden;
-                    border-radius: 0.65rem;
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    background: rgba(6, 16, 28, 0.22);
-                    padding: 1rem;
-                    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
-                }
-
-                .hub-stat-card::after {
-                    content: '';
-                    position: absolute;
-                    left: 0.65rem;
-                    bottom: 0.55rem;
-                    width: 2rem;
-                    height: 0.95rem;
-                    background:
-                        linear-gradient(125deg, rgba(214, 238, 255, 0.14), rgba(214, 238, 255, 0.03)),
-                        repeating-linear-gradient(135deg, rgba(214, 238, 255, 0.1) 0 1px, transparent 1px 5px);
-                    clip-path: polygon(0 20%, 100% 0, 84% 100%, 0 100%);
-                    opacity: 0.45;
-                    z-index: 0;
-                    pointer-events: none;
-                }
-
-                .hub-stat-card > * {
-                    position: relative;
-                    z-index: 1;
-                }
-
-                .hub-stat-card-primary {
-                    border-color: rgba(245, 158, 11, 0.24);
-                    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(30, 41, 59, 0.42));
-                }
-
-                .hub-stat-label {
-                    font-size: 0.75rem;
-                    letter-spacing: 0.12em;
-                    text-transform: uppercase;
-                    color: rgba(148, 163, 184, 0.9);
-                }
-
-                .hub-stat-value {
-                    margin-top: 0.5rem;
-                    font-size: 1.35rem;
-                    font-weight: 700;
-                    color: #fff;
-                    line-height: 1.2;
-                }
-
-                .hub-stat-note {
-                    margin-top: 0.45rem;
-                    font-size: 0.82rem;
-                    line-height: 1.5;
-                    color: rgba(203, 213, 225, 0.86);
+                .hub-academic-year {
+                    color: #fde68a;
+                    font-size: 0.95rem;
+                    font-weight: 600;
                 }
 
                 .hub-shortcut-card,
@@ -1434,18 +1355,8 @@ export default function HubPage() {
                 }
 
                 @media (min-width: 768px) {
-                    .hub-hero-layout {
-                        grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr);
-                        align-items: end;
-                        gap: 1.4rem;
-                    }
-
-                    .hub-stats-strip {
-                        grid-template-columns: repeat(2, minmax(0, 1fr));
-                    }
-
-                    .hub-stats-strip .hub-stat-card:first-child {
-                        grid-column: 1 / -1;
+                    .hub-hero-copy {
+                        max-width: 62rem;
                     }
                 }
 

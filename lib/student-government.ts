@@ -166,7 +166,12 @@ export function isConstitutionalCommissionEntry(source: DirectoryLogoSource): bo
     const position = normalizeStudentGovernmentText(source.position);
 
     const combined = `${category} ${branch} ${name} ${position}`;
-    const hasConstitutionalSignal = combined.includes('constitutional commission') || combined.includes('constitutional commissions');
+    const hasConstitutionalSignal =
+        combined.includes('constitutional commission') ||
+        combined.includes('constitutional commissions') ||
+        combined.includes('commission on') ||
+        combined.includes('comselec') ||
+        name.includes('commission');
 
     if (!hasConstitutionalSignal) {
         return false;

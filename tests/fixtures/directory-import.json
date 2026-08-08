@@ -1,0 +1,22 @@
+{
+  "organizations": [
+    {
+      "sourceLabel": "Supreme Student Council",
+      "fallbackCategory": "Supreme Student Council",
+      "rows": [
+        ["Organization", "Acronym", "Email", "Logo"],
+        ["Office of the Secretary General", "OSG", "osg@rtu.edu.ph", "https://drive.google.com/file/d/legacyLogo123456/view"]
+      ]
+    }
+  ],
+  "offices": [
+    {
+      "sourceLabel": "University Offices",
+      "fallbackCategory": "University Office",
+      "rows": [
+        ["Office Name", "Acronym", "Branch", "Logo", "Email", "Official", "Title", "Location"],
+        ["Registrar", "RO", "Academic", "", "registrar@rtu.edu.ph", "", "Registrar", "Mandaluyong"]
+      ]
+    }
+  ]
+}

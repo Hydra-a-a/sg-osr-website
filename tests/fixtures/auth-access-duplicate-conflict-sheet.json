@@ -1,0 +1,7 @@
+{
+  "rows": [
+    ["Email", "Name", "Council", "LastLogin", "AccessEnabled", "Role", "ApprovedBy", "Officer_Access"],
+    ["conflict.alpha@rtu.edu.ph", "Conflict Alpha", "Student Council", "", "TRUE", "Student Leader", "OSR Admin", ""],
+    ["conflict.alpha@rtu.edu.ph", "Conflict Alpha Disabled", "Student Council", "", "FALSE", "Officer", "OSR Admin", ""]
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "rows": [
+    ["Email", "Name", "Council", "LastLogin", "AccessEnabled", "Role", "ApprovedBy", "Officer_Access"],
+    ["leader.alpha@rtu.edu.ph", "Leader Alpha", "Student Council", "", "TRUE", "Student Leader", "OSR Admin", ""],
+    ["officer.beta@rtu.edu.ph", "Officer Beta", "OSR", "", "TRUE", "Leader", "OSR Admin", "TRUE"],
+    ["disabled.gamma@rtu.edu.ph", "Disabled Gamma", "Old Council", "", "FALSE", "Officer", "OSR Admin", ""],
+    ["student.delta@rtu.edu.ph", "Student Delta", "General", "", "TRUE", "Student", "OSR Admin", ""],
+    ["leader.alpha@rtu.edu.ph", "Leader Alpha Duplicate", "Student Council", "", "TRUE", "Officer", "OSR Admin", ""],
+    ["external.echo@example.com", "External Echo", "External", "", "TRUE", "Officer", "OSR Admin", ""],
+    ["not-an-email", "Malformed Email", "External", "", "TRUE", "Leader", "OSR Admin", ""],
+    ["", "", "", "", "", "", "", ""]
+  ]
+}

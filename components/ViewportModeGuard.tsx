@@ -9,9 +9,18 @@ function detectMobileDesktopMode(): boolean {
         return false;
     }
 
+    const userAgent = navigator.userAgent || '';
+    const mobileUserAgent = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|BlackBerry|Opera Mini/i.test(userAgent);
+    const isIPadOS = /Macintosh/i.test(userAgent) && (navigator.maxTouchPoints || 0) > 1;
+
+    // Desktop operating systems (Windows, macOS, Linux) without mobile UA or iPadOS touch signals
+    // must never be classified as mobile desktop mode.
+    if (!mobileUserAgent && !isIPadOS) {
+        return false;
+    }
+
     const touchPoints = navigator.maxTouchPoints || 0;
     const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
-    const mobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
     const shortestEdge = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
     const viewportMismatch = shortestEdge > 0 ? window.innerWidth / shortestEdge : 1;
 
