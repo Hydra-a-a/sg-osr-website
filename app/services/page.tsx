@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { NoncedStyle } from '@/components/CspNonceProvider';
 import BackLink from '@/components/BackLink';
-import LeaderAccessNoticeBanner from '@/components/LeaderAccessNoticeBanner';
+import LeaderAccessNoticeClient from '@/components/LeaderAccessNoticeClient';
 import {
     FileText,
     Search,
@@ -85,7 +85,9 @@ export default function ServicesPage() {
     return (
         <div className={`services-shell relative overflow-hidden`}>
             <div className="services-noise" aria-hidden="true" />
-            <LeaderAccessNoticeBanner />
+            {visibility.showLeaderAttemptNotice ? (
+                <LeaderAccessNoticeClient canSwitchToLeaderMode={visibility.canSwitchToLeaderMode} />
+            ) : null}
 
             <section className="relative z-10 pt-20 pb-10 md:pt-28 md:pb-14">
                 <div className="container-main">

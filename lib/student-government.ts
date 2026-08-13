@@ -151,6 +151,10 @@ export function isRuntimeLogoSource(src: string): boolean {
     return value.startsWith('/api/directory/logos/') || /^https?:\/\//i.test(value);
 }
 
+export function isExternalRuntimeLogoSource(src: string): boolean {
+    return /^https?:\/\//i.test((src || '').trim());
+}
+
 export function normalizeStudentGovernmentText(value: unknown): string {
     return String(value || '')
         .toLowerCase()

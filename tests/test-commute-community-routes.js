@@ -18,6 +18,7 @@ const voteApiSource = read(path.join('app', 'api', 'hub', 'commute', 'vote', 'ro
 const submitApiSource = read(path.join('app', 'api', 'hub', 'commute', 'submit', 'route.ts'));
 const adminRoutesApiSource = read(path.join('app', 'api', 'admin', 'routes', 'route.ts'));
 const adminHubSource = read(path.join('app', 'services', 'admin', 'page.tsx'));
+const adminNavigationSource = read(path.join('components', 'admin', 'admin-navigation.ts'));
 
 assert(commuteSchema.includes('ContributorSubmissionSchema'), 'Commute schema should define ContributorSubmissionSchema.');
 assert(commuteSchema.includes('LeaderboardEntrySchema'), 'Commute schema should define LeaderboardEntrySchema.');
@@ -48,6 +49,6 @@ assert(voteApiSource.includes('INVALID_VOTE_TARGET') || voteApiSource.includes('
 assert(adminRoutesApiSource.includes('RouteModerationActionSchema') || adminRoutesApiSource.includes('Mark for Review') || adminRoutesApiSource.includes('Approve with Warning') || adminRoutesApiSource.includes('Restore Confidence'), 'Admin routes API should support expanded moderation actions.');
 assert(adminRoutesSource.includes('Flagged for Review'), 'Admin routes page should expose flagged review filtering.');
 assert(adminRoutesSource.includes('Approve with Warning') || adminRoutesSource.includes('Restore Confidence'), 'Admin routes page should expose expanded moderation actions.');
-assert(adminHubSource.includes('/services/admin/routes'), 'Admin hub should link to route moderation.');
+assert(adminHubSource.includes('adminNavigationItems') && adminNavigationSource.includes('/services/admin/routes'), 'Admin hub should link to route moderation.');
 
 console.log('test-commute-community-routes: PASS');

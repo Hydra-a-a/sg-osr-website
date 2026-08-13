@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ExternalLink } from 'lucide-react';
 import BackLink from '@/components/BackLink';
 import {
-    isRuntimeLogoSource,
+    isExternalRuntimeLogoSource,
     studentGovernmentCouncils,
 } from '@/lib/student-government';
 
@@ -105,7 +105,7 @@ export default function StudentGovernmentCouncilsPage() {
                                         alt={activeCouncil.name}
                                         fill
                                         sizes="(max-width: 1024px) 100vw, 50vw"
-                                        unoptimized={isRuntimeLogoSource(activeCouncil.src)}
+                                        unoptimized={isExternalRuntimeLogoSource(activeCouncil.src)}
                                         className="object-contain p-8 md:p-12"
                                         priority
                                     />
@@ -183,7 +183,7 @@ export default function StudentGovernmentCouncilsPage() {
                                             alt={council.abbr}
                                             fill
                                             sizes="(max-width: 768px) 64px, 80px"
-                                            unoptimized={isRuntimeLogoSource(council.src)}
+                                        unoptimized={isExternalRuntimeLogoSource(council.src)}
                                             className="object-contain p-1.5"
                                         />
                                     </div>

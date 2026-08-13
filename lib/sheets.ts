@@ -29,7 +29,7 @@ export async function getSheetData(spreadsheetId: string, range: string) {
                 range,
             },
             {
-                timeout: 8000, // don't let vercel hang forever or we get billed
+                timeout: 3000,
                 headers: {
                     'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
                     'Pragma': 'no-cache',
@@ -102,7 +102,7 @@ export async function getSheetDataWithHyperlinks(spreadsheetId: string, range: s
                 includeGridData: true,
             },
             {
-                timeout: 8000,
+                timeout: 3000,
                 headers: {
                     'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
                     'Pragma': 'no-cache',
@@ -203,7 +203,7 @@ export async function getSpreadsheetSheetTitles(spreadsheetId: string): Promise<
                 fields: 'sheets(properties(title))',
             },
             {
-                timeout: 8000,
+                timeout: 3000,
             }
         );
 

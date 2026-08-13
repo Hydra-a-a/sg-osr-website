@@ -38,7 +38,7 @@ async function fetchDirectoryPayload(url: string): Promise<DirectoryResponsePayl
 
 function isRuntimeLogoSource(src: string): boolean {
     const value = (src || '').trim();
-    return value.startsWith('/api/directory/logos/') || /^https?:\/\//i.test(value);
+    return /^https?:\/\//i.test(value);
 }
 
 function normalizeForMatch(value: unknown): string {

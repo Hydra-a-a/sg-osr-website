@@ -49,7 +49,9 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install --global npm@11.9.0
+          npm ci
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -78,7 +80,16 @@ jobs:
 
       - name: Lighthouse CI
         continue-on-error: true
+        env:
+          AUDIT_ENFORCE: '0'
         run: npm run audit:lighthouse
+
+      - name: Mobile performance budget audit
+        continue-on-error: true
+        env:
+          AUDIT_ENFORCE: '0'
+          AUDIT_COLD_RUNS: '3'
+        run: npm run audit:performance
 
       - name: axe WCAG route scan
         if: ${{ always() }}

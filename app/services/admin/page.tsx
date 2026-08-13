@@ -1,275 +1,125 @@
 'use client';
 
-import React from 'react';
-import { Ticket, Lightbulb, ArrowRight, Shield, MapPinned, UserCog, PackageSearch, ImageUp } from 'lucide-react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import BackLink from '@/components/BackLink';
-import { NoncedStyle } from '@/components/CspNonceProvider';
+import useSWR from 'swr';
+import { AlertTriangle, CheckCircle2, Clock3, Database, Loader2, Shield, XCircle } from 'lucide-react';
+import { AdminNotice, AdminPageShell } from '@/components/admin/AdminPageShell';
+import { adminNavigationItems } from '@/components/admin/admin-navigation';
+import type { AdminModuleSummary, AdminSurfaceSummary } from '@/lib/admin-overview-types';
+import { getAdminSurface } from '@/lib/admin-surface-registry';
 
+type OverviewPayload = {
+    success: boolean;
+    modules: AdminModuleSummary[];
+    checkedAt: string;
+    surfaces?: AdminSurfaceSummary[];
+};
 
+async function fetchOverview(url: string): Promise<OverviewPayload> {
+    const response = await fetch(url, { cache: 'no-store' });
+    const payload = await response.json() as OverviewPayload & { error?: { message?: string } };
+    if (!response.ok) throw new Error(payload.error?.message || 'Unable to load the operations overview.');
+    return payload;
+}
+
+function sourceLabel(source: AdminModuleSummary['source']): string {
+    return source === 'neon' ? 'Neon' : source === 'sheets' ? 'Google Sheets' : 'Neon + Sheets';
+}
+
+function healthLabel(health: AdminModuleSummary['health']): string {
+    return health === 'healthy' ? 'Healthy' : health === 'attention' ? 'Needs attention' : 'Unavailable';
+}
+
+function healthClass(health: AdminModuleSummary['health']): string {
+    return health === 'healthy'
+        ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100'
+        : health === 'attention'
+            ? 'border-amber-300/25 bg-amber-300/10 text-amber-100'
+            : 'border-red-300/25 bg-red-300/10 text-red-100';
+}
+
+function surfaceStatusClass(hasSummary: boolean, health: AdminModuleSummary['health']): string {
+    return hasSummary ? healthClass(health) : 'border-sky-300/25 bg-sky-300/10 text-sky-100';
+}
 
 export default function AdminHubPage() {
-    const adminCards = [
-        {
-            id: 'grievances',
-            label: 'Grievance Tickets',
-            description: 'Review, respond to, and manage student grievances and complaints.',
-            icon: Ticket,
-            href: '/services/admin/grievances',
-            tone: 'blue',
-        },
-        {
-            id: 'proposals',
-            label: 'Project Proposals',
-            description: 'Evaluate and approve project programs submitted by Student Leaders.',
-            icon: Lightbulb,
-            href: '/services/admin/proposals',
-            tone: 'amber',
-        },
-        {
-            id: 'routes',
-            label: 'Community Routes',
-            description: 'Review commuter route submissions, approve public listings, and keep the Local Guides queue accurate.',
-            icon: MapPinned,
-            href: '/services/admin/routes',
-            tone: 'green',
-        },
-        {
-            id: 'access',
-            label: 'Access Management',
-            description: 'Grant, update, or revoke leader and officer access. (LOGGED, UNAUTHORIZED ACCESS WILL BE REPORTED).',
-            icon: UserCog,
-            href: '/services/admin/users',
-            tone: 'gray',
-        },
-        {
-            id: 'lost-found',
-            label: 'Lost and Found',
-            description: 'MOD: Manage lost and found items in RTU from Security Offices, and posted by students.',
-            icon: PackageSearch,
-            href: '/services/admin/lost-found',
-            tone: 'amber',
-        },
-        {
-            id: 'directory',
-            label: 'Directory Logos',
-            description: 'Upload, replace, or update protected logos for CSCs, CISCs, AOs, and University Offices.',
-            icon: ImageUp,
-            href: '/services/admin/directory',
-            tone: 'blue',
-        },
-    ];
+    const { data, error, isLoading, mutate } = useSWR<OverviewPayload>('/api/admin/overview', fetchOverview, {
+        revalidateOnFocus: false,
+        errorRetryCount: 1,
+    });
+
+    const modules = adminNavigationItems.filter((item) => item.key !== 'dashboard');
+    const summaryByKey = new Map((data?.modules || []).map((module) => [module.key, module]));
+    const attentionCount = (data?.modules || []).reduce((total, module) => total + module.attention, 0);
+    const queuedCount = (data?.modules || []).reduce((total, module) => total + module.queued, 0);
+    const unavailableCount = (data?.modules || []).filter((module) => module.health === 'unavailable').length;
 
     return (
-        <div className={`services-shell relative overflow-hidden`}>
-            <div className="services-noise" aria-hidden="true" />
+        <AdminPageShell
+            eyebrow="Officer access"
+            title="Operations overview"
+            description="A compact view of active queues, source health, and the next administrative work surface."
+            icon={Shield}
+            actions={(
+                <button type="button" onClick={() => void mutate()} disabled={isLoading} className="inline-flex min-h-11 items-center gap-2 border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">
+                    <Loader2 size={16} className={isLoading ? 'animate-spin' : ''} />
+                    Refresh overview
+                </button>
+            )}
+        >
+            {error ? <div className="mt-6"><AdminNotice tone="danger" role="alert">{error.message}</AdminNotice></div> : null}
 
-            <section className="relative z-10 pt-20 pb-10 md:pt-28 md:pb-14">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <BackLink href="/services" label="Back to Services" className="mb-8 text-slate-200 hover:text-white transition-colors" />
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
-                        <div className="max-w-2xl">
-                            <span className="services-eyebrow inline-flex items-center gap-2 px-4 py-1.5 rounded-full shadow-sm mb-4">
-                                <Shield size={14} className="text-red-400" />
-                                Officer Access
-                            </span>
-                            <h1 className={`services-display mt-3`}>
-                                Operations <span className="services-display-accent">Deck</span>
-                            </h1>
-                            <p className="services-lead mt-5 max-w-2xl">
-                                Central dashboard for administrative review work, moderation, and officer-managed role access.
-                            </p>
+            <section className="mt-6 grid border border-white/10 bg-white/[0.03] sm:grid-cols-3" aria-label="Overview metrics">
+                <div className="border-b border-white/10 px-4 py-4 sm:border-b-0 sm:border-r"><p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Queued work</p><p className="mt-2 text-2xl font-semibold text-white">{isLoading ? '—' : queuedCount}</p></div>
+                <div className="border-b border-white/10 px-4 py-4 sm:border-b-0 sm:border-r"><p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Attention flags</p><p className="mt-2 text-2xl font-semibold text-amber-100">{isLoading ? '—' : attentionCount}</p></div>
+                <div className="px-4 py-4"><p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Unavailable sources</p><p className="mt-2 text-2xl font-semibold text-red-100">{isLoading ? '—' : unavailableCount}</p></div>
+            </section>
+
+            <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+                <section className="border border-white/10 bg-white/[0.04]" aria-labelledby="admin-queues-title">
+                    <div className="flex items-end justify-between gap-4 border-b border-white/10 px-5 py-4">
+                        <div>
+                            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-amber-200">Data view</p>
+                            <h2 id="admin-queues-title" className="mt-1 text-lg font-semibold text-white">Administrative queues</h2>
                         </div>
+                        <p className="text-xs text-slate-500">Select a module to open its grid</p>
                     </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {adminCards.map((card, index) => {
-                            const Icon = card.icon;
-
+                    <div className="divide-y divide-white/10">
+                        {modules.map((item) => {
+                            const Icon = item.icon;
+                            const summary = summaryByKey.get(item.key as AdminModuleSummary['key']);
+                            const health = summary?.health || 'unavailable';
+                            const surface = getAdminSurface(item.key as Parameters<typeof getAdminSurface>[0]);
+                            const statusLabel = summary ? healthLabel(health) : surface?.source === 'linked' ? 'Linked surface' : 'Source rollout';
                             return (
-                                <motion.div
-                                    key={card.id}
-                                    initial={{ opacity: 0, y: 28 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.45, delay: 0.08 * index }}
-                                >
-                                    <Link href={card.href} className={`services-card services-card-${card.tone} group h-full block no-underline p-7 md:p-8`}>
-                                        <div className="services-icon-box mb-8 relative">
-                                            <div className="services-icon-tile">
-                                                <Icon size={34} />
-                                            </div>
-                                        </div>
-
-                                        <h2 className={`services-card-title`}>{card.label}</h2>
-                                        <p className="services-card-description mt-3">{card.description}</p>
-
-                                        <div className="services-card-cta mt-8 inline-flex items-center gap-2">
-                                            Manage Module
-                                            <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-1" />
-                                        </div>
-                                    </Link>
-                                </motion.div>
+                                <Link key={item.key} href={item.href} className="group grid gap-3 px-5 py-4 transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-200 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_8rem] sm:items-center">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                        <span className="grid size-9 shrink-0 place-items-center border border-white/10 bg-white/[0.04] text-slate-200"><Icon size={17} aria-hidden="true" /></span>
+                                        <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{item.label}</span><span className="mt-1 block truncate text-xs text-slate-500">{item.description}</span></span>
+                                    </div>
+                                    <div><span className="text-[0.62rem] uppercase tracking-[0.12em] text-slate-500 sm:hidden">Total · </span><span className="text-sm text-slate-200">{summary?.total ?? '—'}</span></div>
+                                    <div><span className="text-[0.62rem] uppercase tracking-[0.12em] text-slate-500 sm:hidden">Queue · </span><span className="text-sm text-slate-200">{summary?.queued ?? '—'}</span></div>
+                                    <span className={`inline-flex w-fit items-center gap-1.5 border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${surfaceStatusClass(Boolean(summary), health)}`}><span aria-hidden="true" className="size-1.5 rounded-full bg-current" />{statusLabel}</span>
+                                </Link>
                             );
                         })}
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <NoncedStyle css={`
-        .services-shell {
-            background: linear-gradient(130deg, #1a3352 0%, #234874 48%, #3e6596 100%);
-            background-image:
-                radial-gradient(130% 120% at 8% 12%, rgba(232, 207, 146, 0.18) 0%, rgba(232, 207, 146, 0) 52%),
-                radial-gradient(140% 120% at 92% 8%, rgba(87, 131, 186, 0.28) 0%, rgba(87, 131, 186, 0) 58%),
-                linear-gradient(130deg, #1a3352 0%, #234874 48%, #3e6596 100%);
-            color: #e2e8f0;
-            min-height: 100vh;
-        }
+                <aside className="border border-white/10 bg-[#0d192c]" aria-labelledby="admin-health-title">
+                    <div className="border-b border-white/10 px-5 py-4"><p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-amber-200">Utility rail</p><h2 id="admin-health-title" className="mt-1 text-lg font-semibold text-white">Source health</h2></div>
+                    <div className="space-y-4 p-5 text-sm">
+                        <div className="flex items-start gap-3"><Database size={17} className="mt-0.5 text-sky-200" aria-hidden="true" /><div><p className="font-semibold text-slate-100">Neon records</p><p className="mt-1 text-xs leading-5 text-slate-400">Access, directory, and lost-and-found data use the database-backed boundary.</p></div></div>
+                        <div className="flex items-start gap-3"><Clock3 size={17} className="mt-0.5 text-amber-200" aria-hidden="true" /><div><p className="font-semibold text-slate-100">Sheet queues</p><p className="mt-1 text-xs leading-5 text-slate-400">Tickets, proposals, and commuter moderation still report their current Sheet source.</p></div></div>
+                        <div className="border-t border-white/10 pt-4 text-xs text-slate-500">{data?.checkedAt ? `Checked ${new Date(data.checkedAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Waiting for source checks.'}</div>
+                        {data?.surfaces?.filter((surface) => surface.key === 'content' || surface.key === 'directory').map((surface) => <div key={surface.key} className="border-t border-white/10 pt-4"><div className="flex items-center justify-between gap-3"><p className="font-semibold text-slate-200">{surface.key === 'content' ? 'Website content' : 'Directory export'}</p><span className={`border px-2 py-1 text-[0.62rem] uppercase tracking-[0.08em] ${surface.health === 'healthy' ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100' : surface.health === 'attention' ? 'border-amber-300/25 bg-amber-300/10 text-amber-100' : 'border-red-300/25 bg-red-300/10 text-red-100'}`}>{surface.health}</span></div><p className="mt-1 text-xs text-slate-500">{surface.pendingDrafts} pending draft{surface.pendingDrafts === 1 ? '' : 's'}{surface.exportState !== 'not-applicable' ? ` · export ${surface.exportState}` : ''}</p></div>)}
+                    </div>
+                </aside>
+            </div>
 
-                .services-shell::before {
-                    content: '';
-                    position: absolute;
-                    inset: 0;
-                    background: radial-gradient(circle at top, rgba(255,255,255,0.02) 0%, transparent 100%);
-                    pointer-events: none;
-                    z-index: 1;
-                }
-
-                .services-noise {
-                    position: absolute;
-                    inset: 0;
-                    background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
-                    background-size: 32px 32px;
-                    opacity: 0.2;
-                    mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
-                    pointer-events: none;
-                    z-index: 2;
-                }
-
-                .services-eyebrow {
-                    background: rgba(239, 68, 68, 0.1);
-                    border: 1px solid rgba(239, 68, 68, 0.2);
-                    color: #fca5a5;
-                    font-size: 0.8rem;
-                    font-weight: 600;
-                    backdrop-filter: blur(8px);
-                }
-
-                .services-display {
-                    font-size: clamp(2.2rem, 5vw, 4.2rem);
-                    line-height: 1.1;
-                    color: #ffffff;
-                    max-width: 20ch;
-                    text-wrap: pretty;
-                    font-weight: 700;
-                }
-
-                .services-display-accent {
-                    color: transparent;
-                    background: linear-gradient(135deg, #fca5a5 0%, #ef4444 100%);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                }
-
-                .services-lead {
-                    color: #94a3b8;
-                    font-size: clamp(1rem, 1.15vw + 0.5rem, 1.15rem);
-                    line-height: 1.6;
-                    max-width: 65ch;
-                }
-
-                .services-card {
-                    position: relative;
-                    border-radius: 1.5rem;
-                    background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
-                    border: 1px solid rgba(255, 255, 255, 0.05);
-                    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
-                    backdrop-filter: blur(12px);
-                    -webkit-backdrop-filter: blur(12px);
-                    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1), background 0.4s ease, border-color 0.4s ease;
-                    overflow: hidden;
-                }
-
-                .services-card::before {
-                    content: '';
-                    position: absolute;
-                    inset: 0;
-                    background: radial-gradient(800px circle at var(--mouse-x) var(--mouse-y), rgba(255,255,255,0.06), transparent 40%);
-                    opacity: 0;
-                    pointer-events: none;
-                    transition: opacity 0.5s ease;
-                }
-
-                .services-card:hover {
-                    transform: translateY(-2px);
-                    background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-                    border-color: rgba(255, 255, 255, 0.1);
-                    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-                }
-
-                .services-card:hover::before {
-                    opacity: 1;
-                }
-
-                .services-icon-box {
-                    font-size: 2.8rem;
-                }
-
-                .services-icon-tile {
-                    width: 5rem;
-                    height: 5rem;
-                    display: grid;
-                    place-items: center;
-                    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
-                    border: 1px solid rgba(255, 255, 255, 0.15);
-                    border-radius: 1.15rem;
-                    color: #ffffff;
-                    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 14px 30px rgba(0,0,0,0.22);
-                }
-
-                .services-card-blue .services-icon-tile { color: #93c5fd; background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05)); border-color: rgba(59, 130, 246, 0.2); }
-                .services-card-amber .services-icon-tile { color: #fde047; background: linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(234, 179, 8, 0.05)); border-color: rgba(234, 179, 8, 0.2); }
-                .services-card-green .services-icon-tile { color: #86efac; background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.05)); border-color: rgba(34, 197, 94, 0.2); }
-                .services-card-gray .services-icon-tile { color: #cbd5e1; background: linear-gradient(135deg, rgba(100, 116, 139, 0.15), rgba(100, 116, 139, 0.05)); border-color: rgba(100, 116, 139, 0.2); }
-
-                .services-card-title {
-                    font-size: clamp(1.4rem, 2vw, 1.8rem);
-                    margin: 0;
-                    color: #ffffff;
-                    line-height: 1.15;
-                    font-weight: 500;
-                    letter-spacing: -0.01em;
-                }
-
-                .services-card-description {
-                    font-size: 0.95rem;
-                    color: #cbd5e1;
-                    line-height: 1.65;
-                }
-
-                .services-card-cta {
-                    color: #7dd3fc;
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                    letter-spacing: 0.01em;
-                    transition: color 0.3s ease;
-                }
-
-                .services-card:hover .services-card-cta {
-                    color: #fca5a5;
-                }
-            `} />
-        </div>
+            {!isLoading && data?.modules.some((module) => module.health === 'attention') ? <div className="mt-6 flex items-start gap-3 border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm text-amber-100"><AlertTriangle size={17} className="mt-0.5 shrink-0" aria-hidden="true" /><span>Some queues need attention. Open the affected module to review its records.</span></div> : null}
+            {!isLoading && data?.modules.every((module) => module.health === 'unavailable') ? <div className="mt-6 flex items-start gap-3 border border-red-300/25 bg-red-300/10 px-4 py-3 text-sm text-red-100"><XCircle size={17} className="mt-0.5 shrink-0" aria-hidden="true" /><span>All source checks are unavailable. The module pages will preserve their own error details.</span></div> : null}
+            {!isLoading && data?.modules.every((module) => module.health === 'healthy') ? <div className="mt-6 flex items-start gap-3 border border-emerald-300/25 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100"><CheckCircle2 size={17} className="mt-0.5 shrink-0" aria-hidden="true" /><span>All configured source checks are healthy.</span></div> : null}
+        </AdminPageShell>
     );
 }
-
-
-
-
-
-
-
-
-
-

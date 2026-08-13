@@ -1,16 +1,16 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import "maplibre-gl/dist/maplibre-gl.css";
 import NavbarClient from "@/components/NavbarClient";
 import AlphaTestingNotice from "@/components/AlphaTestingNotice";
 import SectionNavigationRail from "@/components/SectionNavigationRail";
 import Footer from "@/components/Footer";
-import AuthProvider from "@/components/AuthProvider";
-import PageTransition from "@/components/PageTransition";
 import { CspNonceProvider } from "@/components/CspNonceProvider";
 import ViewportModeGuard from "@/components/ViewportModeGuard";
-import AnnouncementPopup from "@/components/AnnouncementPopup";
+import DeferredAnnouncementPopup from "@/components/DeferredAnnouncementPopup";
+import RouteAwareSiteChrome from "@/components/RouteAwareSiteChrome";
+import NetworkStatusBanner from "@/components/NetworkStatusBanner";
 import { getSiteConfig } from "@/lib/slideConfig";
+import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 
 const geistSans = Geist({
@@ -35,8 +35,11 @@ export const viewport = {
 };
 
 export default async function RootLayout({ children }) {
-  const config = await getSiteConfig();
-  const requestHeaders = await headers();
+  const [config, session, requestHeaders] = await Promise.all([
+    getSiteConfig(),
+    auth(),
+    headers(),
+  ]);
   const nonce = requestHeaders.get('x-nonce') || '';
 
   return (
@@ -47,19 +50,17 @@ export default async function RootLayout({ children }) {
       >
         <a href="#main-content" className="skip-link">Skip to main content</a>
         <CspNonceProvider nonce={nonce}>
+          <NetworkStatusBanner />
           <ViewportModeGuard />
-          <AuthProvider>
-            <NavbarClient config={config} />
-            <AlphaTestingNotice />
-            <SectionNavigationRail />
-            <main id="main-content" className="flex-1" tabIndex={-1}>
-              <PageTransition>
-                {children}
-              </PageTransition>
-            </main>
-            <Footer />
-            <AnnouncementPopup />
-          </AuthProvider>
+          <RouteAwareSiteChrome
+            publicHeader={<NavbarClient config={config} session={session} />}
+            publicAlphaNotice={<AlphaTestingNotice />}
+            publicNavigationRail={<SectionNavigationRail />}
+            publicFooter={<Footer isLoggedIn={Boolean(session?.user)} />}
+            publicAnnouncement={<DeferredAnnouncementPopup />}
+          >
+            {children}
+          </RouteAwareSiteChrome>
         </CspNonceProvider>
       </body>
     </html>

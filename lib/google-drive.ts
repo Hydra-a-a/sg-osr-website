@@ -333,11 +333,12 @@ export function getLostFoundFolderId(): string {
 }
 
 export async function uploadLostFoundAttachmentToDrive(params: {
-    itemId: string;
-    attachmentId: string;
-    fileName: string;
-    mimeType: string;
-    buffer: Buffer;
+  itemId: string;
+  attachmentId: string;
+  fileName: string;
+  mimeType: string;
+  buffer: Buffer;
+  submissionAttemptId?: string;
 }): Promise<{ fileId: string; resourceKey: string }> {
     const drive = getDriveClient();
     const folderId = getLostFoundFolderId();
@@ -348,6 +349,7 @@ export async function uploadLostFoundAttachmentToDrive(params: {
             requestBody: {
                 name: driveFileName,
                 parents: [folderId],
+                ...(params.submissionAttemptId ? { appProperties: { submissionAttemptId: params.submissionAttemptId } } : {}),
             },
             media: {
                 mimeType: params.mimeType,

@@ -4,8 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { usePathname } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
-import { AnimatePresence, motion } from 'framer-motion';
+import type { Session } from 'next-auth';
 import { ChevronRight, LogOut, Menu, Shield, ShieldAlert, User, X } from 'lucide-react';
 import AlertBanner from './AlertBanner';
 import { SiteConfig } from '@/lib/slideConfig';
@@ -59,14 +58,12 @@ function readForcedMobileLayout(): boolean {
     return document.documentElement.dataset.mobileDesktopMode === 'true';
 }
 
-export default function NavbarClient({ config }: { config: SiteConfig }) {
+export default function NavbarClient({ config, session }: { config: SiteConfig; session?: Session | null }) {
     const pathname = usePathname();
-    const { data: session, status } = useSession();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [forceMobileLayout, setForceMobileLayout] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
-    const [authLoadTimedOutPath, setAuthLoadTimedOutPath] = useState<string | null>(null);
     const [dismissedOfficerNotice, setDismissedOfficerNotice] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
     const cookieSnapshot = useSyncExternalStore(subscribeNoop, getCookieSnapshot, () => '');
@@ -116,19 +113,6 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
     }, [mobileOpen]);
 
     useEffect(() => {
-        if (status !== 'loading') {
-            return;
-        }
-
-        const activePath = pathname || '/';
-        const timeoutId = window.setTimeout(() => {
-            setAuthLoadTimedOutPath(activePath);
-        }, 3000);
-
-        return () => window.clearTimeout(timeoutId);
-    }, [pathname, status]);
-
-    useEffect(() => {
         const syncForcedMobileLayout = () => {
             setForceMobileLayout(readForcedMobileLayout());
         };
@@ -153,12 +137,9 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
     const isLeader = canSeeLeaderFeatures;
     const isOfficer = canSeeOfficerFeatures;
 
-    const shouldShowOfficerDeniedNotice = status === 'authenticated'
-        && Boolean(session?.user)
+    const shouldShowOfficerDeniedNotice = Boolean(session?.user)
         && !dismissedOfficerNotice
         && shouldShowOfficerAccessNotice(session?.user?.role, effectiveRole, officerAttempt);
-    const showAuthLoadingPlaceholder = status === 'loading' && authLoadTimedOutPath !== (pathname || '/');
-
     const switchPortalMode = (mode: 'student' | 'leader' | 'officer') => {
         const secure = window.location.protocol === 'https:' ? '; Secure' : '';
         document.cookie = `${PORTAL_MODE_COOKIE}=${mode}; Path=/; Max-Age=1209600; SameSite=Lax${secure}`;
@@ -176,9 +157,10 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
         }
     };
 
-    const handleSignOut = () => {
+    const handleSignOut = async () => {
         clearPortalCookies(true);
-        signOut({ callbackUrl: '/' });
+        const { signOut } = await import('next-auth/react');
+        await signOut({ callbackUrl: '/' });
     };
 
     const isActiveNavLink = (href: string): boolean => {
@@ -256,9 +238,7 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                             </Link>
                         ))}
 
-                        {showAuthLoadingPlaceholder ? (
-                            <div className="ml-2 h-9 w-9 rounded-full bg-white/10 animate-pulse" />
-                        ) : session?.user ? (
+                        {session?.user ? (
                             <div className="relative ml-2" ref={profileRef}>
                                 <button
                                     type="button"
@@ -279,15 +259,8 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                     )}
                                 </button>
 
-                                <AnimatePresence>
-                                    {profileOpen && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                                            exit={{ opacity: 0, y: -8, scale: 0.98 }}
-                                            transition={{ duration: 0.16 }}
-                                            className="portal-dropdown portal-account-menu absolute right-0 mt-3 w-72 overflow-hidden"
-                                        >
+                                {profileOpen && (
+                                        <div className="portal-dropdown portal-account-menu portal-account-menu-open absolute right-0 mt-3 w-72 overflow-hidden">
                                             <div className="flex items-center gap-3 border-b border-white/8 bg-white/4 p-4">
                                                 {session.user.image ? (
                                                     <Image src={session.user.image} alt="" width={36} height={36} className="rounded-full" />
@@ -354,9 +327,8 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                                     Sign Out
                                                 </button>
                                             </div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
+                                        </div>
+                                )}
                             </div>
                         ) : (
                             <Link href="/login" className="portal-signin-btn ml-2 px-5 text-sm no-underline" onClick={() => setProfileOpen(false)}>
@@ -378,24 +350,17 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                     </button>
                 </div>
 
-                <AnimatePresence>
                     {mobileOpen && (
                         <>
-                            <motion.button
+                            <button
                                 type="button"
                                 aria-label="Close mobile navigation"
-                                className={`${forceMobileLayout ? '' : 'lg:hidden'} fixed inset-0 top-[4.75rem] z-40 bg-[#07111d]/45`}
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
+                                className={`${forceMobileLayout ? '' : 'lg:hidden'} portal-mobile-scrim fixed inset-0 top-[4.75rem] z-40 bg-[#07111d]/45`}
                                 onClick={() => setMobileOpen(false)}
                             />
-                            <motion.div
+                            <div
                                 id="mobile-nav-panel"
-                                initial={{ opacity: 0, y: -8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -8 }}
-                                className={`portal-mobile-panel ${forceMobileLayout ? '' : 'lg:hidden'} relative z-50 overflow-hidden border-t border-white/8`}
+                                className={`portal-mobile-panel portal-mobile-panel-open ${forceMobileLayout ? '' : 'lg:hidden'} relative z-50 overflow-hidden border-t border-white/8`}
                             >
                                 <div className="container-main py-2">
                                     <nav className="portal-mobile-nav-list" aria-label="Mobile primary navigation">
@@ -485,10 +450,9 @@ export default function NavbarClient({ config }: { config: SiteConfig }) {
                                         </Link>
                                     )}
                                 </div>
-                            </motion.div>
+                            </div>
                         </>
                     )}
-                </AnimatePresence>
             </nav>
         </header>
     );

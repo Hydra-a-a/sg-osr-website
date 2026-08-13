@@ -7,6 +7,7 @@ import { triggerTicketQueueInBackground } from '@/lib/queue-trigger';
 import { generateTicketCredentials, hashTicketTrackingToken, writeTicketToSheet } from '@/lib/tickets';
 import type { TicketSubmissionData } from '@/features/tickets/schema';
 import { sanitizeAttachmentUrl, validateAttachment } from '@/features/tickets/server/attachments';
+import { resolveSubmissionSource } from '@/lib/submission-source';
 
 const TICKET_NOTIFICATION_QUEUE_SHEET_TAB = process.env.TICKET_NOTIFICATION_QUEUE_SHEET_TAB || 'Ticket_Notification_Queue';
 const TICKET_NOTIFICATION_QUEUE_RANGE = `${TICKET_NOTIFICATION_QUEUE_SHEET_TAB}!A2:N`;
@@ -33,6 +34,10 @@ export async function createTicketSubmission({
   sessionUserName?: string | null;
   ip: string;
 }) {
+  if (resolveSubmissionSource('TICKET_SOURCE') === 'db') {
+    throw new ApiError(503, 'TICKET_DB_CUTOVER_REQUIRED', 'Ticket database cutover is not enabled for this deployment.', undefined, false);
+  }
+
   const complaintNarrative = (data.complaintNarrative || data.message || '').trim();
   const attachmentUrlFromPayload = sanitizeAttachmentUrl(data.attachmentUrl);
   const attachmentKind = data.attachmentKind;

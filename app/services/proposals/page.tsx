@@ -3,8 +3,9 @@
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { NoncedStyle } from '@/components/CspNonceProvider';
+import { clearDraft, getOrCreateIdempotencyKey, readDraft, resetIdempotencyKey, writeDraft } from '@/lib/draft-storage';
 import {
     Lightbulb, ArrowLeft, FileText, CheckCircle,
     Users, Target, Calendar, Send, ShieldCheck, UploadCloud, X, AlertCircle, ArrowRight, ChevronDown, Search
@@ -33,6 +34,11 @@ const UN_SDGS = [
 ] as const;
 
 const ACCESS_TOKEN_STORAGE_KEY = 'osr_proposal_access_tokens';
+const PROPOSAL_DRAFT_KEY = 'osr:draft:proposal:v1';
+const PROPOSAL_IDEMPOTENCY_KEY = 'osr:idempotency:proposal:v1';
+const PROPOSAL_DRAFT_VERSION = 1;
+
+type ProposalDraft = { title: string; categories: string[]; projectType: string; description: string };
 
 function saveStoredAccessToken(proposalId: string, accessToken: string): void {
     const normalizedProposalId = String(proposalId || '').trim().toUpperCase();
@@ -64,8 +70,39 @@ export default function ProposalsPage() {
     const [isSuccess, setIsSuccess] = useState(false);
     const [submittedProposalId, setSubmittedProposalId] = useState('');
     const [submittedAccessToken, setSubmittedAccessToken] = useState('');
+    const draftRestoredRef = useRef(false);
+    const idempotencyKeyRef = useRef<string | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const draft = readDraft<ProposalDraft>(PROPOSAL_DRAFT_KEY, PROPOSAL_DRAFT_VERSION);
+        const restoreTimer = window.setTimeout(() => {
+            if (draft) {
+                setTitle(typeof draft.title === 'string' ? draft.title : '');
+                setCategories(Array.isArray(draft.categories) ? draft.categories.filter((item): item is string => typeof item === 'string') : []);
+                setProjectType(typeof draft.projectType === 'string' ? draft.projectType : '');
+                setDescription(typeof draft.description === 'string' ? draft.description : '');
+            }
+            draftRestoredRef.current = true;
+        }, 0);
+        return () => window.clearTimeout(restoreTimer);
+    }, []);
+
+    useEffect(() => {
+        if (!draftRestoredRef.current) return;
+        const timeout = window.setTimeout(() => {
+            writeDraft<ProposalDraft>(PROPOSAL_DRAFT_KEY, PROPOSAL_DRAFT_VERSION, { title, categories, projectType, description });
+        }, 250);
+        return () => window.clearTimeout(timeout);
+    }, [categories, description, projectType, title]);
+
+    const getSubmissionKey = () => {
+        if (!idempotencyKeyRef.current) {
+            idempotencyKeyRef.current = getOrCreateIdempotencyKey(PROPOSAL_IDEMPOTENCY_KEY);
+        }
+        return idempotencyKeyRef.current;
+    };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {      
         if (e.target.files && e.target.files[0]) {
@@ -100,10 +137,11 @@ export default function ProposalsPage() {
 
             const res = await fetch('/api/proposals', {
                 method: 'POST',
+                headers: { 'Idempotency-Key': getSubmissionKey() },
                 body: formData,
             });
 
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
                 throw new Error(data.error || 'Failed to submit proposal.');    
@@ -120,6 +158,8 @@ export default function ProposalsPage() {
             setProjectType('');
             setDescription('');
             setFile(null);
+            clearDraft(PROPOSAL_DRAFT_KEY);
+            idempotencyKeyRef.current = resetIdempotencyKey(PROPOSAL_IDEMPOTENCY_KEY);
         } catch (err: any) {
             setError(err.message || 'An unexpected error occurred. Please try again.');
         } finally {
@@ -244,6 +284,9 @@ export default function ProposalsPage() {
                                 </motion.div>
                             )}
 
+                            <p className="mb-6 rounded-lg border border-sky-400/15 bg-sky-400/5 px-4 py-3 text-xs leading-5 text-sky-100/80">
+                                Draft text stays in this browser tab for up to two hours. The attachment and tracking credentials are never saved.
+                            </p>
                             <form onSubmit={handleSubmit} className="space-y-8">
                                 <div>
                                     <label htmlFor="title" className="block text-sm font-semibold text-slate-200 mb-2">Project Title</label>

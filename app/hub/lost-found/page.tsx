@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import {
     ArrowLeft,
@@ -20,6 +20,7 @@ import {
     Video,
 } from 'lucide-react';
 import { NoncedStyle } from '@/components/CspNonceProvider';
+import { clearDraft, getOrCreateIdempotencyKey, readDraft, resetIdempotencyKey, writeDraft } from '@/lib/draft-storage';
 
 type LostFoundItem = {
     itemId: string;
@@ -43,6 +44,9 @@ type LostFoundComment = {
 
 type ReportForm = { reportType: 'LOST' | 'FOUND'; title: string; description: string; location: string; eventDate: string };
 const initialForm: ReportForm = { reportType: 'LOST', title: '', description: '', location: '', eventDate: '' };
+const LOST_FOUND_DRAFT_KEY = 'osr:draft:lost-found:v1';
+const LOST_FOUND_IDEMPOTENCY_KEY = 'osr:idempotency:lost-found:v1';
+const LOST_FOUND_DRAFT_VERSION = 1;
 
 export default function LostFoundPage() {
     const { data: session, status: sessionStatus } = useSession();
@@ -59,6 +63,8 @@ export default function LostFoundPage() {
     const [submitting, setSubmitting] = useState(false);
     const [commenting, setCommenting] = useState(false);
     const [message, setMessage] = useState('');
+    const draftRestoredRef = useRef(false);
+    const idempotencyKeyRef = useRef<string | null>(null);
 
     const selectedItem = useMemo(
         () => items.find((item) => item.itemId === selectedItemId) || items[0] || null,
@@ -87,6 +93,36 @@ export default function LostFoundPage() {
     useEffect(() => {
         void loadItems();
     }, [loadItems]);
+
+    useEffect(() => {
+        const draft = readDraft<ReportForm>(LOST_FOUND_DRAFT_KEY, LOST_FOUND_DRAFT_VERSION);
+        const restoreTimer = window.setTimeout(() => {
+            if (draft) {
+                setForm({
+                    reportType: draft.reportType === 'FOUND' ? 'FOUND' : 'LOST',
+                    title: typeof draft.title === 'string' ? draft.title : '',
+                    description: typeof draft.description === 'string' ? draft.description : '',
+                    location: typeof draft.location === 'string' ? draft.location : '',
+                    eventDate: typeof draft.eventDate === 'string' ? draft.eventDate : '',
+                });
+            }
+            draftRestoredRef.current = true;
+        }, 0);
+        return () => window.clearTimeout(restoreTimer);
+    }, []);
+
+    useEffect(() => {
+        if (!draftRestoredRef.current) return;
+        const timeout = window.setTimeout(() => writeDraft(LOST_FOUND_DRAFT_KEY, LOST_FOUND_DRAFT_VERSION, form), 250);
+        return () => window.clearTimeout(timeout);
+    }, [form]);
+
+    const getSubmissionKey = () => {
+        if (!idempotencyKeyRef.current) {
+            idempotencyKeyRef.current = getOrCreateIdempotencyKey(LOST_FOUND_IDEMPOTENCY_KEY);
+        }
+        return idempotencyKeyRef.current;
+    };
 
     const selectedItemIdForComments = selectedItem?.itemId || '';
     useEffect(() => {
@@ -117,11 +153,17 @@ export default function LostFoundPage() {
             const payload = new FormData();
             Object.entries(form).forEach(([key, value]) => payload.append(key, value));
             files.forEach((file) => payload.append('attachments', file));
-            const response = await fetch('/api/hub/lost-found', { method: 'POST', body: payload });
-            const json = await response.json();
+            const response = await fetch('/api/hub/lost-found', {
+                method: 'POST',
+                headers: { 'Idempotency-Key': getSubmissionKey() },
+                body: payload,
+            });
+            const json = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(json.error?.message || 'Unable to submit report.');
             setForm(initialForm);
             setFiles([]);
+            clearDraft(LOST_FOUND_DRAFT_KEY);
+            idempotencyKeyRef.current = resetIdempotencyKey(LOST_FOUND_IDEMPOTENCY_KEY);
             setMessage(`Report ${json.itemId} submitted for officer review.`);
             setSource('STUDENT');
             await loadItems();
@@ -286,6 +328,7 @@ export default function LostFoundPage() {
                     <aside className="space-y-6 md:col-span-3">
                         <section className="hub-panel p-6" aria-labelledby="submit-heading">
                             <div className="flex items-center gap-2"><Upload size={17} className="text-amber-200" /><h2 id="submit-heading" className="text-lg font-semibold text-white">Submit a student report</h2></div>
+                            <p className="mt-3 rounded-lg border border-sky-400/15 bg-sky-400/5 px-3 py-2 text-xs leading-5 text-sky-100/80">Draft text stays in this browser tab for up to two hours. Attachments and account details are never saved.</p>
                             <p className="mt-3 text-sm leading-6 text-slate-400">Student reports stay in review until an officer confirms the listing.</p>
                             <form onSubmit={handleSubmit} className="mt-5 space-y-4">
                                 <label className="block text-sm text-slate-300">Report type<select value={form.reportType} onChange={(event) => setForm((current) => ({ ...current, reportType: event.target.value as 'LOST' | 'FOUND' }))} className="mt-2 w-full border border-white/15 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-200"><option value="LOST">I lost an item</option><option value="FOUND">I found an item</option></select></label>

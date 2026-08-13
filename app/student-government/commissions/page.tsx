@@ -14,7 +14,7 @@ import {
     buildCommissionProfiles,
     fetchStudentGovernmentDirectoryPayload,
     getCommissionAbbreviation,
-    isRuntimeLogoSource,
+    isExternalRuntimeLogoSource,
     normalizeStudentGovernmentText,
     STUDENT_GOVERNMENT_DIRECTORY_SWR_OPTIONS,
 } from '@/lib/student-government';
@@ -158,7 +158,7 @@ export default function StudentGovernmentCommissionsPage() {
                                                         alt={String(commission.name || 'Commission logo')}
                                                         fill
                                                         sizes="64px"
-                                                        unoptimized={isRuntimeLogoSource(logoSrc)}
+                                                        unoptimized={isExternalRuntimeLogoSource(logoSrc)}
                                                         className="object-contain p-1.5"
                                                     />
                                                 ) : (
@@ -215,7 +215,7 @@ export default function StudentGovernmentCommissionsPage() {
                                             alt={String(activeCommission.name || 'Constitutional Commission')}
                                             fill
                                             sizes="(max-width: 1024px) 100vw, 50vw"
-                                            unoptimized={isRuntimeLogoSource(activeCommission.logoUrl)}
+                                            unoptimized={isExternalRuntimeLogoSource(activeCommission.logoUrl)}
                                             className="object-contain p-8 md:p-12"
                                         />
                                     ) : (

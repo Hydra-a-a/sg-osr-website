@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { NextRequest, NextResponse } from 'next/server';
-import { auth, invalidateAuthorizedUsersCache } from '@/lib/auth';
+import { invalidateAuthorizedUsersCache } from '@/lib/auth';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { requireSameOriginRequest } from '@/lib/request-guards';
@@ -8,8 +8,7 @@ import { getClientIp, redactErrorForLog, sanitizeText } from '@/lib/security';
 import { logAuditAction } from '@/lib/audit';
 import { resolveAuthAccessSource } from '@/lib/auth-access';
 import {
-    findAuthorizedUserByEmail,
-    isActiveOfficer,
+    requireActiveDatabaseOfficer,
     listAuthorizedUsersForAdmin,
     upsertAuthorizedUserAccess,
 } from '@/lib/admin-access';
@@ -30,21 +29,6 @@ function withNoStore(response: NextResponse): NextResponse {
     return response;
 }
 
-async function requireDatabaseOfficer() {
-    const session = await auth();
-    const email = String(session?.user?.email || '').trim().toLowerCase();
-    if (!email) {
-        throw new ApiError(401, 'UNAUTHORIZED', 'Authentication required.');
-    }
-
-    const actor = await findAuthorizedUserByEmail(email);
-    if (!actor || !isActiveOfficer(actor)) {
-        throw new ApiError(403, 'FORBIDDEN', 'Officer access is required.');
-    }
-
-    return { actor, email };
-}
-
 async function enforceRateLimit(action: string, actorEmail: string, ip: string): Promise<NextResponse | null> {
     const limit = await checkRateLimit(`admin_access_${action}_${actorEmail}_${ip}`, action === 'get' ? 60 : 30, 60_000);
     if (limit.success) return null;
@@ -60,7 +44,7 @@ export async function GET(request: NextRequest) {
     const ip = getClientIp(request);
 
     try {
-        const { email } = await requireDatabaseOfficer();
+        const { email } = await requireActiveDatabaseOfficer();
         const rateLimitResponse = await enforceRateLimit('get', email, ip);
         if (rateLimitResponse) return rateLimitResponse;
 
@@ -81,7 +65,7 @@ export async function PATCH(request: NextRequest) {
 
     try {
         requireSameOriginRequest(request);
-        const { actor, email: actorEmail } = await requireDatabaseOfficer();
+        const { actor, email: actorEmail } = await requireActiveDatabaseOfficer();
         const rateLimitResponse = await enforceRateLimit('patch', actorEmail, ip);
         if (rateLimitResponse) return rateLimitResponse;
 

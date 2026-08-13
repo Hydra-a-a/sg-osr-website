@@ -1,12 +1,11 @@
-'use client';
-
 import Link from 'next/link';
 import Image from 'next/image';
-import { useSession } from 'next-auth/react';
 
-export default function Footer() {
-    const { data: session } = useSession();
-    const isLoggedIn = !!session?.user;
+type FooterProps = {
+    isLoggedIn?: boolean;
+};
+
+export default function Footer({ isLoggedIn = false }: FooterProps) {
 
     const exploreLinks = [
         { href: '/', label: 'Home' },

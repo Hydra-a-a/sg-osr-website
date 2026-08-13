@@ -2,6 +2,8 @@ import { google } from 'googleapis';
 import { z } from 'zod';
 import { getGoogleServiceAccountCredentials } from '@/lib/google-credentials';
 import { redactErrorForLog } from '@/lib/security';
+import { unstable_cache } from 'next/cache';
+import { PUBLIC_CACHE_TAGS } from '@/lib/public-cache';
 
 // ───── Zod Schemas for Google Slides API ─────
 // Now captures text, images, AND videos from slide page elements.
@@ -47,7 +49,7 @@ const SlideSchema = z.object({
 export type SlideData = z.infer<typeof SlideSchema>;
 export type PageElement = z.infer<typeof PageElementSchema>;
 
-export async function getSlidesData(): Promise<SlideData[]> {
+async function fetchSlidesData(): Promise<SlideData[]> {
     const credentials = getGoogleServiceAccountCredentials();
 
     const auth = new google.auth.GoogleAuth({
@@ -58,9 +60,10 @@ export async function getSlidesData(): Promise<SlideData[]> {
     const slides = google.slides({ version: 'v1', auth });
 
     try {
-        const res = await slides.presentations.get({
-            presentationId: process.env.GOOGLE_SLIDES_ID,
-        });
+        const res = await slides.presentations.get(
+            { presentationId: process.env.GOOGLE_SLIDES_ID },
+            { timeout: 3000 },
+        );
 
         // Parse and scrub the raw Google payload against our expanded Zod schema
         const parsedSlides = z.array(SlideSchema).parse(res.data.slides || []);
@@ -74,4 +77,14 @@ export async function getSlidesData(): Promise<SlideData[]> {
         }
         return [];
     }
+}
+
+const getCachedSlidesData = unstable_cache(
+    fetchSlidesData,
+    ['public-google-slides'],
+    { revalidate: 60, tags: [PUBLIC_CACHE_TAGS.siteConfig, PUBLIC_CACHE_TAGS.announcements] },
+);
+
+export async function getSlidesData(): Promise<SlideData[]> {
+    return getCachedSlidesData();
 }

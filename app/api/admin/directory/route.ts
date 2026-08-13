@@ -7,6 +7,7 @@ import { requireSameOriginRequest } from '@/lib/request-guards';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { requireActiveDatabaseOfficer } from '@/lib/admin-access';
 import { logAuditAction } from '@/lib/audit';
+import { PUBLIC_CACHE_TAGS, revalidatePublicTags } from '@/lib/public-cache';
 import {
     getDirectoryAdminPayload,
     removeDirectoryLogo,
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest) {
             file,
             actorEmail: email,
         });
+        await revalidatePublicTags([PUBLIC_CACHE_TAGS.directory]);
         logAuditAction('DIRECTORY_LOGO_UPLOADED', {
             source: 'admin_directory_dashboard',
             directoryKey: result.directoryKey,
@@ -99,6 +101,7 @@ export async function DELETE(request: NextRequest) {
         }
 
         const result = await removeDirectoryLogo({ directoryKey: parsed.data.directoryKey, actorEmail: email });
+        await revalidatePublicTags([PUBLIC_CACHE_TAGS.directory]);
         logAuditAction('DIRECTORY_LOGO_REMOVED', {
             source: 'admin_directory_dashboard',
             directoryKey: result.directoryKey,

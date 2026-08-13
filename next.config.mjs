@@ -12,6 +12,8 @@ const nextConfig = {
     }
   },
   images: {
+    minimumCacheTTL: 86400,
+    qualities: [70, 75, 78],
     remotePatterns: [
       { protocol: 'https', hostname: '*.googleusercontent.com' },
       { protocol: 'https', hostname: 'www.google.com' },
@@ -46,10 +48,27 @@ const nextConfig = {
   }
 };
 
-export default withSentryConfig(nextConfig, {
+const sentryBuildOptions = {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: true,
-  disableLogger: true,
-});
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
+  bundleSizeOptimizations: {
+    excludeDebugStatements: true,
+    excludeTracing: true,
+    excludeReplayShadowDom: true,
+    excludeReplayIframe: true,
+  },
+};
+
+// The Sentry webpack plugin is a production build concern. Keeping it out of
+// `next dev` avoids route-manifest/source-map setup on every local config load
+// while runtime instrumentation remains available through instrumentation.ts.
+export default process.env.NODE_ENV === 'development'
+  ? nextConfig
+  : withSentryConfig(nextConfig, sentryBuildOptions);

@@ -1,6 +1,6 @@
 ---
 canonical: false
-last_verified: 2026-08-06
+last_verified: 2026-08-09
 confidence: high
 source_files:
   - .neon
@@ -44,6 +44,7 @@ source_files:
   - scripts/preflight-db.mjs
   - tests/test-lost-found-boundaries.js
   - lib/directory-repository.ts
+  - app/api/directory/route.ts
   - lib/directory-logo-manager.ts
   - lib/directory-export.ts
   - app/api/admin/directory/route.ts
@@ -55,6 +56,23 @@ source_files:
   - tests/test-directory-import-parser.js
   - tests/test-directory-management-contract.js
   - docs/launch/production-verification-runbook.md
+  - prisma/migrations/20260809010000_submission_attempts/migration.sql
+  - lib/idempotency.ts
+  - lib/submission-source.ts
+  - lib/quick-links.ts
+  - lib/public-cache.ts
+  - app/api/hub/lost-found/route.ts
+  - prisma/migrations/20260809000000_admin_content_workspace/migration.sql
+  - lib/admin-content.ts
+  - lib/admin-surface-registry.ts
+  - lib/public-content-source.ts
+  - app/api/admin/content/
+  - app/api/admin/news/sync/route.ts
+  - app/services/admin/content/page.tsx
+  - app/services/admin/classroom/page.tsx
+  - scripts/compare-public-content.mjs
+  - tests/test-admin-content-contract.js
+  - tests/test-admin-overlay-contract.js
 ---
 
 # Database Map
@@ -80,6 +98,12 @@ The app has a Neon Postgres + Prisma data layer connected to the existing Neon o
 - Public repository projections include only `PUBLISHED` and `RESOLVED` items. Submitter identity, review notes, and raw Drive URLs remain outside the public response; attachments are addressed by item-scoped public IDs and streamed through the media proxy.
 - `preflight:db` verifies the three lost-and-found tables and reports aggregate item, attachment, and comment counts without exposing private rows. The production runbook covers controlled CSO, student, moderation, media, and attachment-limit checks.
 
+## Durable Submission Attempts
+
+- The additive `20260809010000_submission_attempts` migration adds `SubmissionAttempt`, a server-only ledger keyed by operation plus a hashed idempotency key. It stores actor/payload hashes, state, entity ID, staged Drive reference, timestamps, error code, and expiry; it does not store raw submissions, emails, tracking tokens, or response bodies.
+- `lib/idempotency.ts` reserves attempts before external Lost & Found uploads, detects replay/in-progress/payload-reuse cases, derives recovery credentials from `SUBMISSION_TOKEN_SECRET`, and marks terminal success/failure. Lost & Found records staged Drive references against the attempt for recovery/compensation bookkeeping and replays completed entity IDs; compensation remains required for terminal external-upload/DB mismatches.
+- `TICKET_SOURCE` and `PROPOSAL_SOURCE` resolve to `sheet` by default and support explicit `db-with-sheets-fallback`/`db` modes through `lib/submission-source.ts`. The current ticket/proposal create paths fail closed with a cutover-required response when `db` is selected; operational import blockers and the complete ticket/proposal vertical-slice migration gate remain unresolved.
+
 ## Directory Logo Management
 
 - `DirectoryEntry.directoryKey` is the stable directory identity; `DirectoryLogo` stores one protected Drive asset and sanitized metadata per enabled entry, while `DirectoryExportState` tracks retryable Sheets publication.
@@ -87,6 +111,14 @@ The app has a Neon Postgres + Prisma data layer connected to the existing Neon o
 - `/services/admin/directory` and its server routes require an active Neon `officer`. Raster uploads are signature-checked, limited to 5 MB, uploaded to the configured organization-logo folder, and compensated in Drive if the Neon transaction fails.
 - `scripts/import-directory-to-db.mjs` is the aggregate-only import boundary. `scripts/export-public-sheets.mjs` writes the sanitized `Directory Export` tab from `public_sheet_directory_entries`, clearing stale rows before deterministic replacement.
 - Student-organization correction guidance is a public configured `mailto:` instruction only. There is no correction-report table, queue, or backend email processing.
+
+## Public Content Workspace
+
+- The additive `20260809000000_admin_content_workspace` migration adds version fields to public NewsPost, DirectoryEntry, QuickLink, and HubGuide rows, plus `AdminContentDraft` and `AdminContentRevision` tables for one active draft and immutable publication history per content entity.
+- `lib/admin-content.ts` is the shared draft/publish boundary for `directory`, `news`, `hub-guide`, and `quick-link`. Strict schemas validate public payloads and trusted links; publication checks the draft base version inside a transaction, increments the entity version, records a revision, and removes the draft. A version conflict keeps the draft for refresh/review.
+- `/services/admin/content` is the officer workspace for those collections. Directory logo uploads go through the staged-asset path and remain private in the restricted Drive folder until the directory draft is published; discard and replacement paths clean up staged assets.
+- `NEWS_SOURCE`, `HUB_GUIDES_SOURCE`, and `QUICK_LINKS_SOURCE` resolve to `sheet` by default, or explicit `db-with-sheets-fallback`/`db` modes through `lib/public-content-source.ts`. Database loaders keep public response shapes while filtering navigation links and guide URLs to safe HTTPS/PDF or Google-hosted targets.
+- `npm run db:compare:public-content` is a read-only aggregate parity check for News Posts, Quick Links, and Student Hub guides. It reports only collection counts and never writes to Neon or emits URLs, labels, identifiers, or private fields.
 
 ## Migration Direction
 

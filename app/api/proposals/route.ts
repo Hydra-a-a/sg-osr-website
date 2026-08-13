@@ -8,6 +8,7 @@ import { ProposalSubmissionSchema } from '@/features/proposals/schema';
 import { requireLeaderOrOfficerSession, listProposalsBySubmitterEmail } from '@/features/proposals/server/access';
 import { validateAttachment } from '@/features/proposals/server/attachments';
 import { createProposalSubmission } from '@/features/proposals/server/create-proposal';
+import { normalizeIdempotencyKey, submissionResponseHeaders } from '@/lib/idempotency-contract';
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request);
@@ -34,6 +35,8 @@ export async function POST(request: NextRequest) {
 
   try {
     requireSameOriginRequest(request);
+    // Legacy Sheets consumers may omit this header; durable replay guarantees begin with the DB source cutover.
+    normalizeIdempotencyKey(request.headers.get('Idempotency-Key'));
     const session = await requireLeaderOrOfficerSession(request.cookies.get('osr_portal_mode')?.value);
     const principal = session.user.email?.toLowerCase().trim() || ip;
     const limit = await checkRateLimit(`proposals_post_${principal}_${ip}`, 25, 60_000);
@@ -75,7 +78,7 @@ export async function POST(request: NextRequest) {
       submitterName,
     });
 
-    return withNoStore(NextResponse.json(result));
+    return withNoStore(NextResponse.json({ ...result, replayed: false }, { headers: submissionResponseHeaders(false) }));
   } catch (error) {
     console.error('[Proposals API] Failed to process proposal submission:', redactErrorForLog(error));
     return withNoStore(toApiResponse(error));

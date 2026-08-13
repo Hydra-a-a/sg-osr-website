@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CheckCircle2, ExternalLink, Loader2, Paperclip, Save, Search, ShieldAlert, X } from 'lucide-react';
-import { NoncedStyle } from '@/components/CspNonceProvider';
+import { CheckCircle2, ExternalLink, Loader2, Paperclip, Save, Search, ShieldAlert, X } from 'lucide-react';
+import { AdminPageShell } from '@/components/admin/AdminPageShell';
+import AdminInspector from '@/components/admin/AdminInspector';
 
 const STATUS_OPTIONS = ['Open', 'In Progress', 'Resolved', 'Closed', 'Appealed'] as const;
 type TicketStatus = typeof STATUS_OPTIONS[number];
@@ -85,6 +85,7 @@ export default function AdminGrievancesPage() {
     const [error, setError] = useState('');
     const [query, setQuery] = useState('');
     const [queueFilter, setQueueFilter] = useState<'all' | 'appealed' | 'needs-publish'>('all');
+    const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
     const [activeTicketId, setActiveTicketId] = useState('');
     const [status, setStatus] = useState<TicketStatus>('Open');
@@ -313,6 +314,7 @@ export default function AdminGrievancesPage() {
 
     function hydrateEditor(ticket: AdminTicket) {
         setActiveTicketId(ticket.ticketId);
+        setMobileDetailOpen(true);
         setStatus(ticket.status);
         setResolutionNotes(ticket.resolutionNotes || '');
         setPublishNow(false);
@@ -450,29 +452,15 @@ export default function AdminGrievancesPage() {
     }
 
     return (
-        <div className="services-shell relative overflow-hidden min-h-screen">
-            <div className="services-noise" aria-hidden="true" />
-            <section className="relative z-10 pt-20 pb-14 md:pt-28 md:pb-20">
-                <div className="container-main max-w-7xl">
-                    <Link
-                        href="/services/admin"
-                        className="inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white transition-colors mb-8"
-                    >
-                        <ArrowLeft size={16} /> Return to Admin Hub
-                    </Link>
+        <AdminPageShell
+            eyebrow="Grievance operations"
+            title="Grievance and appeals console"
+            description="Manage case status, resolution notes, and publication controls from the web UI. Every action still writes back to the Tickets sheet for audit-grade retention."
+            icon={ShieldAlert}
+        >
 
-                    <div className="mb-8 md:mb-10">
-                        <h1 className="text-3xl md:text-5xl font-bold text-white leading-tight tracking-tight">
-                            Grievance and Appeals Control Console
-                        </h1>
-                        <p className="mt-4 text-slate-300 max-w-3xl leading-relaxed">
-                            Manage case status, resolution notes, and publication controls from the web UI.
-                            Every action still writes back to the Tickets sheet for audit-grade retention.
-                        </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6 items-stretch">
-                        <div className="rounded-2xl border border-white/10 bg-[#0f223f]/60 backdrop-blur-sm p-5 md:p-6 shadow-[0_8px_30px_rgba(0,0,0,0.25)] h-full flex flex-col">
+                    <div className="admin-grievances-workspace mt-8">
+                        <div className="admin-grievances-queue min-h-0 w-full border border-white/10 bg-white/[0.04] p-5 md:p-6 shadow-[0_12px_36px_rgba(0,0,0,0.2)] flex flex-col">
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
                                 <h2 className="text-xl font-semibold text-white">Sheet-Synced Cases</h2>
                                 <div className="relative w-full md:w-80">
@@ -517,7 +505,7 @@ export default function AdminGrievancesPage() {
                             ) : filteredTickets.length === 0 ? (
                                 <div className="py-16 text-center text-slate-400">No tickets matched your filters.</div>
                             ) : (
-                                <div className="flex-1 min-h-0 overflow-auto pr-1 space-y-3 pb-2">
+                                <div className="flex-1 min-h-0 max-h-[50dvh] overflow-y-auto overscroll-contain pr-1 space-y-3 pb-2 sm:max-h-[62vh] xl:max-h-[calc(100dvh-18rem)]">
                                     {filteredTickets.map((ticket) => {
                                         const isActive = activeTicketId === ticket.ticketId;
                                         return (
@@ -550,7 +538,7 @@ export default function AdminGrievancesPage() {
                             )}
                         </div>
 
-                        <div className="rounded-2xl border border-white/10 bg-[#0f223f]/60 backdrop-blur-sm p-5 md:p-6 shadow-[0_8px_30px_rgba(0,0,0,0.25)] h-full flex flex-col">
+                        <AdminInspector mode="drawer" open={Boolean(activeTicket && mobileDetailOpen)} onClose={() => setMobileDetailOpen(false)} title={activeTicket?.ticketId || 'Ticket inspector'} eyebrow="Record inspector" drawerSize="xl">
                             {!activeTicket ? (
                                 <div className="text-slate-300 py-10">Select a ticket to edit controls.</div>
                             ) : (
@@ -774,11 +762,12 @@ export default function AdminGrievancesPage() {
                                     </div>
                                 </>
                             )}
-                        </div>
+                        </AdminInspector>
                     </div>
 
-                    <div className="mt-6 rounded-2xl border border-white/10 bg-[#0f223f]/60 backdrop-blur-sm p-5 md:p-6 shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
-                        <h3 className="text-lg font-semibold text-white mb-3">Officer Activity Log</h3>
+                    <details open className="mt-6 border border-white/10 bg-white/[0.04] p-5 md:p-6 shadow-[0_12px_36px_rgba(0,0,0,0.2)]">
+                        <summary className="cursor-pointer list-none text-lg font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">Officer Activity Log</summary>
+                        <div className="mt-4">
                         {activityEntries.length === 0 ? (
                             <p className="text-sm text-slate-400">No officer activity metadata found yet.</p>
                         ) : (
@@ -798,46 +787,14 @@ export default function AdminGrievancesPage() {
                                 ))}
                             </div>
                         )}
-                    </div>
+                        </div>
+                    </details>
 
                     {error ? (
                         <div className="mt-6 rounded-xl border border-red-500/20 bg-red-500/10 text-red-200 px-4 py-3 text-sm">
                             {error}
                         </div>
                     ) : null}
-                </div>
-            </section>
-
-            <NoncedStyle css={`
-                .services-shell {
-                    background: linear-gradient(130deg, #1a3352 0%, #234874 48%, #3e6596 100%);
-                    background-image:
-                        radial-gradient(130% 120% at 8% 12%, rgba(232, 207, 146, 0.18) 0%, rgba(232, 207, 146, 0) 52%),
-                        radial-gradient(140% 120% at 92% 8%, rgba(87, 131, 186, 0.28) 0%, rgba(87, 131, 186, 0) 58%),
-                        linear-gradient(130deg, #1a3352 0%, #234874 48%, #3e6596 100%);
-                    color: #e2e8f0;
-                }
-
-                .services-shell::before {
-                    content: '';
-                    position: absolute;
-                    inset: 0;
-                    background: radial-gradient(circle at top, rgba(255,255,255,0.03) 0%, transparent 100%);
-                    pointer-events: none;
-                    z-index: 1;
-                }
-
-                .services-noise {
-                    position: absolute;
-                    inset: 0;
-                    background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
-                    background-size: 32px 32px;
-                    opacity: 0.2;
-                    mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
-                    pointer-events: none;
-                    z-index: 2;
-                }
-            `} />
-        </div>
+        </AdminPageShell>
     );
 }

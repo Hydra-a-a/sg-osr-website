@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { unstable_cache } from 'next/cache';
 import { getSheetData, getSheetDataWithHyperlinks, getSpreadsheetSheetTitles } from '@/lib/sheets';
 import { parseSheetData } from '@/lib/sheets-parser';
 import { OfficerSchema, OfficeSchema } from '@/schemas/directory';
@@ -7,6 +8,7 @@ import { getClientIp, isSafeNavigationHref, redactErrorForLog } from '@/lib/secu
 import { extractGoogleDriveFileId, extractGoogleDriveResourceKey } from '@/lib/google-drive';
 import { resolveDirectoryData, type DirectoryPayload } from '@/lib/directory-repository';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
+import { PUBLIC_CACHE_TAGS } from '@/lib/public-cache';
 
 // cache for an hour. don't hit google sheets every time or they ban us.
 export const revalidate = 3600;
@@ -766,8 +768,17 @@ async function fetchDirectoryDataFromSheets(): Promise<DirectoryPayload> {
     }
 }
 
+const cachedDirectoryData = unstable_cache(
+    () => resolveDirectoryData(fetchDirectoryDataFromSheets),
+    ['public-directory-data'],
+    {
+        revalidate: 3600,
+        tags: [PUBLIC_CACHE_TAGS.directory],
+    },
+);
+
 export async function fetchDirectoryData(): Promise<DirectoryPayload> {
-    return resolveDirectoryData(fetchDirectoryDataFromSheets);
+    return cachedDirectoryData();
 }
 
 export async function GET(request: Request) {

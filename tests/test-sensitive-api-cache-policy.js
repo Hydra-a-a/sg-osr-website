@@ -51,6 +51,12 @@ const sensitiveApiRoutes = [
   'app/api/news/sync/route.ts',
   'app/api/admin/directory/route.ts',
   'app/api/admin/directory/export/route.ts',
+  'app/api/admin/content/[contentType]/route.ts',
+  'app/api/admin/content/[contentType]/[id]/route.ts',
+  'app/api/admin/content/[contentType]/[id]/publish/route.ts',
+  'app/api/admin/content/[contentType]/[id]/history/route.ts',
+  'app/api/admin/content/directory/[id]/logo-draft/route.ts',
+  'app/api/admin/news/sync/route.ts',
   'app/api/cron/directory-export/route.ts',
 ];
 

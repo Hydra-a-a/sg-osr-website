@@ -9,7 +9,8 @@ assert(route.includes('requireSameOriginRequest(request)'), 'access mutations sh
 assert(route.includes('checkRateLimit'), 'access management should be rate limited.');
 assert(route.includes("z.enum(['student', 'leader', 'officer'])"), 'access updates should validate the supported portal roles.');
 assert(route.includes("value.endsWith('@rtu.edu.ph')"), 'access updates should require RTU institutional email addresses.');
-assert(route.includes('isActiveOfficer(actor)'), 'access management should check the current officer record in Neon.');
+assert(route.includes('requireActiveDatabaseOfficer'), 'access management should use the shared active-officer guard.');
+assert(repository.includes('isActiveOfficer(actor)'), 'the shared access guard should check the current officer record in Neon.');
 assert(route.includes('SELF_ACCESS_LOCKOUT'), 'access management should prevent self-lockout.');
 assert(route.includes('invalidateAuthorizedUsersCache()'), 'access mutations should invalidate the local authorized-user cache.');
 assert(route.includes('AUTH_ACCESS_UPDATED') && route.includes('AUTH_ACCESS_REVOKED'), 'access mutations should emit redacted audit events.');

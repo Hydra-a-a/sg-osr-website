@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
@@ -15,6 +14,8 @@ import {
     type GrievanceCategory,
 } from '@/lib/ticket-constants';
 import { saveTicketToHistory } from '@/lib/ticket-history';
+import { classifyClientError, clientErrorMessage } from '@/lib/client-error';
+import { clearDraft, getOrCreateIdempotencyKey, readDraft, resetIdempotencyKey, writeDraft } from '@/lib/draft-storage';
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
@@ -38,6 +39,21 @@ const ATTACHMENT_KIND_CONFIG: Record<AttachmentKind, {
 };
 
 const ALL_ALLOWED_EXTENSIONS_NOTE = 'Allowed file extensions: .png, .jpg, .jpeg, .pdf, .doc, .docx';
+const GRIEVANCE_DRAFT_KEY = 'osr:draft:grievance:v1';
+const GRIEVANCE_IDEMPOTENCY_KEY = 'osr:idempotency:grievance:v1';
+const GRIEVANCE_DRAFT_VERSION = 1;
+
+type GrievanceDraft = {
+    isAnonymous: boolean;
+    wantsCopy: boolean;
+    wantsAnonymousUpdates: boolean;
+    campus: Campus;
+    college: CollegeInstitute;
+    subject: string;
+    category: GrievanceCategory;
+    complaintNarrative: string;
+    attachmentKind: AttachmentKind;
+};
 
 function getFileExtension(fileName: string): string {
     const lowered = fileName.toLowerCase();
@@ -74,6 +90,8 @@ export default function GrievancePage() {
         ticketId?: string;
         trackingAccessToken?: string;
     } | null>(null);
+    const draftRestoredRef = useRef(false);
+    const idempotencyKeyRef = useRef<string | null>(null);
 
     const isAuthenticated = status === 'authenticated' && Boolean(session?.user?.email);
     const sessionEmail = session?.user?.email?.trim().toLowerCase() || '';
@@ -81,6 +99,57 @@ export default function GrievancePage() {
     useEffect(() => {
         formStartTimestampRef.current = Date.now();
     }, []);
+
+    useEffect(() => {
+        if (status === 'unauthenticated') clearDraft(GRIEVANCE_DRAFT_KEY);
+    }, [status]);
+
+    useEffect(() => {
+        const draft = readDraft<GrievanceDraft>(GRIEVANCE_DRAFT_KEY, GRIEVANCE_DRAFT_VERSION);
+        const restoreTimer = window.setTimeout(() => {
+            if (draft) {
+                setIsAnonymous(Boolean(draft.isAnonymous));
+                setWantsCopy(Boolean(draft.wantsCopy));
+                setWantsAnonymousUpdates(Boolean(draft.wantsAnonymousUpdates));
+                setAttachmentKind(draft.attachmentKind === 'image' ? 'image' : 'document');
+                setFormData((current) => ({
+                    ...current,
+                    campus: CAMPUSES.includes(draft.campus) ? draft.campus : current.campus,
+                    college: COLLEGE_INSTITUTES.includes(draft.college) ? draft.college : current.college,
+                    subject: typeof draft.subject === 'string' ? draft.subject : current.subject,
+                    category: GRIEVANCE_CATEGORIES.includes(draft.category) ? draft.category : current.category,
+                    complaintNarrative: typeof draft.complaintNarrative === 'string' ? draft.complaintNarrative : current.complaintNarrative,
+                }));
+            }
+            draftRestoredRef.current = true;
+        }, 0);
+        return () => window.clearTimeout(restoreTimer);
+    }, []);
+
+    useEffect(() => {
+        if (!draftRestoredRef.current) return;
+        const timeout = window.setTimeout(() => {
+            writeDraft<GrievanceDraft>(GRIEVANCE_DRAFT_KEY, GRIEVANCE_DRAFT_VERSION, {
+                isAnonymous,
+                wantsCopy,
+                wantsAnonymousUpdates,
+                campus: formData.campus,
+                college: formData.college,
+                subject: formData.subject,
+                category: formData.category,
+                complaintNarrative: formData.complaintNarrative,
+                attachmentKind,
+            });
+        }, 250);
+        return () => window.clearTimeout(timeout);
+    }, [attachmentKind, formData.campus, formData.category, formData.college, formData.complaintNarrative, formData.subject, isAnonymous, wantsAnonymousUpdates, wantsCopy]);
+
+    const getSubmissionKey = () => {
+        if (!idempotencyKeyRef.current) {
+            idempotencyKeyRef.current = getOrCreateIdempotencyKey(GRIEVANCE_IDEMPOTENCY_KEY);
+        }
+        return idempotencyKeyRef.current;
+    };
 
     const handleAttachmentChange = (file: File | null) => {
         if (!file) {
@@ -178,10 +247,11 @@ export default function GrievancePage() {
 
             const res = await fetch('/api/tickets', {
                 method: 'POST',
+                headers: { 'Idempotency-Key': getSubmissionKey() },
                 body: payload,
             });
 
-            const json = await res.json();
+            const json = await res.json().catch(() => ({}));
 
             if (res.ok) {
                 const ticketId: string = json.ticketId;
@@ -223,6 +293,8 @@ export default function GrievancePage() {
                 setAnonymousUpdateEmail('');
                 setIsPrivacyChecked(false);
                 formStartTimestampRef.current = Date.now();
+                clearDraft(GRIEVANCE_DRAFT_KEY);
+                idempotencyKeyRef.current = resetIdempotencyKey(GRIEVANCE_IDEMPOTENCY_KEY);
             } else {
                 const errorPayload = json.error;
                 const errorMsg = typeof errorPayload === 'object' && errorPayload !== null
@@ -230,10 +302,11 @@ export default function GrievancePage() {
                     : typeof json.message === 'string'
                         ? json.message
                         : 'Submission failed';
-                setResult({ success: false, message: errorMsg });
+                setResult({ success: false, message: errorMsg || clientErrorMessage(classifyClientError({ status: res.status, message: errorMsg })) });
             }
-        } catch {
-            setResult({ success: false, message: 'Network error. Please try again.' });
+        } catch (error) {
+            const kind = classifyClientError(error);
+            setResult({ success: false, message: clientErrorMessage(kind) });
         }
 
         setSubmitting(false);
@@ -270,13 +343,13 @@ export default function GrievancePage() {
                     </p>
                 </div>
 
-                <motion.form
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
+                <form
                     onSubmit={handleSubmit}
                     className="portal-panel grievance-form-shell p-6 sm:p-10 space-y-7"
                 >
+                    <p className="rounded-lg border border-sky-400/15 bg-sky-400/5 px-4 py-3 text-xs leading-5 text-sky-100/80">
+                        Draft fields stay in this browser tab for up to two hours. Attachments, account details, and tracking credentials are never saved.
+                    </p>
                     {/* hidden bot trap */}
                     <div className="is-hidden-offscreen" aria-hidden="true">
                         <label htmlFor="user_website_url">Website URL (leave blank)</label>
@@ -663,14 +736,8 @@ export default function GrievancePage() {
                         </div>
 
                         {/* Result Banner */}
-                        <AnimatePresence>
-                            {result && (
-                                <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className={`p-4 rounded-xl flex items-start gap-3 border ${result.success ? 'bg-green-500/10 border-green-500/20 text-green-200' : 'bg-red-500/10 border-red-500/20 text-red-200'}`}
-                                >
+                        {result && (
+                                <div className={`grievance-result-enter p-4 rounded-xl flex items-start gap-3 border ${result.success ? 'bg-green-500/10 border-green-500/20 text-green-200' : 'bg-red-500/10 border-red-500/20 text-red-200'}`}>
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 mb-1">
                                             {result.success ? <CheckCircle size={18} className="text-green-400" /> : <AlertCircle size={18} className="text-red-400" />}
@@ -694,9 +761,8 @@ export default function GrievancePage() {
                                             </div>
                                         )}
                                     </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                                </div>
+                        )}
 
                         <button
                             type="submit"
@@ -725,26 +791,17 @@ export default function GrievancePage() {
                             Please ensure all inputs are accurate to avoid delays.
                         </p>
                     </div>
-                </motion.form>
+                </form>
             </div>
             {typeof document !== 'undefined' && createPortal(
-                <AnimatePresence>
+                <>
                     {pendingSubmitWithoutProof && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-[140] flex items-center justify-center px-4 py-6"
-                        >
+                        <div className="grievance-proof-backdrop fixed inset-0 z-[140] flex items-center justify-center px-4 py-6">
                             <div
                                 className="absolute inset-0 bg-slate-950/78 backdrop-blur-sm"
                                 onClick={() => setPendingSubmitWithoutProof(false)}
                             />
-                            <motion.div
-                                initial={{ opacity: 0, y: 16, scale: 0.96 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, y: 10, scale: 0.98 }}
-                                transition={{ duration: 0.22, ease: 'easeOut' }}
+                            <div
                                 className="relative z-[141] max-h-[calc(100vh-3rem)] w-full max-w-xl overflow-y-auto rounded-[1.75rem] border border-white/10 bg-[linear-gradient(145deg,rgba(12,22,36,0.92),rgba(11,20,34,0.98))] p-6 shadow-[0_28px_80px_rgba(2,8,23,0.45)]"
                             >
                                 <div className="flex items-start justify-between gap-4">
@@ -794,10 +851,10 @@ export default function GrievancePage() {
                                         Continue without proof
                                     </button>
                                 </div>
-                            </motion.div>
-                        </motion.div>
+                            </div>
+                        </div>
                     )}
-                </AnimatePresence>,
+                </>,
                 document.body
             )}
         </main>

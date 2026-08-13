@@ -1,8 +1,6 @@
-'use client';
-
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
-import { useSyncExternalStore } from 'react';
+import { cookies } from 'next/headers';
+import { auth } from '@/lib/auth';
 import {
     ArrowRightIcon,
     BuildingLibraryIcon,
@@ -63,9 +61,9 @@ const utilityActions = [
     },
 ];
 
-export default function HomeCoreActions() {
-    const { data: session } = useSession();
-    const portalMode = useSyncExternalStore(subscribeNoop, getPortalModeCookie, () => '');
+export default async function HomeCoreActions() {
+    const [session, cookieStore] = await Promise.all([auth(), cookies()]);
+    const portalMode = cookieStore.get(PORTAL_MODE_COOKIE)?.value || '';
     const visibility = getAccessVisibilityState(session?.user?.role, portalMode, '');
     const visiblePrimary = primaryActions.filter((action) => !action.requiresLeader || visibility.canSeeLeaderFeatures);
     const featuredAction = visiblePrimary[0];
@@ -155,16 +153,4 @@ export default function HomeCoreActions() {
             </div>
         </section>
     );
-}
-
-function getPortalModeCookie(): string {
-    if (typeof document === 'undefined') return '';
-    return document.cookie
-        .split('; ')
-        .find((row) => row.startsWith(`${PORTAL_MODE_COOKIE}=`))
-        ?.split('=')[1] ?? '';
-}
-
-function subscribeNoop(): () => void {
-    return () => {};
 }

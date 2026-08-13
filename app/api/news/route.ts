@@ -9,6 +9,7 @@ import {
 import { rateLimit } from '@/lib/rate-limit';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
+import { loadNewsPostsFromDb, resolvePublicContentSource } from '@/lib/public-content-source';
 
 export const revalidate = 300;
 
@@ -175,7 +176,28 @@ export async function GET(request: Request) {
     }
 
     try {
+        const contentSource = resolvePublicContentSource('NEWS_SOURCE');
         const spreadsheetId = process.env.GOOGLE_SHEETS_INFO_ID;
+        if (contentSource !== 'sheet') {
+            try {
+                const posts = await loadNewsPostsFromDb(200);
+                const requestUrl = new URL(request.url);
+                const searchParams = requestUrl.searchParams;
+                const limit = parseLimit(searchParams.get('limit'));
+                const page = parsePage(searchParams.get('page'));
+                const filteredPosts = sortPosts(applyFilters(posts, {
+                    route: normalizeFilter(searchParams.get('route')),
+                    section: normalizeFilter(searchParams.get('section')),
+                    source: normalizeFilter(searchParams.get('source')),
+                    featured: normalizeFilter(searchParams.get('featured')),
+                }));
+                const start = (page - 1) * limit;
+                return jsonResponse({ data: filteredPosts.slice(start, start + limit), pagination: { page, limit, total: filteredPosts.length, hasMore: start + limit < filteredPosts.length } });
+            } catch (error) {
+                if (contentSource === 'db') throw error;
+                console.warn('[News API] Neon source unavailable; falling back to Sheets:', redactErrorForLog(error));
+            }
+        }
         if (!spreadsheetId) {
             return toApiResponse(new ApiError(500, 'SERVICE_MISCONFIGURED', 'Internal server error', undefined, false));
         }

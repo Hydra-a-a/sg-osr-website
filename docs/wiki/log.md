@@ -111,3 +111,72 @@ Backlinks: [[index]] | [[README]]
 - Recorded the token-free browser session projection and server-only `authWithGoogleToken()` boundary used by Classroom route handlers, plus the focused session-token test and security-workflow entry.
 - Recorded the dependency gate remediation: Next/`eslint-config-next` 16.3.0, `next-auth` beta.32, Gemini and `isomorphic-dompurify` removal, Axios/Nodemailer remediation, and scoped `fast-uri`/`brace-expansion` overrides.
 - Linked the email transport boundary test and canonical session/dependency/auth documents in the maintainer verification map.
+
+## 2026-08-09 - Administrative workspace and overview
+
+- Added the route-scoped `AdminWorkspaceShell` and `RouteAwareSiteChrome`, replacing public chrome inside `/services/admin/**` with responsive/collapsible officer navigation, loading/error boundaries, and shared page, grid, panel, notice, and inspector primitives across all administrative modules.
+- Added the protected `/api/admin/overview` aggregate for six module queue/source-health summaries. It preserves current Neon-versus-Sheets boundaries, requires an effective officer role, rate limits and marks responses `no-store`, redacts failures, and degrades individual provider errors to `unavailable` without record content.
+- Updated [[systems/portal-map]], [[security/invariants]], and [[tests/verification-map]] with the new workspace and overview boundaries. TypeScript, lint (only the existing `app/hub/page.tsx` navigation warnings), diff checks, security/accessibility, and focused admin/module tests passed; unauthenticated browser redirect passed. The 180-second build attempt timed out while an existing dev process was active, with no build error surfaced.
+
+## 2026-08-09 - Admin content workspace and public-content boundary
+
+- Added the versioned public-content workspace for directory, news, hub-guide, and quick-link records, with additive Neon draft/revision tables, strict payload validation, explicit publish/version-conflict handling, immutable history, and staged directory-logo assets that remain private until publication. Added the linked Classroom surface and centralized `adminSurfaceRegistry`.
+- Added protected draft, publish, history, logo-staging, and Facebook news-sync routes with active database-officer, same-origin, rate-limit, no-store, redacted logging, and audit boundaries. Public source switches remain Sheets by default with explicit database/fallback modes; `db:compare:public-content` is aggregate-only and read-only.
+- Updated [[systems/portal-map]], [[systems/database-map]], [[security/invariants]], and [[tests/verification-map]]. TypeScript, lint, security, focused admin-content/overlay contracts, accessibility pipeline, and unauthenticated browser redirect passed. The build timed out while existing dev processes were active, with no surfaced build error.
+
+## 2026-08-09 - Moderation queue scroll containment
+
+- Bounded the inner record queues in grievances, proposals, community routes, and lost-and-found with responsive viewport caps and `overscroll-contain`, keeping long lists inside the admin workspace while preserving inspector/mobile detail behavior.
+- TypeScript, lint (only the two pre-existing `app/hub/page.tsx` warnings), targeted ESLint, accessibility pipeline, and diff checks passed. The change is presentation-only; data, authorization, and mutation contracts are unchanged.
+
+## 2026-08-09 - Admin inspector drawer migration
+
+- Converted grievances, proposals, community routes, lost-and-found, access management, and directory record inspectors to the shared `AdminInspector mode="drawer"`. Queues and data grids are full-width with bounded inner scrolling; desktop uses right-side drawers and mobile uses full-screen sheets.
+- Extended the overlay contract to cover all six surfaces and the shared data-grid viewport cap. `test:admin-overlay-contract`, accessibility, TypeScript, security, lint (only the two pre-existing `app/hub/page.tsx` warnings), and diff checks passed.
+
+## 2026-08-09 - Admin access guard delegation fix
+
+- Routed `/api/admin/access` GET/PATCH through the shared `requireActiveDatabaseOfficer()` guard so explicitly enabled local simulated officers work in development while non-simulated requests still require an active Neon `officer` record. The simulation is gated by non-production `NODE_ENV`, `ENABLE_LOCAL_LOGIN_SIMULATION=true`, `session.user.isDevSim=true`, and `role='officer'`, and returns only a synthetic actor.
+- Updated the access-control contract to assert shared-guard delegation and repository-side Neon officer enforcement. Focused access/cache/origin/rate-limit checks, `npm run test:security`, TypeScript, lint (only the two pre-existing `app/hub/page.tsx` warnings), and diff checks passed.
+
+## 2026-08-09 - Performance and resilience remediation
+
+- Added Node 24/npm 11.9 runtime alignment, a slow-mobile performance harness with median-of-three cold runs, mobile Lighthouse routing, and a non-blocking preview audit path until two stable preview runs establish the release gate.
+- Reworked public media and browser payloads: responsive optimized LCP/logo assets, immutable/static cache policy, route-scoped MapLibre CSS, CSS navigation/modal transitions, server-rendered initial public data, bounded public repository caches, parallel provider reads with three-second timeouts, session projection reuse, Sentry instrumentation without client tracing/replay, and route/recovery boundaries.
+- Added classified retry/offline UX and tab-scoped two-hour form drafts that exclude identity, tracking, and attachment data. Added the `SubmissionAttempt` Prisma ledger, hashed idempotency contract, deterministic recovery-token derivation, and durable Lost & Found replay/in-progress/reuse handling. Ticket/proposal source resolution remains fail-closed for `db` until operational import blockers and the complete vertical-slice cutover are resolved.
+- Verification passed `db:generate`, Prisma validation with a placeholder direct URL, TypeScript, lint (only two pre-existing Hub navigation warnings), `npm run test:security`, and production build. Local slow-mobile audit results show initial transfer/JavaScript mostly within working budgets, while Hub LCP/settled transfer and TBT/CLS still miss gates; no live provider/DB preflight, migration, deployment, or preview promotion was performed.
+
+## 2026-08-09 - Public shell and performance checkpoint
+
+- Moved public shell selection into `RouteAwareSiteChrome`: `/services/admin/**` omits public header, rail, footer, announcements, and page transitions while public routes retain the existing transition boundary. `app/layout.js` resolves configuration, session, and CSP headers in parallel; `Footer` is server-rendered and receives only the login boolean needed for its action links.
+- The clean production Home slow-mobile median of three cold runs measured CLS `0`, approximately `292.6 KB` transfer, approximately `167.4 KB` initial compressed JavaScript, LCP `3.524 s`, and TBT `1.807 s`. Transfer/CLS/initial-JavaScript pass this sample, but LCP and TBT remain open release gates. Controlled `/hub` browser smoke found no iframe before preview and confirmed mobile-menu `aria-expanded` toggling.
+- `npm run build`, `npx tsc --noEmit`, `npm run lint` (only two existing HubClient `window.location` warnings), `npm run test:security`, and submission/admin contracts passed. No live DB/provider/deployment action was performed.
+
+## 2026-08-09 - Directory public-read cache
+
+- Wrapped the shared public directory resolver in `app/api/directory/route.ts` with a one-hour `unstable_cache` entry tagged `PUBLIC_CACHE_TAGS.directory`, so server-rendered directory pages and the API reuse one bounded provider read while retaining existing organizations/offices response shapes.
+- Verification after the patch passed TypeScript, lint (the same two existing HubClient `window.location` warnings), `npm run test:security`, and production build. A controlled four-route audit observed directory warm TTFB around `103 ms`; no live DB/provider/deployment action was performed.
+
+## 2026-08-10 - Branded loading-state remediation
+
+- Added the shared `PortalLoading` variant surface and route loading boundaries for page, Hub, directory/data, services, grievance, and admin routes. The dark branded skeleton geometry matches each route's expected layout, remains responsive, and disables shimmer for reduced motion/data preferences.
+- Updated existing `.skeleton` styling so light surfaces use neutral placeholders while dark portal surfaces use navy/gold tones, preventing white flashes during News/About and route-panel loading. Delayed production navigation smoke showed the branded dark Hub shell at desktop and mobile with a clean transition.
+- Verification passed `npx tsc --noEmit`, `npm run lint` (only the two existing HubClient warnings), `npm run audit:a11y` across seven routes and two viewports, and production build before the final CSS-only shimmer rerun. No external/live actions were performed; the final post-adjustment build remains the only pending confirmation.
+
+## 2026-08-10 - Release-gate audit hardening and Hub payload split
+
+- Hardened `scripts/audit-performance.mjs` to self-start a direct production server on a free loopback port, report `serverMode`, reject development resources, and clean up owned child processes. Updated Lighthouse CI to explicit mobile screen emulation. The local four-route audit used port `61796`, found no dev resources, and kept menu interaction under `200 ms`.
+- Deferred Hub overlay/lightbox controls and announcement popup code from the initial client path. `RouteAwareSiteChrome` now avoids the client `PageTransition` boundary, while preserving the static transition shell for public routes. The Home hero uses the optimized image at quality 70; Hub uses `BONI_AVE.jpg`, and the obsolete SVG has no references.
+- Verification passed TypeScript, lint (only two existing HubClient `window.location.href` warnings), production build, `npm run audit:a11y` (seven routes x two viewports), `test-accessibility-audit-pipeline`, `test-hub-guides-pdf-gating`, and `test-package-script-targets`. Audit LCP/CLS/transfer/initial-JavaScript budgets passed, but TBT medians remained high (Home `1254 ms`, Hub `757 ms`, directory `1106 ms`, grievance `853 ms`). Lighthouse collection reached Chrome cleanup but ended with Windows `EPERM`; no live DB/provider/deployment actions were performed.
+
+## 2026-08-10 - Session narrowing, Hub masthead, and directory hydration
+
+- Narrowed the root auth/session boundary: `app/layout.js` resolves config, session, and CSP headers in parallel, passes the approved session projection to `NavbarClient`, and leaves `AuthProvider` to the `/hub`, `/services`, and `/transparency` layouts that actually use `useSession()`. `NavbarClient` lazy-loads `signOut`; server authorization and CSP nonce boundaries remain unchanged.
+- Converted the Hub masthead to prioritized `next/image` for `BONI_AVE.jpg` at quality 70 with explicit `sizes` and `center 46%` crop positioning while retaining the CSS overlay. Student-organization pages now consume server `initialData` and use a native fallback fetch instead of SWR.
+- Verification passed build, TypeScript, lint (only existing HubClient `window.location` warnings), security, focused accessibility/Hub/package tests, seven-route/two-viewport `audit:a11y`, and Playwright image/menu checks. Full-route performance budgets passed for LCP, CLS, transfer, initial JavaScript, and menu interaction; TBT remained above gate at Home `655 ms`, Hub `515 ms`, directory `584 ms`, and grievance `504 ms`. Lighthouse still ends with Windows Chrome cleanup `EPERM`/taskkill access denied; no live DB/provider/deployment actions were performed.
+
+## 2026-08-11 - Direct Lighthouse release-gate closeout
+
+- Refined `audit:performance` to report `observedLongTaskBlockingMs` over a three-second diagnostic window without treating the browser-side proxy as release TBT. Added `audit:lighthouse`, which self-starts a production server on a free loopback port, runs three mobile Lighthouse samples per route with median TBT/LCP/CLS aggregation, records long-task URLs and dev-resource detections, and uses Windows-safe temporary Chrome profiles/cleanup. `AUDIT_ENFORCE=0` remains advisory in CI until preview stability is established.
+- Corrected four-route Lighthouse medians passed the numeric gates with empty dev-resource sets: Home `124 ms` TBT / `2.974 s` LCP, Hub `98 ms` / `3.202 s`, directory `101 ms` / `2.986 s`, grievance `127 ms` / `2.792 s`; CLS was `0` across routes. The custom audit passed its budgets.
+- `node --check` for audit scripts/config, `npm run test:readiness`, security, TypeScript, lint (two existing HubClient warnings), build, and seven-route/two-viewport accessibility checks passed. Production `npm audit` found no High/Critical vulnerabilities and nine existing Low/Moderate advisories. Two provider preview runs remain required before flipping `AUDIT_ENFORCE=1`; no live DB/provider/deployment actions were performed.

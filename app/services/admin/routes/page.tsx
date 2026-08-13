@@ -1,9 +1,10 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CheckCircle2, Loader2, MapPinned, RefreshCcw, Search, ShieldAlert, XCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Loader2, MapPinned, RefreshCcw, Search, ShieldAlert, XCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { NoncedStyle } from '@/components/CspNonceProvider';
+import { AdminActionButton, AdminPageShell } from '@/components/admin/AdminPageShell';
+import AdminInspector from '@/components/admin/AdminInspector';
 
 type ModerationAction = 'Approve' | 'Reject' | 'Mark for Review' | 'Approve with Warning' | 'Restore Confidence';
 
@@ -40,6 +41,7 @@ export default function AdminRoutesPage() {
     const [error, setError] = useState('');
     const [query, setQuery] = useState('');
     const [activeRow, setActiveRow] = useState<number | null>(null);
+    const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
     const [reviewNotesDraft, setReviewNotesDraft] = useState<Record<number, string>>({});
     const [statusFilter, setStatusFilter] = useState<'all' | 'Pending' | 'Flagged for Review' | 'Approved with Warning' | 'Rejected'>('all');
 
@@ -129,29 +131,21 @@ export default function AdminRoutesPage() {
     }
 
     return (
-        <div className="admin-routes-shell min-h-screen">
-            <section className="max-w-7xl mx-auto px-4 py-10 md:py-14">
-                <Link href="/services/admin" className="inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white transition-colors">
-                    <ArrowLeft size={16} /> Back to Admin
-                </Link>
-
-                <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="max-w-2xl">
-                        <span className="admin-routes-kicker">Transit Moderation</span>
-                        <h1 className="mt-4 text-4xl font-bold text-white leading-tight">Community Routes Queue</h1>
-                        <p className="mt-4 text-slate-200 leading-relaxed">
-                            Review student-submitted commuter guides, clean up notes if needed, and decide which routes become public.
-                        </p>
-                    </div>
-
-                    <button onClick={() => void loadRoutes()} className="admin-routes-refresh" disabled={loading}>
+        <AdminPageShell
+            eyebrow="Transit moderation"
+            title="Community routes queue"
+            description="Review student-submitted commuter guides, clean up notes if needed, and decide which routes become public."
+            icon={MapPinned}
+            actions={(
+                <AdminActionButton onClick={() => void loadRoutes()} disabled={loading}>
                         <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
                         Refresh queue
-                    </button>
-                </div>
+                </AdminActionButton>
+            )}
+        >
 
-                <div className="mt-8 grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-                    <div className="admin-routes-panel p-4">
+                <div className="mt-8">
+                    <div className="admin-routes-panel admin-routes-queue min-h-0 w-full p-4">
                         <label className="admin-routes-search">
                             <Search size={16} />
                             <input
@@ -181,11 +175,11 @@ export default function AdminRoutesPage() {
                         ) : filteredRoutes.length === 0 ? (
                             <div className="admin-routes-empty">No matching route submissions found.</div>
                         ) : (
-                            <div className="mt-4 space-y-3">
+                            <div className="mt-4 max-h-[50dvh] space-y-3 overflow-y-auto overscroll-contain pr-1 sm:max-h-[62vh] xl:max-h-[calc(100dvh-18rem)]">
                                 {filteredRoutes.map((route) => (
                                     <button
                                         key={route.rowNumber}
-                                        onClick={() => setActiveRow(route.rowNumber)}
+                                        onClick={() => { setActiveRow(route.rowNumber); setMobileDetailOpen(true); }}
                                         className={`admin-routes-row ${activeRoute?.rowNumber === route.rowNumber ? 'admin-routes-row-active' : ''}`}
                                     >
                                         <div className="flex items-start justify-between gap-3">
@@ -208,7 +202,7 @@ export default function AdminRoutesPage() {
                         )}
                     </div>
 
-                    <div className="admin-routes-panel p-5">
+                    <AdminInspector mode="drawer" open={Boolean(activeRoute && mobileDetailOpen)} onClose={() => setMobileDetailOpen(false)} title={activeRoute ? `${activeRoute.originAliases} → ${activeRoute.destinationAliases}` : 'Route inspector'} eyebrow="Record inspector" drawerSize="xl">
                         {error ? (
                             <div className="admin-routes-error">
                                 <ShieldAlert size={18} />
@@ -348,17 +342,11 @@ export default function AdminRoutesPage() {
                                 </div>
                             </div>
                         )}
-                    </div>
+                    </AdminInspector>
                 </div>
-            </section>
-
             <NoncedStyle css={`
                 .admin-routes-shell {
-                    background:
-                        radial-gradient(120% 120% at 8% 10%, rgba(74, 222, 128, 0.12) 0%, rgba(74, 222, 128, 0) 48%),
-                        radial-gradient(100% 110% at 92% 12%, rgba(96, 165, 250, 0.16) 0%, rgba(96, 165, 250, 0) 50%),
-                        linear-gradient(135deg, #102845 0%, #1c436c 45%, #245f82 100%);
-                    color: #e2e8f0;
+                    color: #f8fafc;
                 }
                 .admin-routes-panel,
                 .admin-routes-row,
@@ -373,9 +361,8 @@ export default function AdminRoutesPage() {
                 .admin-routes-error,
                 .admin-routes-kicker {
                     border: 1px solid rgba(255, 255, 255, 0.08);
-                    background: linear-gradient(145deg, rgba(12, 22, 36, 0.42), rgba(11, 20, 34, 0.62));
-                    box-shadow: 0 20px 50px rgba(4, 10, 22, 0.26);
-                    backdrop-filter: blur(18px);
+                    background: rgba(255, 255, 255, 0.04);
+                    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
                 }
                 .admin-routes-kicker {
                     display: inline-flex;
@@ -385,13 +372,13 @@ export default function AdminRoutesPage() {
                     background: rgba(34, 197, 94, 0.12);
                 }
                 .admin-routes-panel {
-                    border-radius: 1.5rem;
+                    border-radius: 0;
                 }
                 .admin-routes-search {
                     display: flex;
                     align-items: center;
                     gap: 0.65rem;
-                    border-radius: 1rem;
+                    border-radius: 0.5rem;
                     padding: 0.85rem 0.95rem;
                     color: #cbd5e1;
                 }
@@ -410,7 +397,7 @@ export default function AdminRoutesPage() {
                     align-items: center;
                     justify-content: center;
                     gap: 0.55rem;
-                    border-radius: 0.95rem;
+                    border-radius: 0.375rem;
                     padding: 0.85rem 1rem;
                     font-weight: 600;
                     transition: transform 0.2s ease, background 0.2s ease;
@@ -425,12 +412,12 @@ export default function AdminRoutesPage() {
                 }
                 .admin-routes-row {
                     width: 100%;
-                    border-radius: 1rem;
+                    border-radius: 0.5rem;
                     padding: 0.95rem;
                     text-align: left;
                 }
                 .admin-routes-filter {
-                    border-radius: 999px;
+                    border-radius: 0.375rem;
                     padding: 0.42rem 0.8rem;
                     border: 1px solid rgba(255, 255, 255, 0.1);
                     background: rgba(255, 255, 255, 0.04);
@@ -439,13 +426,13 @@ export default function AdminRoutesPage() {
                     font-weight: 600;
                 }
                 .admin-routes-filter-active {
-                    background: rgba(96, 165, 250, 0.14);
-                    border-color: rgba(96, 165, 250, 0.28);
-                    color: #eff6ff;
+                    background: rgba(251, 191, 36, 0.12);
+                    border-color: rgba(251, 191, 36, 0.28);
+                    color: #fef3c7;
                 }
                 .admin-routes-row-active {
-                    border-color: rgba(96, 165, 250, 0.3);
-                    background: linear-gradient(145deg, rgba(26, 62, 106, 0.8), rgba(11, 20, 34, 0.72));
+                    border-color: rgba(251, 191, 36, 0.3);
+                    background: rgba(251, 191, 36, 0.08);
                 }
                 .admin-routes-badge {
                     border-radius: 999px;
@@ -471,7 +458,7 @@ export default function AdminRoutesPage() {
                 .admin-routes-metric,
                 .admin-routes-step,
                 .admin-routes-note-card {
-                    border-radius: 1rem;
+                    border-radius: 0.5rem;
                     padding: 0.9rem 1rem;
                 }
                 .admin-routes-step {
@@ -484,7 +471,7 @@ export default function AdminRoutesPage() {
                     display: flex;
                     gap: 0.75rem;
                     align-items: flex-start;
-                    border-radius: 1rem;
+                    border-radius: 0.5rem;
                     padding: 0.95rem 1rem;
                     border: 1px solid rgba(255, 255, 255, 0.08);
                 }
@@ -533,7 +520,7 @@ export default function AdminRoutesPage() {
                 }
                 .admin-routes-textarea textarea {
                     min-height: 130px;
-                    border-radius: 1rem;
+                    border-radius: 0.5rem;
                     padding: 0.95rem 1rem;
                     border: 1px solid rgba(255, 255, 255, 0.08);
                     background: rgba(8, 15, 28, 0.5);
@@ -558,7 +545,7 @@ export default function AdminRoutesPage() {
                 .admin-routes-empty,
                 .admin-routes-error {
                     margin-top: 1rem;
-                    border-radius: 1rem;
+                    border-radius: 0.5rem;
                     padding: 1rem;
                     display: flex;
                     align-items: center;
@@ -572,6 +559,6 @@ export default function AdminRoutesPage() {
                     border-color: rgba(248, 113, 113, 0.22);
                 }
             `} />
-        </div>
+        </AdminPageShell>
     );
 }

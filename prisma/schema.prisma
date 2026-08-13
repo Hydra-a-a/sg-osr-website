@@ -95,6 +95,19 @@ enum LostFoundAttachmentKind {
   VIDEO
 }
 
+enum SubmissionOperation {
+  TICKET
+  PROPOSAL
+  LOST_FOUND
+}
+
+enum SubmissionAttemptState {
+  PENDING
+  SUCCEEDED
+  FAILED
+  COMPENSATED
+}
+
 model AuthorizedUser {
   id                  String    @id @default(cuid())
   email               String    @unique
@@ -342,6 +355,15 @@ model NewsPost {
   fbLink          String   @default("")
   targetPagesJson Json
   enabled         Boolean  @default(true)
+  featured        Boolean  @default(false)
+  manualTitle     String   @default("")
+  manualBody      String   @default("")
+  articleTitle    String   @default("")
+  articleBody     String   @default("")
+  imageAlt        String   @default("")
+  section         String   @default("")
+  sortOrder       Int?
+  version         Int      @default(1)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -382,6 +404,7 @@ model DirectoryEntry {
   publicDataJson  Json
   enabled         Boolean  @default(true)
   sortOrder       Int      @default(0)
+  version         Int      @default(1)
   updatedAt       DateTime @updatedAt
   logo            DirectoryLogo?
 
@@ -420,8 +443,10 @@ model QuickLink {
   href        String
   category    String   @default("")
   description String   @default("")
+  icon        String   @default("ExternalLink")
   enabled     Boolean  @default(true)
   sortOrder   Int      @default(0)
+  version     Int      @default(1)
   updatedAt   DateTime @updatedAt
 
   @@index([enabled, sortOrder])
@@ -438,10 +463,61 @@ model HubGuide {
   publicDataJson Json
   enabled        Boolean  @default(true)
   sortOrder      Int      @default(0)
+  version        Int      @default(1)
   updatedAt      DateTime @updatedAt
 
   @@index([enabled, sortOrder])
   @@index([driveFileId])
+}
+
+model SubmissionAttempt {
+  id                    String                 @id @default(cuid())
+  operation             SubmissionOperation
+  keyHash               String
+  actorHash             String
+  payloadHash           String
+  state                 SubmissionAttemptState @default(PENDING)
+  entityId              String?
+  stagedDriveFileId     String?
+  stagedDriveResourceKey String?
+  errorCode             String?
+  expiresAt             DateTime
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@unique([operation, keyHash])
+  @@index([state, expiresAt])
+  @@index([entityId])
+}
+
+model AdminContentDraft {
+  id             String   @id @default(cuid())
+  contentType    String
+  entityId       String
+  baseVersion    Int
+  payloadJson    Json
+  stagedAssets   Json?
+  editorId       String
+  editorLabel    String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([contentType, entityId])
+  @@index([editorId, updatedAt])
+}
+
+model AdminContentRevision {
+  id              String   @id @default(cuid())
+  contentType     String
+  entityId        String
+  version         Int
+  payloadJson     Json
+  publisherId     String
+  publisherLabel  String   @default("")
+  publishedAt     DateTime @default(now())
+
+  @@unique([contentType, entityId, version])
+  @@index([contentType, entityId, publishedAt])
 }
 
 model LostFoundItem {

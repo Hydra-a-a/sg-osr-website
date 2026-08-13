@@ -15,6 +15,7 @@ import { emitProposalSubmissionNotifications, processProposalNotifications } fro
 import { triggerProposalQueueInBackground } from '@/lib/queue-trigger';
 import { safeProcessImmediateNotifications } from '@/lib/immediate-notification-processing';
 import type { ProposalSubmissionData } from '@/features/proposals/schema';
+import { resolveSubmissionSource } from '@/lib/submission-source';
 
 const PROPOSAL_NOTIFICATION_QUEUE_TAB = process.env.PROPOSAL_NOTIFICATION_QUEUE_SHEET_TAB || 'Project_Proposal_Notification_Queue';
 const PROPOSAL_NOTIFICATION_QUEUE_RANGE = `${PROPOSAL_NOTIFICATION_QUEUE_TAB}!A2:N`;
@@ -32,6 +33,10 @@ export async function createProposalSubmission(input: {
   submitterEmail: string;
   submitterName: string;
 }) {
+  if (resolveSubmissionSource('PROPOSAL_SOURCE') === 'db') {
+    throw new ApiError(503, 'PROPOSAL_DB_CUTOVER_REQUIRED', 'Proposal database cutover is not enabled for this deployment.', undefined, false);
+  }
+
   const { data, attachment, submitterEmail, submitterName } = input;
   const buffer = Buffer.from(await attachment.arrayBuffer());
 

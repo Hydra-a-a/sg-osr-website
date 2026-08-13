@@ -218,3 +218,38 @@ export async function removeDirectoryLogo(input: { directoryKey: string; actorEm
 
     return { directoryKey, imageUrl: '', sheetsSync: 'pending' as const };
 }
+
+export async function stageDirectoryLogo(input: { directoryKey: string; file: File; actorEmail: string }) {
+    const directoryKey = normalizeDirectoryKey(input.directoryKey);
+    const validated = await validateDirectoryLogoFile(input.file);
+    const prisma = await getPrisma();
+    const existing = await prisma.directoryEntry.findUnique({
+        where: { directoryKey },
+        select: { id: true, version: true, enabled: true, name: true, entryType: true, roleOrOffice: true, councilOrUnit: true, email: true, imageUrl: true, profileUrl: true, publicDataJson: true, sortOrder: true },
+    });
+    if (!existing || !existing.enabled) throw new ApiError(404, 'DIRECTORY_ENTRY_NOT_FOUND', 'Directory entry not found.');
+
+    const uploaded = await uploadOrganizationLogoToDrive({ directoryKey, fileName: validated.fileName, mimeType: validated.mimeType, buffer: validated.buffer });
+    const imageUrl = toDirectoryLogoUrl(uploaded.fileId, uploaded.resourceKey);
+    try {
+        const currentDraft = await prisma.adminContentDraft.findUnique({ where: { contentType_entityId: { contentType: 'directory', entityId: existing.id } } });
+        const previousAsset = currentDraft?.stagedAssets && typeof currentDraft.stagedAssets === 'object' ? currentDraft.stagedAssets : null;
+        await prisma.adminContentDraft.upsert({
+            where: { contentType_entityId: { contentType: 'directory', entityId: existing.id } },
+            create: {
+                contentType: 'directory', entityId: existing.id, baseVersion: existing.version || 1,
+                payloadJson: { directoryKey, entryType: existing.entryType, name: existing.name, roleOrOffice: existing.roleOrOffice, councilOrUnit: existing.councilOrUnit, email: existing.email, imageUrl: existing.imageUrl || '', profileUrl: existing.profileUrl || '', publicDataJson: existing.publicDataJson || {}, enabled: existing.enabled, sortOrder: existing.sortOrder },
+                stagedAssets: { driveFileId: uploaded.fileId, resourceKey: uploaded.resourceKey, fileName: validated.fileName, mimeType: validated.mimeType, sizeBytes: validated.sizeBytes, imageUrl },
+                editorId: input.actorEmail, editorLabel: input.actorEmail,
+            },
+            update: { stagedAssets: { driveFileId: uploaded.fileId, resourceKey: uploaded.resourceKey, fileName: validated.fileName, mimeType: validated.mimeType, sizeBytes: validated.sizeBytes, imageUrl }, editorId: input.actorEmail, editorLabel: input.actorEmail },
+        });
+        if (previousAsset && typeof previousAsset === 'object' && 'driveFileId' in previousAsset && String(previousAsset.driveFileId) !== uploaded.fileId) {
+            await trashDriveFileById(String(previousAsset.driveFileId), getOrganizationLogosFolderId());
+        }
+    } catch (error) {
+        await trashDriveFileById(uploaded.fileId, getOrganizationLogosFolderId());
+        throw error;
+    }
+    return { directoryKey, imageUrl, fileName: validated.fileName, mimeType: validated.mimeType, sizeBytes: validated.sizeBytes, status: 'staged' as const };
+}

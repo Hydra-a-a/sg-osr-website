@@ -26,6 +26,7 @@ import { TrackEntryRail } from '@/components/track/TrackEntryRail';
 import { TrackProgressPanel } from '@/components/track/TrackProgressPanel';
 import { TrackRedactedShell } from '@/components/track/TrackRedactedShell';
 import type { StoredTicket, TrackStep, TrackTicket } from '@/components/track/types';
+import { classifyClientError, clientErrorMessage, type ClientErrorKind } from '@/lib/client-error';
 
 const STORAGE_KEY = 'osr_submitted_tickets';
 const ACCESS_TOKEN_STORAGE_KEY = 'osr_ticket_access_tokens';
@@ -472,6 +473,7 @@ function TrackContent() {
     const [ticketId, setTicketId] = useState(initialId);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [errorKind, setErrorKind] = useState<ClientErrorKind | null>(null);
     const [history, setHistory] = useState<StoredTicket[]>([]);
     const [ticket, setTicket] = useState<TrackTicket | null>(null);
 
@@ -522,6 +524,7 @@ function TrackContent() {
 
         setLoading(true);
         setError(null);
+        setErrorKind(null);
         setTicket(null);
 
         const query = new URLSearchParams({ id });
@@ -535,7 +538,7 @@ function TrackContent() {
             const response = await fetch(`/api/tickets/${encodeURIComponent(id)}${responseQuery}`, { cache: 'no-store' });
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.error?.message || 'Failed to locate ticket');
+                throw new Error(`${response.status} ${data.error?.message || 'Failed to locate ticket'}`);
             }
 
             const rawStatus = data.ticket?.status || 'Open';
@@ -556,7 +559,11 @@ function TrackContent() {
 
             setTicketId('');
         } catch (lookupError: unknown) {
-            setError(lookupError instanceof Error ? lookupError.message : 'An error occurred while tracking this ticket.');
+            const kind = classifyClientError(lookupError);
+            setErrorKind(kind);
+            setError(kind === 'unknown' || kind === 'not-found'
+                ? (lookupError instanceof Error ? lookupError.message : 'That ticket could not be found.')
+                : clientErrorMessage(kind));
         } finally {
             setLoading(false);
         }
@@ -635,8 +642,15 @@ function TrackContent() {
                         <div className="flex gap-4">
                             <XCircle className="mt-0.5 shrink-0 text-red-500" size={20} />
                             <div>
-                                <h3 className="text-lg font-semibold tracking-tight text-strong">We couldn&apos;t find that ticket</h3>
+                                <h3 className="text-lg font-semibold tracking-tight text-strong">
+                                    {errorKind === 'offline' || errorKind === 'service' || errorKind === 'timeout' ? 'We could not reach the ticket service' : 'We couldn&apos;t find that ticket'}
+                                </h3>
                                 <p className="mt-2 text-sm text-body">{error}</p>
+                                {errorKind === 'offline' || errorKind === 'service' || errorKind === 'timeout' ? (
+                                    <p className="mt-4 border-t border-[rgba(220,38,38,0.12)] pt-4 text-sm text-subtle">
+                                        Reconnect or try again shortly. Your ticket ID was not treated as invalid.
+                                    </p>
+                                ) : null}
                                 <p className="mt-4 border-t border-[rgba(220,38,38,0.12)] pt-4 text-sm text-subtle">
                                     Double-check the exact ID from your confirmation email. Newly submitted tickets may take a few moments to appear, and protected tickets may also require the access token that came with the confirmation link.
                                 </p>

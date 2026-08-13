@@ -13,6 +13,14 @@ import {
 } from '@/lib/lost-found';
 import { LostFoundPublicFilterSchema, LostFoundReportSchema } from '@/schemas/lost-found';
 import { LostFoundReportType, LostFoundSource } from '@prisma/client';
+import { createHash } from 'node:crypto';
+import {
+    hashSubmissionPayload,
+    markSubmissionFailed,
+    markSubmissionSucceeded,
+    reserveSubmissionAttempt,
+} from '@/lib/idempotency';
+import { normalizeIdempotencyKey, submissionResponseHeaders } from '@/lib/idempotency-contract';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,22 +98,70 @@ export async function POST(request: NextRequest) {
             throw new ApiError(400, 'INVALID_PAYLOAD', 'Complete the report details before submitting.');
         }
 
-        const itemId = await createLostFoundItem({
-            source: LostFoundSource.STUDENT,
-            reportType: parsed.data.reportType as LostFoundReportType,
-            title: sanitizeText(parsed.data.title),
-            description: sanitizeText(parsed.data.description),
-            location: sanitizeText(parsed.data.location),
-            eventDate: parseEventDate(parsed.data.eventDate),
-            submitterEmail: email,
-            submitterName: sanitizeText(session.user.name || 'RTU Student'),
-        }, files);
+        const idempotencyKey = normalizeIdempotencyKey(request.headers.get('Idempotency-Key'));
+        const payloadHash = idempotencyKey
+            ? hashSubmissionPayload('LOST_FOUND', {
+                ...parsed.data,
+                attachments: files.map((file) => ({
+                    fileName: file.fileName,
+                    mimeType: file.mimeType,
+                    sizeBytes: file.sizeBytes,
+                    contentHash: createHash('sha256').update(file.buffer).digest('hex'),
+                })),
+            })
+            : null;
+        const reservation = idempotencyKey && payloadHash
+            ? await reserveSubmissionAttempt({ operation: 'LOST_FOUND', idempotencyKey, actor: email, payloadHash })
+            : null;
+
+        if (reservation?.kind === 'replayed') {
+            return withNoStore(NextResponse.json({
+                success: true,
+                itemId: reservation.entityId,
+                status: 'PENDING_REVIEW',
+                replayed: true,
+            }, { headers: submissionResponseHeaders(true) }));
+        }
+        if (reservation?.kind === 'in_progress') {
+            const response = toApiResponse(new ApiError(409, 'SUBMISSION_IN_PROGRESS', 'This report is already being submitted.'));
+            response.headers.set('Retry-After', String(reservation.retryAfterSeconds));
+            response.headers.set('Idempotency-Replayed', 'false');
+            return withNoStore(response);
+        }
+        if (reservation?.kind === 'reused') {
+            const response = toApiResponse(new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'This idempotency key was already used for different report data.'));
+            response.headers.set('Idempotency-Replayed', 'false');
+            return withNoStore(response);
+        }
+
+        let itemId: string;
+        try {
+            itemId = await createLostFoundItem({
+                source: LostFoundSource.STUDENT,
+                reportType: parsed.data.reportType as LostFoundReportType,
+                title: sanitizeText(parsed.data.title),
+                description: sanitizeText(parsed.data.description),
+                location: sanitizeText(parsed.data.location),
+                eventDate: parseEventDate(parsed.data.eventDate),
+                submitterEmail: email,
+                submitterName: sanitizeText(session.user.name || 'RTU Student'),
+            }, files, reservation?.kind === 'reserved' ? reservation.attemptId : undefined);
+            if (reservation?.kind === 'reserved') {
+                await markSubmissionSucceeded({ attemptId: reservation.attemptId, entityId: itemId });
+            }
+        } catch (error) {
+            if (reservation?.kind === 'reserved') {
+                await markSubmissionFailed(reservation.attemptId, error instanceof ApiError ? error.code : 'SUBMISSION_FAILED').catch(() => undefined);
+            }
+            throw error;
+        }
 
         return withNoStore(NextResponse.json({
             success: true,
             itemId,
             status: 'PENDING_REVIEW',
-        }, { status: 201 }));
+            replayed: false,
+        }, { status: 201, headers: submissionResponseHeaders(false) }));
     } catch (error) {
         console.error('[Lost Found API] POST failed:', redactErrorForLog(error));
         return withNoStore(toApiResponse(error));

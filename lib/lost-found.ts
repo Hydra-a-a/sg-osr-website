@@ -13,6 +13,7 @@ import { prisma } from '@/lib/prisma';
 import { ApiError } from '@/lib/api-errors';
 import { trashLostFoundAttachmentById, uploadLostFoundAttachmentToDrive } from '@/lib/google-drive';
 import { redactErrorForLog } from '@/lib/security';
+import { recordStagedDriveReference } from '@/lib/idempotency';
 
 const MAX_ATTACHMENTS = 3;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -118,7 +119,7 @@ export async function validateLostFoundAttachments(files: File[]): Promise<Prepa
     return prepared;
 }
 
-async function attachFiles(itemId: string, files: PreparedLostFoundAttachment[]): Promise<void> {
+async function attachFiles(itemId: string, files: PreparedLostFoundAttachment[], submissionAttemptId?: string): Promise<void> {
     const uploadedFileIds: string[] = [];
 
     try {
@@ -129,8 +130,17 @@ async function attachFiles(itemId: string, files: PreparedLostFoundAttachment[])
                 fileName: file.fileName,
                 mimeType: file.mimeType,
                 buffer: file.buffer,
+                submissionAttemptId,
             });
             uploadedFileIds.push(uploaded.fileId);
+
+            if (submissionAttemptId) {
+                await recordStagedDriveReference({
+                    attemptId: submissionAttemptId,
+                    fileId: uploaded.fileId,
+                    resourceKey: uploaded.resourceKey,
+                });
+            }
 
             await prisma.lostFoundAttachment.create({
                 data: {
@@ -243,7 +253,7 @@ export async function getPublicLostFoundItem(itemId: string) {
     return item ? toPublicItem(item) : null;
 }
 
-export async function createLostFoundItem(input: LostFoundInput, files: PreparedLostFoundAttachment[]) {
+export async function createLostFoundItem(input: LostFoundInput, files: PreparedLostFoundAttachment[], submissionAttemptId?: string) {
     if (input.source === LostFoundSource.CSO && input.csoReference?.trim()) {
         const existing = await prisma.lostFoundItem.findFirst({
             where: { source: LostFoundSource.CSO, csoReference: input.csoReference.trim() },
@@ -278,7 +288,7 @@ export async function createLostFoundItem(input: LostFoundInput, files: Prepared
         itemCreated = true;
 
         if (files.length > 0) {
-            await attachFiles(item.itemId, files);
+            await attachFiles(item.itemId, files, submissionAttemptId);
         }
 
         return item.itemId;

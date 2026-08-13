@@ -8,6 +8,7 @@ import { requireSameOriginRequest } from '@/lib/request-guards';
 import { logAuditAction } from '@/lib/audit';
 import { TicketSubmissionSchema } from '@/features/tickets/schema';
 import { createTicketSubmission } from '@/features/tickets/server/create-ticket';
+import { normalizeIdempotencyKey, submissionResponseHeaders } from '@/lib/idempotency-contract';
 
 const MIN_SUBMISSION_AGE_MS = 1000;
 
@@ -136,6 +137,8 @@ export async function POST(request: Request) {
 
   try {
     requireSameOriginRequest(request);
+    // Legacy Sheets consumers may omit this header; durable replay guarantees begin with the DB source cutover.
+    normalizeIdempotencyKey(request.headers.get('Idempotency-Key'));
   } catch (error) {
     logAuditAction('TICKET_SUBMISSION_FAILED', { ip, reason: 'Origin check failed' });
     return withNoStore(toApiResponse(error));
@@ -168,7 +171,7 @@ export async function POST(request: Request) {
     const data = result.data;
 
     if (data.honeypot) {
-      return withNoStore(NextResponse.json({ success: true, ticketId: 'TKT-0000-FAKE' }));
+      return withNoStore(NextResponse.json({ success: true, ticketId: 'TKT-0000-FAKE', replayed: false }, { headers: submissionResponseHeaders(false) }));
     }
     if (data.timestamp && Date.now() - data.timestamp < MIN_SUBMISSION_AGE_MS) {
       return withNoStore(NextResponse.json({ success: true, ticketId: 'TKT-0000-FAKE' }));
@@ -182,7 +185,7 @@ export async function POST(request: Request) {
       ip,
     });
 
-    return withNoStore(NextResponse.json(responseBody));
+    return withNoStore(NextResponse.json({ ...responseBody, replayed: false }, { headers: submissionResponseHeaders(false) }));
   } catch (error) {
     console.error('[Tickets API] Unhandled error:', redactErrorForLog(error));
     if (error instanceof SyntaxError) {

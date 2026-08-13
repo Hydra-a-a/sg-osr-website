@@ -1,7 +1,5 @@
-'use client';
-
-import useSWR from 'swr';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
     ArrowTopRightOnSquareIcon,
     BuildingLibraryIcon,
@@ -44,15 +42,23 @@ const fallbackLinks: QuickLink[] = [
     },
 ];
 
-export default function Hero() {
-    const { data: linksResponse } = useSWR('/api/config/links', (url: string) => fetch(url).then((response) => response.json()));
-
-    const links: QuickLink[] = linksResponse?.data || fallbackLinks;
+export default function Hero({ links: configuredLinks }: { links?: QuickLink[] }) {
+    const links: QuickLink[] = configuredLinks?.length ? configuredLinks : fallbackLinks;
     const heroLinks = links.length > 0 ? links.slice(0, 3) : fallbackLinks;
 
     return (
         <section className="home-hero-section relative overflow-hidden">
-            <div className="home-hero-photo" aria-hidden="true" />
+            <div className="home-hero-photo" aria-hidden="true">
+                <Image
+                    src="/images/rtu-campus-home.webp"
+                    alt=""
+                    fill
+                    priority
+                    sizes="100vw"
+                    quality={70}
+                    className="home-hero-image"
+                />
+            </div>
             <div className="portal-noise-overlay" aria-hidden="true" />
             <div className="home-hero-texture" aria-hidden="true" />
 

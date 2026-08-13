@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ExternalLink, Loader2, MessageSquare, Paperclip, Save, Search, Send } from 'lucide-react';
-import { NoncedStyle } from '@/components/CspNonceProvider';
+import { ExternalLink, Loader2, MessageSquare, Paperclip, Save, Search, Send } from 'lucide-react';
+import { AdminNotice, AdminPageShell } from '@/components/admin/AdminPageShell';
+import AdminInspector from '@/components/admin/AdminInspector';
 
 const STATUS_OPTIONS = ['Pending Review', 'Under Review', 'Approved', 'Rejected', 'Needs Revision'] as const;
 type ProposalStatus = typeof STATUS_OPTIONS[number];
@@ -57,6 +57,7 @@ export default function AdminProposalsPage() {
     const [query, setQuery] = useState('');
 
     const [activeRow, setActiveRow] = useState<number | null>(null);
+    const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
     const [status, setStatus] = useState<ProposalStatus>('Pending Review');
     const [reviewNotes, setReviewNotes] = useState('');
     const [reviewAttachment, setReviewAttachment] = useState<File | null>(null);
@@ -174,6 +175,7 @@ export default function AdminProposalsPage() {
 
     function selectProposal(proposal: ProposalItem) {
         setActiveRow(proposal.rowNumber);
+        setMobileDetailOpen(true);
         setStatus((STATUS_OPTIONS.includes(proposal.status as ProposalStatus) ? proposal.status : 'Pending Review') as ProposalStatus);
         setReviewNotes(proposal.reviewNotes || '');
         setReviewAttachment(null);
@@ -352,29 +354,15 @@ export default function AdminProposalsPage() {
     }
 
     return (
-        <div className="services-shell relative overflow-hidden min-h-screen">
-            <div className="services-noise" aria-hidden="true" />
+        <AdminPageShell
+            eyebrow="Proposal operations"
+            title="Project proposals console"
+            description="Review submissions, update proposal outcomes, and keep decision notes synchronized to your sheet ledger."
+            icon={MessageSquare}
+        >
 
-            <section className="relative z-10 pt-20 pb-14 md:pt-28 md:pb-20">
-                <div className="container-main max-w-7xl">
-                    <Link
-                        href="/services/admin"
-                        className="inline-flex items-center gap-2 text-sm font-medium text-slate-200 hover:text-white transition-colors mb-8"
-                    >
-                        <ArrowLeft size={16} /> Return to Admin Hub
-                    </Link>
-
-                    <div className="mb-8 md:mb-10">
-                        <h1 className="text-3xl md:text-5xl font-bold text-white leading-tight tracking-tight">
-                            Project Proposals Control Console
-                        </h1>
-                        <p className="mt-4 text-slate-300 max-w-3xl leading-relaxed">
-                            Review submissions, update proposal outcomes, and keep decision notes synchronized to your sheet ledger.
-                        </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6">
-                        <div className="rounded-2xl border border-white/10 bg-[#0f223f]/60 backdrop-blur-sm p-5 md:p-6 shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
+                    <div className="admin-proposals-workspace mt-8">
+                        <div className="admin-proposals-queue min-h-0 w-full border border-white/10 bg-white/[0.04] p-5 md:p-6 shadow-[0_12px_36px_rgba(0,0,0,0.2)]">
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
                                 <h2 className="text-xl font-semibold text-white">Sheet-Synced Proposals</h2>
                                 <div className="relative w-full md:w-80">
@@ -395,7 +383,7 @@ export default function AdminProposalsPage() {
                             ) : filteredProposals.length === 0 ? (
                                 <div className="py-16 text-center text-slate-400">No proposals matched your filters.</div>
                             ) : (
-                                <div className="max-h-[62vh] overflow-auto pr-1 space-y-3">
+                                <div className="max-h-[50dvh] overflow-y-auto overscroll-contain pr-1 space-y-3 sm:max-h-[62vh] xl:max-h-[calc(100dvh-18rem)]">
                                     {filteredProposals.map((proposal) => {
                                         const isActive = activeRow === proposal.rowNumber;
                                         return (
@@ -427,7 +415,7 @@ export default function AdminProposalsPage() {
                             )}
                         </div>
 
-                        <div className="rounded-2xl border border-white/10 bg-[#0f223f]/60 backdrop-blur-sm p-5 md:p-6 shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
+                        <AdminInspector mode="drawer" open={Boolean(activeProposal && mobileDetailOpen)} onClose={() => setMobileDetailOpen(false)} title={activeProposal?.title || 'Proposal inspector'} eyebrow="Record inspector" drawerSize="xl">
                             {!activeProposal ? (
                                 <div className="text-slate-300 py-10">Select a proposal to edit controls.</div>
                             ) : (
@@ -519,12 +507,12 @@ export default function AdminProposalsPage() {
                                     </div>
                                 </>
                             )}
-                        </div>
+                        </AdminInspector>
                     </div>
 
                     {activeProposal ? (
-                        <div className="mt-6 rounded-2xl border border-white/10 bg-[#0f223f]/60 backdrop-blur-sm p-5 md:p-6 shadow-[0_8px_30px_rgba(0,0,0,0.25)]">
-                            <div className="flex items-center justify-between gap-4 mb-5">
+                        <details open className="mt-6 border border-white/10 bg-white/[0.04] p-5 md:p-6 shadow-[0_12px_36px_rgba(0,0,0,0.2)]">
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 mb-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">
                                 <div>
                                     <h2 className="text-xl font-semibold text-white flex items-center gap-2">
                                         <MessageSquare size={18} className="text-blue-300" />
@@ -537,7 +525,7 @@ export default function AdminProposalsPage() {
                                         <Loader2 size={16} className="animate-spin" /> Loading thread...
                                     </div>
                                 ) : null}
-                            </div>
+                            </summary>
 
                             {commentsError ? (
                                 <p className="mb-4 text-sm text-red-300">{commentsError}</p>
@@ -658,49 +646,12 @@ export default function AdminProposalsPage() {
                                     Send Officer Reply
                                 </button>
                             </div>
-                        </div>
+                        </details>
                     ) : null}
 
-                    {success ? (
-                        <div className="mt-6 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-200 px-4 py-3 text-sm">{success}</div>
-                    ) : null}
+                    {success ? <div className="mt-6"><AdminNotice tone="success">{success}</AdminNotice></div> : null}
 
-                    {error ? (
-                        <div className="mt-6 rounded-xl border border-red-500/20 bg-red-500/10 text-red-200 px-4 py-3 text-sm">{error}</div>
-                    ) : null}
-                </div>
-            </section>
-
-            <NoncedStyle css={`
-                .services-shell {
-                    background: linear-gradient(130deg, #1a3352 0%, #234874 48%, #3e6596 100%);
-                    background-image:
-                        radial-gradient(130% 120% at 8% 12%, rgba(232, 207, 146, 0.18) 0%, rgba(232, 207, 146, 0) 52%),
-                        radial-gradient(140% 120% at 92% 8%, rgba(87, 131, 186, 0.28) 0%, rgba(87, 131, 186, 0) 58%),
-                        linear-gradient(130deg, #1a3352 0%, #234874 48%, #3e6596 100%);
-                    color: #e2e8f0;
-                }
-
-                .services-shell::before {
-                    content: '';
-                    position: absolute;
-                    inset: 0;
-                    background: radial-gradient(circle at top, rgba(255,255,255,0.03) 0%, transparent 100%);
-                    pointer-events: none;
-                    z-index: 1;
-                }
-
-                .services-noise {
-                    position: absolute;
-                    inset: 0;
-                    background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
-                    background-size: 32px 32px;
-                    opacity: 0.2;
-                    mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
-                    pointer-events: none;
-                    z-index: 2;
-                }
-            `} />
-        </div>
+                    {error ? <div className="mt-6"><AdminNotice tone="danger" role="alert">{error}</AdminNotice></div> : null}
+        </AdminPageShell>
     );
 }
