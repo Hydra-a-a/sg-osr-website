@@ -12,6 +12,7 @@ import NetworkStatusBanner from "@/components/NetworkStatusBanner";
 import { getSiteConfig } from "@/lib/slideConfig";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -61,6 +62,7 @@ export default async function RootLayout({ children }) {
           >
             {children}
           </RouteAwareSiteChrome>
+          <SpeedInsights />
         </CspNonceProvider>
       </body>
     </html>

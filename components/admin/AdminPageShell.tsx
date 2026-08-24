@@ -41,7 +41,6 @@ export function AdminPageShell({
     eyebrow,
     title,
     description,
-    icon: Icon,
     children,
     actions,
     backLabel = 'Back to Operations Deck',
@@ -60,10 +59,6 @@ export function AdminPageShell({
 
                     <header className="mt-5 flex flex-col gap-4 border-b border-white/10 pb-6 lg:flex-row lg:items-end lg:justify-between">
                         <div className="max-w-3xl">
-                            <div className="inline-flex items-center gap-2 border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-amber-100">
-                                <Icon size={14} aria-hidden="true" />
-                                {eyebrow}
-                            </div>
                             <h1 className="mt-3 text-2xl font-bold leading-tight tracking-[-0.02em] text-white md:text-4xl">{title}</h1>
                             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">{description}</p>
                         </div>

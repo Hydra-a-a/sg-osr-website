@@ -804,6 +804,7 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                     line-height: 1.04;
                     font-weight: 700;
                     text-wrap: balance;
+                    filter: drop-shadow(0 2px 2px rgba(3, 10, 20, 0.78)) drop-shadow(0 8px 16px rgba(3, 10, 20, 0.46));
                 }
 
                 .hub-display-accent {
@@ -816,12 +817,14 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                 .hub-lead {
                     font-size: clamp(1rem, 1.1vw + 0.5rem, 1.12rem);
                     line-height: 1.75;
+                    text-shadow: 0 1px 3px rgba(3, 10, 20, 0.82), 0 5px 12px rgba(3, 10, 20, 0.46);
                 }
 
                 .hub-academic-year {
                     color: #fde68a;
                     font-size: 0.95rem;
                     font-weight: 600;
+                    text-shadow: 0 1px 3px rgba(3, 10, 20, 0.84), 0 4px 10px rgba(3, 10, 20, 0.44);
                 }
 
                 .hub-shortcut-card,
