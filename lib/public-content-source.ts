@@ -64,6 +64,28 @@ async function queryHubGuidesFromDb() {
     const rows = await prisma.hubGuide.findMany({ where: { enabled: true }, orderBy: [{ sortOrder: 'asc' }, { updatedAt: 'desc' }] });
     return rows.flatMap((row: any) => {
         const data = row.publicDataJson && typeof row.publicDataJson === 'object' ? row.publicDataJson as Record<string, unknown> : {};
+        const driveFileId = String(row.driveFileId || '').trim();
+        if (/^[a-zA-Z0-9_-]{10,}$/.test(driveFileId)) {
+            const resourceKey = String(row.resourceKey || '').trim();
+            const previewParams = new URLSearchParams();
+            if (/^[a-zA-Z0-9_-]{4,200}$/.test(resourceKey)) previewParams.set('resourcekey', resourceKey);
+            const previewUrl = `/api/hub/guides/preview/${encodeURIComponent(driveFileId)}${previewParams.size ? `?${previewParams}` : ''}`;
+            const downloadParams = new URLSearchParams(previewParams);
+            downloadParams.set('download', '1');
+            return [{
+                id: row.id,
+                title: row.title,
+                description: row.description || '',
+                category: row.category || 'Student Handbook & Guides',
+                source: 'drive',
+                embedUrl: previewUrl,
+                viewUrl: previewUrl,
+                downloadUrl: `${previewUrl.split('?')[0]}?${downloadParams}`,
+                canEmbed: true,
+                mimeType: 'application/pdf',
+                sortOrder: row.sortOrder,
+            }];
+        }
         const viewUrl = String(data.viewUrl || row.fileUrl || '');
         const embedUrl = String(data.embedUrl || viewUrl);
         const downloadUrl = String(data.downloadUrl || viewUrl);
@@ -74,7 +96,7 @@ async function queryHubGuidesFromDb() {
             title: row.title,
             description: row.description || '',
             category: row.category || 'Student Handbook & Guides',
-            source: row.driveFileId ? 'drive' : 'direct',
+            source: 'direct',
             embedUrl,
             viewUrl,
             downloadUrl,

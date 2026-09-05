@@ -15,9 +15,10 @@ function getDriveClient() {
     return google.drive({ version: 'v3', auth });
 }
 
-export async function getDrivePdfStreamById(fileId: string, resourceKey?: string): Promise<{
+export async function getDrivePdfStreamById(fileId: string, resourceKey?: string, expectedParentId?: string): Promise<{
     stream: Readable;
     fileName?: string | null;
+    parents?: string[];
 } | null> {
     const normalizedFileId = (fileId || '').trim();
     if (!normalizedFileId) {
@@ -29,12 +30,12 @@ export async function getDrivePdfStreamById(fileId: string, resourceKey?: string
     try {
         const metadataResponse = await drive.files.get({
             fileId: normalizedFileId,
-            fields: 'id,name,mimeType',
+            fields: 'id,name,mimeType,parents',
             supportsAllDrives: true,
             resourceKey,
         } as any);
 
-        if (!metadataResponse.data || metadataResponse.data.mimeType !== 'application/pdf') {
+        if (!metadataResponse.data || metadataResponse.data.mimeType !== 'application/pdf' || (expectedParentId && !(metadataResponse.data.parents || []).includes(expectedParentId))) {
             return null;
         }
 
@@ -57,6 +58,7 @@ export async function getDrivePdfStreamById(fileId: string, resourceKey?: string
         return {
             stream: mediaResponse.data as Readable,
             fileName: metadataResponse.data.name || null,
+            parents: metadataResponse.data.parents || [],
         };
     } catch (error) {
         console.error('[Drive Preview] Failed to stream PDF:', redactErrorForLog(error));
@@ -171,6 +173,14 @@ export function extractGoogleDriveResourceKey(url: string): string | undefined {
 
 export function getOrganizationLogosFolderId(): string {
     const folderId = (process.env.GOOGLE_DRIVE_ORGANIZATION_LOGOS_FOLDER_ID || '').trim();
+    return folderId;
+}
+
+export function getHubGuidesFolderId(): string {
+    const folderId = (process.env.GOOGLE_DRIVE_HUB_GUIDES_FOLDER_ID || '').trim();
+    if (!folderId) {
+        throw new Error('GOOGLE_DRIVE_HUB_GUIDES_FOLDER_ID is not configured in the environment.');
+    }
     return folderId;
 }
 
@@ -430,6 +440,32 @@ export async function uploadOrganizationLogoToDrive(params: {
     } catch (error) {
         console.error('[Drive Upload] Failed to upload organization logo:', redactErrorForLog(error));
         throw new Error('Failed to upload organization logo to Google Drive.');
+    }
+}
+
+export async function uploadHubGuidePdfToDrive(params: {
+    fileName: string;
+    mimeType: 'application/pdf';
+    buffer: Buffer;
+}): Promise<{ fileId: string; resourceKey: string; fileName: string }> {
+    const drive = getDriveClient();
+    const folderId = getHubGuidesFolderId();
+    const safeName = sanitizeFileBaseName(params.fileName);
+    const fileName = safeName.toLowerCase().endsWith('.pdf') ? safeName : `${safeName}.pdf`;
+
+    try {
+        const response = await drive.files.create({
+            requestBody: { name: `[HUB_GUIDE] ${fileName}`, parents: [folderId] },
+            media: { mimeType: params.mimeType, body: Readable.from(params.buffer) },
+            fields: 'id,name,resourceKey',
+            supportsAllDrives: true,
+        });
+        const fileId = response.data.id;
+        if (!fileId) throw new Error('Google Drive did not return a file ID for the Hub Guide.');
+        return { fileId, resourceKey: response.data.resourceKey || '', fileName };
+    } catch (error) {
+        console.error('[Drive Upload] Failed to upload Hub Guide PDF:', redactErrorForLog(error));
+        throw new Error('Failed to upload Hub Guide PDF to Google Drive.');
     }
 }
 

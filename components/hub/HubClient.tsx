@@ -106,19 +106,6 @@ function getDriveGuideIdentifiers(guide: HubGuide): { fileId: string; resourceKe
     return { fileId, resourceKey };
 }
 
-function getDriveInlineViewerUrl(guide: HubGuide): string {
-    const { fileId, resourceKey } = getDriveGuideIdentifiers(guide);
-    if (!fileId) {
-        return '';
-    }
-
-    if (resourceKey) {
-        return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview?resourcekey=${encodeURIComponent(resourceKey)}`;
-    }
-
-    return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview`;
-}
-
 function getDrivePreviewProxyUrl(guide: HubGuide): string {
     const { fileId, resourceKey } = getDriveGuideIdentifiers(guide);
     if (!fileId) {
@@ -247,7 +234,7 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
         const selectedGuideEmbedUrl = activeGuide
             ? (
                 activeGuide.source === 'drive'
-                    ? (getDriveInlineViewerUrl(activeGuide) || getDrivePreviewProxyUrl(activeGuide) || activeGuide.embedUrl)
+                    ? (getDrivePreviewProxyUrl(activeGuide) || activeGuide.embedUrl)
                     : activeGuide.embedUrl
             )
             : '';
@@ -533,7 +520,7 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                             </div>
                         ) : guides.length === 0 ? (
                             <div className="hub-empty-state">
-                                No PDF guides are published yet. Add or unhide rows in Student Hub Control to make documents appear here.
+                                No PDF guides are published yet. Add a Hub Guide in Website Control or publish an existing draft to make documents appear here.
                             </div>
                         ) : (
                             <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">

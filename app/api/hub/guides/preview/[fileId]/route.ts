@@ -1,7 +1,7 @@
 import { checkRateLimit } from '@/lib/rate-limit';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
-import { getClientIp } from '@/lib/security';
-import { getDrivePdfStreamById } from '@/lib/google-drive';
+import { getClientIp, redactErrorForLog } from '@/lib/security';
+import { getDrivePdfStreamById, getHubGuidesFolderId } from '@/lib/google-drive';
 
 function nodeReadableToWebStream(stream: NodeJS.ReadableStream): ReadableStream<Uint8Array> {
     return new ReadableStream<Uint8Array>({
@@ -69,24 +69,31 @@ export async function GET(
         return toApiResponse(new ApiError(400, 'INVALID_REQUEST', 'Invalid guide file id'));
     }
 
-    const parsed = new URL(request.url);
-    const resourceKey = (parsed.searchParams.get('resourcekey') || '').trim() || undefined;
+    try {
+        const parsed = new URL(request.url);
+        const rawResourceKey = (parsed.searchParams.get('resourcekey') || '').trim();
+        if (rawResourceKey && !/^[a-zA-Z0-9_-]{4,200}$/.test(rawResourceKey)) {
+            return toApiResponse(new ApiError(400, 'INVALID_REQUEST', 'Invalid guide resource key'));
+        }
+        const file = await getDrivePdfStreamById(normalizedFileId, rawResourceKey || undefined, getHubGuidesFolderId());
+        if (!file) {
+            return toApiResponse(new ApiError(404, 'NOT_FOUND', 'Guide preview unavailable'));
+        }
 
-    const file = await getDrivePdfStreamById(normalizedFileId, resourceKey);
-    if (!file) {
-        return toApiResponse(new ApiError(404, 'NOT_FOUND', 'Guide preview unavailable'));
+        const stream = nodeReadableToWebStream(file.stream);
+        const filename = sanitizeInlineFilename(file.fileName || 'guide.pdf');
+        const download = parsed.searchParams.get('download') === '1';
+        return new Response(stream, {
+            status: 200,
+            headers: {
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="${filename}"`,
+                'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
+                'X-Content-Type-Options': 'nosniff',
+            },
+        });
+    } catch (error) {
+        console.error('[Hub Guide Preview] failed:', redactErrorForLog(error));
+        return toApiResponse(new ApiError(503, 'GUIDE_PREVIEW_UNAVAILABLE', 'Guide preview is temporarily unavailable.'));
     }
-
-    const stream = nodeReadableToWebStream(file.stream);
-    const filename = sanitizeInlineFilename(file.fileName || 'guide.pdf');
-
-    return new Response(stream, {
-        status: 200,
-        headers: {
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': `inline; filename="${filename}"`,
-            'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
-            'X-Content-Type-Options': 'nosniff',
-        },
-    });
 }
