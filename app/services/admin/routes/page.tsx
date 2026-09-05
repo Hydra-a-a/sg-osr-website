@@ -132,10 +132,7 @@ export default function AdminRoutesPage() {
 
     return (
         <AdminPageShell
-            eyebrow="Transit moderation"
             title="Community routes queue"
-            description="Review student-submitted commuter guides, clean up notes if needed, and decide which routes become public."
-            icon={MapPinned}
             actions={(
                 <AdminActionButton onClick={() => void loadRoutes()} disabled={loading}>
                         <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
@@ -202,7 +199,7 @@ export default function AdminRoutesPage() {
                         )}
                     </div>
 
-                    <AdminInspector mode="drawer" open={Boolean(activeRoute && mobileDetailOpen)} onClose={() => setMobileDetailOpen(false)} title={activeRoute ? `${activeRoute.originAliases} → ${activeRoute.destinationAliases}` : 'Route inspector'} eyebrow="Record inspector" drawerSize="xl">
+                    <AdminInspector mode="drawer" open={Boolean(activeRoute && mobileDetailOpen)} onClose={() => setMobileDetailOpen(false)} title={activeRoute ? `${activeRoute.originAliases} → ${activeRoute.destinationAliases}` : 'Route inspector'} drawerSize="xl">
                         {error ? (
                             <div className="admin-routes-error">
                                 <ShieldAlert size={18} />

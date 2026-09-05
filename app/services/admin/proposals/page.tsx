@@ -355,10 +355,7 @@ export default function AdminProposalsPage() {
 
     return (
         <AdminPageShell
-            eyebrow="Proposal operations"
             title="Project proposals console"
-            description="Review submissions, update proposal outcomes, and keep decision notes synchronized to your sheet ledger."
-            icon={MessageSquare}
         >
 
                     <div className="admin-proposals-workspace mt-8">
@@ -415,7 +412,7 @@ export default function AdminProposalsPage() {
                             )}
                         </div>
 
-                        <AdminInspector mode="drawer" open={Boolean(activeProposal && mobileDetailOpen)} onClose={() => setMobileDetailOpen(false)} title={activeProposal?.title || 'Proposal inspector'} eyebrow="Record inspector" drawerSize="xl">
+                        <AdminInspector mode="drawer" open={Boolean(activeProposal && mobileDetailOpen)} onClose={() => setMobileDetailOpen(false)} title={activeProposal?.title || 'Proposal inspector'} drawerSize="xl">
                             {!activeProposal ? (
                                 <div className="text-slate-300 py-10">Select a proposal to edit controls.</div>
                             ) : (

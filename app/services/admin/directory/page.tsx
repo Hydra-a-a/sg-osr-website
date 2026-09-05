@@ -182,10 +182,7 @@ export default function AdminDirectoryPage() {
 
     return (
         <AdminPageShell
-            eyebrow="Directory assets"
             title="Directory logos"
-            description="Manage the protected logo files used by student organizations and university offices. Changes are stored in Neon first and exported to Sheets on request or by cron."
-            icon={FileImage}
             actions={(
                 <>
                     <AdminActionButton onClick={() => void mutate()} disabled={isLoading}>
@@ -225,7 +222,7 @@ export default function AdminDirectoryPage() {
                         <AdminDataGrid rows={filteredEntries} columns={directoryColumns} adapter={directoryAdapter} selectedId={selectedKey || undefined} onSelect={(entry) => setSelectedKey(entry.directoryKey)} loading={isLoading && !data} emptyMessage="No matching enabled directory records." searchPlaceholder="Search name, unit, or key" />
                     </section>
 
-                    <AdminInspector mode="drawer" open={Boolean(selectedEntry)} onClose={() => setSelectedKey(null)} title={selectedEntry?.name || 'Directory inspector'} eyebrow="Protected asset" drawerSize="lg">
+                    <AdminInspector mode="drawer" open={Boolean(selectedEntry)} onClose={() => setSelectedKey(null)} title={selectedEntry?.name || 'Directory inspector'} drawerSize="lg">
                         {selectedEntry ? <div className="space-y-5">
                             <div className="flex items-start gap-4"><div className="flex size-20 shrink-0 items-center justify-center overflow-hidden border border-white/15 bg-white/[0.06]">{selectedEntry.logoUrl ? <Image src={selectedEntry.logoUrl} alt="" width={80} height={80} className="h-full w-full object-cover" unoptimized /> : <FileImage size={25} className="text-slate-500" aria-hidden="true" />}</div><div className="min-w-0"><p className="text-xs uppercase tracking-[0.12em] text-amber-200">{selectedEntry.entryType}</p><p className="mt-2 break-words font-mono text-xs text-slate-500">{selectedEntry.directoryKey}</p><p className="mt-2 text-sm text-slate-300">{selectedEntry.roleOrOffice || selectedEntry.councilOrUnit || 'No unit label'}</p></div></div>
                             <p className="text-xs leading-5 text-slate-500">{selectedEntry.logo ? `${selectedEntry.logo.fileName} · ${formatBytes(selectedEntry.logo.sizeBytes)} · updated ${formatDate(selectedEntry.logo.updatedAt)}` : 'No runtime logo assigned; fallback is active.'}</p>

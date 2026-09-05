@@ -1,12 +1,9 @@
 import Link from 'next/link';
-import { ArrowLeft, type LucideIcon } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 type AdminPageShellProps = {
-    eyebrow: string;
     title: string;
-    description: string;
-    icon: LucideIcon;
     children: ReactNode;
     actions?: ReactNode;
     backLabel?: string;
@@ -38,9 +35,7 @@ const noticeTones = {
 } as const;
 
 export function AdminPageShell({
-    eyebrow,
     title,
-    description,
     children,
     actions,
     backLabel = 'Back to Operations Deck',
@@ -59,8 +54,7 @@ export function AdminPageShell({
 
                     <header className="mt-5 flex flex-col gap-4 border-b border-white/10 pb-6 lg:flex-row lg:items-end lg:justify-between">
                         <div className="max-w-3xl">
-                            <h1 className="mt-3 text-2xl font-bold leading-tight tracking-[-0.02em] text-white md:text-4xl">{title}</h1>
-                            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">{description}</p>
+                            <h1 className="text-2xl font-bold leading-tight tracking-[-0.02em] text-white md:text-4xl">{title}</h1>
                         </div>
                         {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
                     </header>

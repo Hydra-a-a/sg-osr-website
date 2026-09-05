@@ -453,10 +453,7 @@ export default function AdminGrievancesPage() {
 
     return (
         <AdminPageShell
-            eyebrow="Grievance operations"
             title="Grievance and appeals console"
-            description="Manage case status, resolution notes, and publication controls from the web UI. Every action still writes back to the Tickets sheet for audit-grade retention."
-            icon={ShieldAlert}
         >
 
                     <div className="admin-grievances-workspace mt-8">
@@ -538,7 +535,7 @@ export default function AdminGrievancesPage() {
                             )}
                         </div>
 
-                        <AdminInspector mode="drawer" open={Boolean(activeTicket && mobileDetailOpen)} onClose={() => setMobileDetailOpen(false)} title={activeTicket?.ticketId || 'Ticket inspector'} eyebrow="Record inspector" drawerSize="xl">
+                        <AdminInspector mode="drawer" open={Boolean(activeTicket && mobileDetailOpen)} onClose={() => setMobileDetailOpen(false)} title={activeTicket?.ticketId || 'Ticket inspector'} drawerSize="xl">
                             {!activeTicket ? (
                                 <div className="text-slate-300 py-10">Select a ticket to edit controls.</div>
                             ) : (

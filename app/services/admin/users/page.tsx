@@ -9,7 +9,6 @@ import {
     RefreshCcw,
     ShieldCheck,
     ShieldOff,
-    UserCog,
     UserPlus,
     X,
 } from 'lucide-react';
@@ -216,10 +215,7 @@ export default function AdminUsersPage() {
 
     return (
         <AdminPageShell
-            eyebrow="Access control"
             title="Leader and officer access"
-            description="Maintain the Neon-backed access list used for portal role assignment and session revocation."
-            icon={UserCog}
             actions={(
                 <>
                     <AdminActionButton onClick={beginNewGrant}>
@@ -264,7 +260,6 @@ export default function AdminUsersPage() {
                         open={inspectorOpen}
                         onClose={closeInspector}
                         title={editingEmail ? 'Edit access' : 'Grant access'}
-                        eyebrow="Inspector"
                         drawerSize="lg"
                     >
                         <div className="flex items-start justify-between gap-4">

@@ -128,7 +128,6 @@ export default function AdminWorkspaceShell({ children, alphaNotice }: AdminWork
                             </button>
                             <div className="min-w-0">
                                 <p className="truncate text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-amber-200">RTU officer workspace</p>
-                                <p className="truncate text-sm text-slate-400">Operational records and moderation controls</p>
                             </div>
                         </div>
                         {alphaNotice ? <div className="border-t border-red-300/20">{alphaNotice}</div> : null}

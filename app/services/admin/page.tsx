@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import useSWR from 'swr';
-import { AlertTriangle, CheckCircle2, Loader2, Shield, XCircle } from 'lucide-react';
+import { AlertTriangle, Loader2, XCircle } from 'lucide-react';
 import { AdminNotice, AdminPageShell } from '@/components/admin/AdminPageShell';
 import { adminNavigationItems } from '@/components/admin/admin-navigation';
 import type { AdminModuleSummary, AdminSurfaceSummary } from '@/lib/admin-overview-types';
@@ -52,10 +52,7 @@ export default function AdminHubPage() {
 
     return (
         <AdminPageShell
-            eyebrow="Officer access"
             title="Operations overview"
-            description="A compact view of active queues, source health, and the next administrative work surface."
-            icon={Shield}
             actions={(
                 <button type="button" onClick={() => void mutate()} disabled={isLoading} className="inline-flex min-h-11 items-center gap-2 border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">
                     <Loader2 size={16} className={isLoading ? 'animate-spin' : ''} />
@@ -75,10 +72,8 @@ export default function AdminHubPage() {
                 <section className="border border-white/10 bg-white/[0.04]" aria-labelledby="admin-queues-title">
                     <div className="flex items-end justify-between gap-4 border-b border-white/10 px-5 py-4">
                         <div>
-                            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-amber-200">Data view</p>
-                            <h2 id="admin-queues-title" className="mt-1 text-lg font-semibold text-white">Administrative queues</h2>
+                            <h2 id="admin-queues-title" className="text-lg font-semibold text-white">Administrative queues</h2>
                         </div>
-                        <p className="text-xs text-slate-500">Select a module to open its grid</p>
                     </div>
                     <div className="divide-y divide-white/10">
                         {isLoading && !data ? modules.map((item) => (
@@ -97,7 +92,7 @@ export default function AdminHubPage() {
                                 <Link key={item.key} href={item.href} className="group grid gap-3 px-5 py-4 transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-200 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_8rem] sm:items-center">
                                     <div className="flex min-w-0 items-center gap-3">
                                         <span className="grid size-9 shrink-0 place-items-center border border-white/10 bg-white/[0.04] text-slate-200"><Icon size={17} aria-hidden="true" /></span>
-                                        <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{item.label}</span><span className="mt-1 block truncate text-xs text-slate-500">{item.description}</span></span>
+                                        <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{item.label}</span></span>
                                     </div>
                                     <div><span className="text-[0.62rem] uppercase tracking-[0.12em] text-slate-500 sm:hidden">Total · </span><span className="text-sm text-slate-200">{summary?.total ?? '—'}</span></div>
                                     <div><span className="text-[0.62rem] uppercase tracking-[0.12em] text-slate-500 sm:hidden">Queue · </span><span className="text-sm text-slate-200">{summary?.queued ?? '—'}</span></div>
@@ -112,7 +107,6 @@ export default function AdminHubPage() {
 
             {!isLoading && data?.modules.some((module) => module.health === 'attention') ? <div className="mt-6 flex items-start gap-3 border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm text-amber-100"><AlertTriangle size={17} className="mt-0.5 shrink-0" aria-hidden="true" /><span>Some queues need attention. Open the affected module to review its records.</span></div> : null}
             {!isLoading && data?.modules.every((module) => module.health === 'unavailable') ? <div className="mt-6 flex items-start gap-3 border border-red-300/25 bg-red-300/10 px-4 py-3 text-sm text-red-100"><XCircle size={17} className="mt-0.5 shrink-0" aria-hidden="true" /><span>All source checks are unavailable. The module pages will preserve their own error details.</span></div> : null}
-            {!isLoading && data?.modules.every((module) => module.health === 'healthy') ? <div className="mt-6 flex items-start gap-3 border border-emerald-300/25 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100"><CheckCircle2 size={17} className="mt-0.5 shrink-0" aria-hidden="true" /><span>All configured source checks are healthy.</span></div> : null}
         </AdminPageShell>
     );
 }
