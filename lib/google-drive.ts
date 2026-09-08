@@ -3,6 +3,7 @@ import path from 'path';
 import { google } from 'googleapis';
 import { getGoogleServiceAccountCredentials } from '@/lib/google-credentials';
 import { redactErrorForLog } from '@/lib/security';
+import { MANAGED_PDF_MAX_BYTES, validatePdfBuffer } from '@/lib/managed-pdf';
 
 function getDriveClient() {
     const auth = new google.auth.GoogleAuth({
@@ -30,12 +31,12 @@ export async function getDrivePdfStreamById(fileId: string, resourceKey?: string
     try {
         const metadataResponse = await drive.files.get({
             fileId: normalizedFileId,
-            fields: 'id,name,mimeType,parents',
+            fields: 'id,name,mimeType,parents,size,trashed',
             supportsAllDrives: true,
             resourceKey,
-        } as any);
+        } as any, { timeout: 3000 });
 
-        if (!metadataResponse.data || metadataResponse.data.mimeType !== 'application/pdf' || (expectedParentId && !(metadataResponse.data.parents || []).includes(expectedParentId))) {
+        if (!metadataResponse.data || metadataResponse.data.trashed || metadataResponse.data.mimeType !== 'application/pdf' || (expectedParentId && (!(metadataResponse.data.parents || []).includes(expectedParentId) || !Number(metadataResponse.data.size) || Number(metadataResponse.data.size) > MANAGED_PDF_MAX_BYTES))) {
             return null;
         }
 
@@ -48,6 +49,7 @@ export async function getDrivePdfStreamById(fileId: string, resourceKey?: string
             } as any,
             {
                 responseType: 'stream',
+                timeout: 3000,
             }
         );
 
@@ -55,13 +57,42 @@ export async function getDrivePdfStreamById(fileId: string, resourceKey?: string
             return null;
         }
 
+        const source = mediaResponse.data as Readable;
+        let stream = source;
+        if (expectedParentId) {
+            const iterator = source[Symbol.asyncIterator]();
+            const prefix: Buffer[] = [];
+            let length = 0;
+            while (length < 5) {
+                const chunk = await iterator.next();
+                if (chunk.done) break;
+                const bytes = Buffer.from(chunk.value);
+                prefix.push(bytes);
+                length += bytes.length;
+            }
+            const initial = Buffer.concat(prefix);
+            if (initial.subarray(0, 5).toString('ascii') !== '%PDF-' || length > MANAGED_PDF_MAX_BYTES) {
+                source.destroy();
+                return null;
+            }
+            stream = Readable.from((async function* () {
+                try {
+                    yield initial;
+                    for (let chunk = await iterator.next(); !chunk.done; chunk = await iterator.next()) {
+                        length += chunk.value.length;
+                        if (length > MANAGED_PDF_MAX_BYTES) throw new Error('Managed PDF exceeded size limit.');
+                        yield chunk.value;
+                    }
+                } finally { source.destroy(); }
+            })());
+        }
         return {
-            stream: mediaResponse.data as Readable,
+            stream,
             fileName: metadataResponse.data.name || null,
             parents: metadataResponse.data.parents || [],
         };
     } catch (error) {
-        console.error('[Drive Preview] Failed to stream PDF:', redactErrorForLog(error));
+        console.error('[Drive Preview] PDF delivery failed.');
         return null;
     }
 }
@@ -448,14 +479,21 @@ export async function uploadHubGuidePdfToDrive(params: {
     mimeType: 'application/pdf';
     buffer: Buffer;
 }): Promise<{ fileId: string; resourceKey: string; fileName: string }> {
+    return uploadManagedPdfToDrive(params, getHubGuidesFolderId(), 'HUB_GUIDE');
+}
+
+export async function uploadManagedPdfToDrive(params: {
+    fileName: string; mimeType: 'application/pdf'; buffer: Buffer;
+}, folderId: string, label = 'TRANSPARENCY'): Promise<{ fileId: string; resourceKey: string; fileName: string }> {
+    if (!folderId || !/^[a-zA-Z0-9_-]+$/.test(folderId)) throw new Error('Managed PDF folder is not configured.');
+    validatePdfBuffer(params.buffer, params.mimeType);
     const drive = getDriveClient();
-    const folderId = getHubGuidesFolderId();
     const safeName = sanitizeFileBaseName(params.fileName);
     const fileName = safeName.toLowerCase().endsWith('.pdf') ? safeName : `${safeName}.pdf`;
 
     try {
         const response = await drive.files.create({
-            requestBody: { name: `[HUB_GUIDE] ${fileName}`, parents: [folderId] },
+            requestBody: { name: `[${label}] ${fileName}`, parents: [folderId] },
             media: { mimeType: params.mimeType, body: Readable.from(params.buffer) },
             fields: 'id,name,resourceKey',
             supportsAllDrives: true,
@@ -464,8 +502,8 @@ export async function uploadHubGuidePdfToDrive(params: {
         if (!fileId) throw new Error('Google Drive did not return a file ID for the Hub Guide.');
         return { fileId, resourceKey: response.data.resourceKey || '', fileName };
     } catch (error) {
-        console.error('[Drive Upload] Failed to upload Hub Guide PDF:', redactErrorForLog(error));
-        throw new Error('Failed to upload Hub Guide PDF to Google Drive.');
+        console.error('[Drive Upload] Managed PDF upload failed.');
+        throw new Error('Managed PDF upload failed.');
     }
 }
 

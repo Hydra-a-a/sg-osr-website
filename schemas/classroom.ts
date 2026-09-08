@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { periodSchema } from '@/schemas/transparency';
 
 const GOOGLE_CLASSROOM_ID_REGEX = /^\d{5,30}$/;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -17,13 +18,13 @@ export const CourseIdSchema = z.string().trim().regex(GOOGLE_CLASSROOM_ID_REGEX,
 
 export const CourseWorkIdSchema = z.string().trim().regex(GOOGLE_CLASSROOM_ID_REGEX, 'Invalid classroom coursework ID format');
 
-export const ClassroomSubmissionSchema = z.object({
+export const ClassroomSubmissionSchema = periodSchema.and(z.object({
     courseId: CourseIdSchema,
     courseWorkId: CourseWorkIdSchema,
     linkUrl: z.string().trim().url().startsWith('https://', 'Submission link must start with https://'),
     linkTitle: z.string().trim().max(150).optional(),
     turnIn: z.boolean().optional().default(true),
-});
+}));
 
 export type ClassroomSubmissionInput = z.infer<typeof ClassroomSubmissionSchema>;
 
@@ -50,3 +51,11 @@ export const ClassroomCourseWorkCreateSchema = z.object({
 
 export type ClassroomCourseCreateInput = z.infer<typeof ClassroomCourseCreateSchema>;
 export type ClassroomCourseWorkCreateInput = z.infer<typeof ClassroomCourseWorkCreateSchema>;
+
+export const reconciliationSchema = z.object({
+    id: z.string().min(1).max(100),
+    status: z.enum(['SUBMITTED', 'FAILED']),
+    reviewNote: z.string().trim().min(5).max(2000),
+    classroomSubmissionId: z.string().trim().regex(/^\d{1,100}$/).optional(),
+    expectedUpdatedAt: z.string().datetime(),
+}).refine(value => value.status !== 'SUBMITTED' || Boolean(value.classroomSubmissionId), { path: ['classroomSubmissionId'], message: 'The verified Classroom submission ID is required.' });

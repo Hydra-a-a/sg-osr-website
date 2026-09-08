@@ -8,9 +8,9 @@ import {
     BookOpen,
     Bus,
     Calendar,
+    ChevronDown,
     Download,
     ExternalLink,
-    FileText,
     Lock,
     MapPin,
     Search,
@@ -19,6 +19,7 @@ import Image from 'next/image';
 import { NoncedStyle } from '@/components/CspNonceProvider';
 import { useSession } from 'next-auth/react';
 import { getAccessVisibilityState } from '@/lib/access-visibility';
+import { HUB_GUIDE_CATEGORIES } from '@/lib/hub-guide-categories';
 import { PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
 
 export type HubGuide = {
@@ -141,38 +142,6 @@ function buildGuidePreviewUrl(urlValue: string): string {
     return `${base}#${baseParams.join('&')}`;
 }
 
-function selectFeaturedGuides(guides: HubGuide[]): HubGuide[] {
-    if (guides.length <= 3) {
-        return guides;
-    }
-
-    const preferredOrder = [
-        'student government code',
-        'student handbook',
-        'enrollment',
-    ];
-
-    const picked: HubGuide[] = [];
-    for (const keyword of preferredOrder) {
-        const match = guides.find((guide) => guide.title.toLowerCase().includes(keyword));
-        if (match && !picked.some((guide) => guide.id === match.id)) {
-            picked.push(match);
-        }
-
-    }
-
-    for (const guide of guides) {
-        if (picked.length >= 3) {
-            break;
-        }
-        if (!picked.some((item) => item.id === guide.id)) {
-            picked.push(guide);
-        }
-    }
-
-    return picked;
-}
-
 function guideLooksLeaderOnly(guide: HubGuide): boolean {
     const source = `${guide.title} ${guide.description} ${guide.category}`.toLowerCase();
     return (
@@ -204,6 +173,8 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [lockedFeatureNotice, setLockedFeatureNotice] = useState<LockedFeatureNotice | null>(null);
     const [selectedGuideId, setSelectedGuideId] = useState('');
+    const [guideSearch, setGuideSearch] = useState('');
+    const [guideCategory, setGuideCategory] = useState('');
     const guidesResponse = { data: initialGuides };
     const guidesError = null;
     const guidesLoading = false;
@@ -216,7 +187,13 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
         }
         return allGuides.filter((guide) => !guideLooksLeaderOnly(guide));
     }, [guidesResponse?.data, visibility.canSeeLeaderFeatures]);
-    const featuredGuides = useMemo(() => selectFeaturedGuides(guides), [guides]);
+    const filteredGuides = useMemo(() => {
+        const query = guideSearch.trim().toLowerCase();
+        return guides.filter((guide) => {
+            if (guideCategory && guide.category !== guideCategory) return false;
+            return !query || `${guide.title} ${guide.description} ${guide.category}`.toLowerCase().includes(query);
+        });
+    }, [guideCategory, guideSearch, guides]);
 
     const {
         resolvedSelectedGuideId,
@@ -224,12 +201,11 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
         selectedGuidePreviewUrl,
         shouldAttemptGuideEmbed,
     } = useMemo(() => {
-        const preferredGuide = guides.find((guide) => guide.title.toLowerCase().includes('student government code'));
-        const fallbackGuideId = preferredGuide?.id || guides[0]?.id || '';
-        const resolvedGuideId = guides.some((guide) => guide.id === selectedGuideId)
+        const fallbackGuideId = filteredGuides[0]?.id || '';
+        const resolvedGuideId = filteredGuides.some((guide) => guide.id === selectedGuideId)
             ? selectedGuideId
             : fallbackGuideId;
-        const activeGuide = guides.find((guide) => guide.id === resolvedGuideId) || null;
+        const activeGuide = filteredGuides.find((guide) => guide.id === resolvedGuideId) || null;
 
         const selectedGuideEmbedUrl = activeGuide
             ? (
@@ -253,7 +229,7 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
             selectedGuidePreviewUrl: previewUrl,
             shouldAttemptGuideEmbed: canAttemptEmbed,
         };
-    }, [guides, selectedGuideId]);
+    }, [filteredGuides, selectedGuideId]);
 
     const scrollToSection = useCallback((sectionId: string) => {
         if (typeof window === 'undefined') {
@@ -264,12 +240,6 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
         const section = document.getElementById(sectionId);
         section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, []);
-
-    const handleGuideSelection = useCallback((guideId: string) => {
-        setSelectedGuideId(guideId);
-        setGuidePreviewOpen(true);
-        scrollToSection('student-guides');
-    }, [scrollToSection]);
 
     const openLightbox = useCallback(() => {
         setLightboxOpen(true);
@@ -299,23 +269,6 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
             accentClassName: 'hub-accent-sky',
             onClick: () => scrollToSection('academic-calendar'),
             badge: 'SY 2026-2027',
-        },
-        {
-            id: 'featured',
-            title: 'Open selected guide',
-            summary: selectedGuide
-                ? selectedGuide.title
-                : 'Open the currently selected guide.',
-            icon: FileText,
-            accentClassName: 'hub-accent-emerald',
-            onClick: () => {
-                if (selectedGuide) {
-                    window.open(selectedGuide.viewUrl, '_blank', 'noopener,noreferrer');
-                } else {
-                    scrollToSection('student-guides');
-                }
-            },
-            badge: selectedGuide ? 'Ready to open' : 'Workspace',
         },
         {
             id: 'maps',
@@ -354,7 +307,7 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
             badge: 'Temporarily locked',
 
         },
-    ]), [guides.length, openLockedFeatureNotice, scrollToSection, selectedGuide]);
+    ]), [guides.length, openLockedFeatureNotice, scrollToSection]);
 
     return (
 
@@ -428,88 +381,13 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                 </div>
             </section>
 
-            <section className="relative z-10 pb-8 md:pb-10">
-                <div className="container-main mx-auto w-full max-w-7xl">
-                    <div className="hub-feature-spread p-6 md:p-7">
-                        <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Featured Documents</p>
-                                <h2 className="mt-2 text-2xl font-semibold text-white">Priority References</h2>
-                            </div>
-                            <p className="max-w-xl text-sm leading-relaxed text-slate-300">
-                                Selected documents are highlighted for quick access.
-                            </p>
-                        </div>
-
-                        {guidesLoading ? (
-                            <div className="grid gap-4 lg:grid-cols-3">
-                                {Array.from({ length: 3 }).map((_, idx) => (
-                                    <div key={idx} className="hub-feature-card animate-pulse">
-                                        <div className="h-8 w-24 rounded-full bg-white/10" />
-                                        <div className="mt-5 h-6 w-2/3 rounded bg-white/10" />
-                                        <div className="mt-3 h-16 rounded bg-white/10" />
-                                    </div>
-                                ))}
-                            </div>
-                        ) : guidesError ? (
-                            <div className="hub-empty-state border-red-400/20 bg-red-500/10 text-red-100">
-                                {guidesError instanceof Error ? guidesError.message : 'Unable to load featured documents right now.'}
-                            </div>
-                        ) : featuredGuides.length === 0 ? (
-                            <div className="hub-empty-state">
-                                No featured guides are published yet. Once PDF entries are available, they will appear here automatically.
-                            </div>
-                        ) : (
-                            <div className="hub-featured-grid grid gap-4 lg:grid-cols-3">
-                                {featuredGuides.map((guide, index) => (
-                                    <article key={guide.id} className="hub-feature-card">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <span className="hub-feature-rank">Essential {index + 1}</span>
-
-                                            <span className="hub-mini-chip">{guide.category || 'PDF Guide'}</span>
-                                        </div>
-                                        <h3 className="mt-5 text-xl font-semibold text-white leading-snug">{guide.title}</h3>
-                                        <p className="mt-3 text-sm leading-relaxed text-slate-300">
-                                            {guide.description || 'Published as part of the student academic resource library.'}
-                                        </p>
-                                        <div className="mt-5 flex flex-wrap gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => handleGuideSelection(guide.id)}
-                                                className="hub-action-primary"
-                                            >
-                                                <Search size={15} />
-                                                Preview
-                                            </button>
-                                            <a
-                                                href={guide.downloadUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="hub-action-secondary"
-                                            >
-                                                <Download size={15} />
-                                                Download
-                                            </a>
-                                        </div>
-                                    </article>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </section>
-
             <section id="student-guides" className="relative z-10 pb-8 md:pb-10 scroll-mt-24">
                 <div className="container-main mx-auto w-full max-w-7xl">
                     <div className="hub-reading-room p-6 md:p-7">
                         <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
                             <div>
-                                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Student Guides</p>
-                                <h2 className="mt-2 text-2xl font-semibold text-white">Document Library</h2>
+                                <h2 className="text-2xl font-semibold text-white">Document Library</h2>
                             </div>
-                            <p className="max-w-xl text-sm leading-relaxed text-slate-300">
-                                Select a guide from the list to preview or open the document.
-                            </p>
                         </div>
 
                         {guidesLoading ? (
@@ -520,20 +398,32 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                             </div>
                         ) : guides.length === 0 ? (
                             <div className="hub-empty-state">
-                                No PDF guides are published yet. Add a Hub Guide in Website Control or publish an existing draft to make documents appear here.
+                                No documents are available yet.
                             </div>
                         ) : (
-                            <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+                            <>
+                                <div className="mb-6 grid gap-3 md:grid-cols-[minmax(0,1fr)_15rem_auto]">
+                                    <label className="relative block">
+                                        <span className="sr-only">Search the document library</span>
+                                        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                                        <input value={guideSearch} onChange={(event) => setGuideSearch(event.target.value)} type="search" placeholder="Search documents" className="min-h-11 w-full border border-white/10 bg-black/10 py-2.5 pl-10 pr-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-amber-200/50" />
+                                    </label>
+                                    <label className="relative block">
+                                        <span className="sr-only">Filter documents by category</span>
+                                        <select value={guideCategory} onChange={(event) => setGuideCategory(event.target.value)} className="min-h-11 w-full appearance-none border border-white/10 bg-black/10 px-3 py-2.5 pr-10 text-sm text-white outline-none [color-scheme:dark] focus:border-amber-200/50 [&>option]:bg-slate-950 [&>option]:text-white">
+                                            <option value="">All categories</option>
+                                            {HUB_GUIDE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                                        </select>
+                                        <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" aria-hidden="true" />
+                                    </label>
+                                    <button type="button" onClick={() => { setGuideSearch(''); setGuideCategory(''); }} disabled={!guideSearch && !guideCategory} className="min-h-11 border border-white/10 px-3 text-sm font-semibold text-slate-200 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40">Clear</button>
+                                </div>
+
+                                <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
                                 <div className="hub-guides-sidebar">
-                                        <div className="flex items-center justify-between gap-3 mb-4">
-                                            <div>
-                                                <p className="text-sm font-semibold text-white">Available Guides</p>
-                                                <p className="text-xs text-slate-400 mt-1">Select a document to preview.</p>
-                                            </div>
-                                            <span className="hub-mini-chip">{guides.length} total</span>
-                                        </div>
-                                    <div className="space-y-2">
-                                        {guides.map((guide) => {
+                                    <p className="mb-4 text-xs text-slate-400">{filteredGuides.length === guides.length ? `${guides.length} documents` : `${filteredGuides.length} of ${guides.length} documents`}</p>
+                                    {filteredGuides.length === 0 ? <div className="hub-empty-state">No matching documents.</div> : <div className="space-y-2">
+                                        {filteredGuides.map((guide) => {
                                             const isSelected = guide.id === resolvedSelectedGuideId;
                                             return (
                                                 <button
@@ -553,18 +443,14 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                                                 </button>
                                             );
                                         })}
-                                    </div>
+                                    </div>}
                                 </div>
 
                                 {selectedGuide ? (
                                     <div className="hub-guide-preview-shell">
                                         <div className="hub-guide-preview-header">
                                             <div>
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="hub-preview-chip">Current preview</span>
-                                                    <span className="hub-mini-chip">{selectedGuide.category || 'PDF Guide'}</span>
-                                                </div>
-                                                <h3 className="mt-4 text-2xl font-semibold text-white">{selectedGuide.title}</h3>
+                                                <h3 className="text-2xl font-semibold text-white">{selectedGuide.title}</h3>
                                                 {selectedGuide.description ? (
 
                                                     <p className="mt-2 text-sm leading-relaxed text-slate-300">{selectedGuide.description}</p>
@@ -593,7 +479,7 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                                             </div>
                                         </div>
 
-                                        <div className="hub-preview-frame pdf-embed-shell min-h-[46rem]">
+                                        <div className={`hub-preview-frame pdf-embed-shell ${guidePreviewOpen ? 'min-h-[46rem]' : 'min-h-[18rem]'}`}>
                                             {shouldAttemptGuideEmbed && guidePreviewOpen ? (
                                                 <iframe
                                                     title={`${selectedGuide.title} PDF Preview`}
@@ -603,30 +489,20 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                                                     referrerPolicy="strict-origin-when-cross-origin"
                                                 />
                                             ) : (
-                                                <div className="h-[46rem] flex flex-col items-center justify-center text-center p-8 bg-slate-900/60">
-                                                    <p className="text-white font-semibold mb-2">{guidePreviewOpen ? 'Preview unavailable' : 'Preview is ready when you are'}</p>
-                                                    <p className="max-w-md text-sm leading-relaxed text-slate-300">
-                                                        {guidePreviewOpen ? 'This document can still be opened or downloaded.' : 'Load the embedded PDF only when you need an in-page preview.'}
-                                                    </p>
+                                                <div className={`${guidePreviewOpen ? 'h-[46rem]' : 'h-[18rem]'} flex flex-col items-center justify-center text-center p-8 bg-slate-900/60`}>
                                                     {!guidePreviewOpen && shouldAttemptGuideEmbed ? (
-                                                        <button type="button" onClick={() => setGuidePreviewOpen(true)} className="hub-action-primary mt-5">
+                                                        <button type="button" onClick={() => setGuidePreviewOpen(true)} className="hub-action-primary">
                                                             <Search size={15} />
                                                             Load preview
                                                         </button>
-                                                    ) : null}
+                                                    ) : <p className="text-sm font-semibold text-white">Preview unavailable</p>}
                                                 </div>
                                             )}
-                                        </div>
-
-                                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                                            <div className="flex flex-wrap gap-2">
-                                                <span className="hub-mini-chip">Embedded preview</span>
-                                                <span className="hub-mini-chip">PDF-only gating active</span>
-                                            </div>
                                         </div>
                                     </div>
                                 ) : null}
                             </div>
+                            </>
                         )}
                     </div>
                 </div>
@@ -718,7 +594,6 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
 
                 .hub-masthead,
                 .hub-command-band,
-                .hub-feature-spread,
                 .hub-reading-room,
                 .hub-calendar-feature {
                     position: relative;
@@ -754,7 +629,6 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                 }
 
                 .hub-command-band,
-                .hub-feature-spread,
                 .hub-reading-room,
                 .hub-calendar-feature {
                     padding-top: 1.75rem;
@@ -762,11 +636,6 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
 
                 .hub-command-band {
                     border-top-color: rgba(245, 158, 11, 0.3);
-                }
-
-
-                .hub-feature-spread {
-                    border-top-color: rgba(125, 211, 252, 0.28);
                 }
 
                 .hub-reading-room {
@@ -814,8 +683,7 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                     text-shadow: 0 1px 3px rgba(3, 10, 20, 0.84), 0 4px 10px rgba(3, 10, 20, 0.44);
                 }
 
-                .hub-shortcut-card,
-                .hub-feature-card {
+                .hub-shortcut-card {
                     position: relative;
                     overflow: hidden;
                     border-radius: 0.75rem;
@@ -828,8 +696,7 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                     clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
                 }
 
-                .hub-shortcut-card::after,
-                .hub-feature-card::after {
+                .hub-shortcut-card::after {
                     content: '';
                     position: absolute;
                     left: 0.75rem;
@@ -845,14 +712,12 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                     pointer-events: none;
                 }
 
-                .hub-shortcut-card > *,
-                .hub-feature-card > * {
+                .hub-shortcut-card > * {
                     position: relative;
                     z-index: 1;
                 }
 
-                .hub-shortcut-card:hover,
-                .hub-feature-card:hover {
+                .hub-shortcut-card:hover {
                     transform: translateY(-1px);
                     border-color: rgba(244, 192, 82, 0.28);
                 }
@@ -933,8 +798,6 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                 }
 
                 .hub-shortcut-badge,
-                .hub-feature-rank,
-                .hub-preview-chip,
                 .hub-mini-chip {
                     display: inline-flex;
                     align-items: center;
@@ -946,9 +809,7 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                     letter-spacing: 0.03em;
                 }
 
-                .hub-shortcut-badge,
-                .hub-feature-rank,
-                .hub-preview-chip {
+                .hub-shortcut-badge {
                     background: rgba(245, 158, 11, 0.12);
                     border: 1px solid rgba(245, 158, 11, 0.18);
                     color: #fde68a;
@@ -993,22 +854,6 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                 .hub-action-secondary:hover {
                     transform: translateY(-1px);
                     background: rgba(255, 255, 255, 0.08);
-                }
-
-                .hub-featured-grid .hub-feature-card:first-child {
-                    background:
-                        linear-gradient(138deg, rgba(245, 158, 11, 0.17), rgba(13, 22, 36, 0.78) 42%),
-                        rgba(6, 16, 28, 0.24);
-                    border-color: rgba(245, 158, 11, 0.3);
-                }
-
-                .hub-featured-grid .hub-feature-card:not(:first-child) {
-                    background: transparent;
-                    border-color: rgba(255, 255, 255, 0.06);
-                }
-
-                .hub-featured-grid .hub-feature-card .hub-action-primary {
-                    min-width: 8.5rem;
                 }
 
                 .hub-guides-sidebar,
@@ -1142,14 +987,10 @@ export default function HubClient({ initialGuides = [] }: { initialGuides?: HubG
                         grid-column: auto;
                     }
 
-                    .hub-featured-grid .hub-feature-card:first-child {
-                        grid-column: span 2 / span 2;
-                    }
                 }
 
                 @media (max-width: 768px) {
                     .hub-masthead,
-                    .hub-feature-card,
                     .hub-shortcut-card,
                     .hub-guides-sidebar,
                     .hub-guide-preview-shell,

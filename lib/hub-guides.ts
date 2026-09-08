@@ -8,6 +8,7 @@ import { extractGoogleDriveFileId, getDriveFileMetadataById } from '@/lib/google
 import { TransparencyGuideSchema, type TransparencyGuide } from '@/schemas/transparency-hub';
 import { loadHubGuidesFromDb, resolvePublicContentSource } from '@/lib/public-content-source';
 import { PUBLIC_CACHE_TAGS } from '@/lib/public-cache';
+import { normalizeHubGuideCategory } from '@/lib/hub-guide-categories';
 
 const BASE_CANDIDATE_RANGES = [
     process.env.STUDENT_HUB_GUIDES_RANGE?.trim(),
@@ -267,7 +268,7 @@ const guides = await Promise.all(rawRows.map(async (rawRow, index) => {
     const titleCell = cells[0] || '';
     const descriptionCell = cells[1] || '';
     const explicitUrl = normalizeUrlCandidate(cells[2] || '');
-    const categoryCell = cells[3] || 'Student Handbook & Guides';
+    const categoryCell = normalizeHubGuideCategory(cells[3]);
     const visibilityCell = cells[4] || '';
     const sortOrderCell = cells[5] || '';
 

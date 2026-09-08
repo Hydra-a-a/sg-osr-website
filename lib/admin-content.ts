@@ -6,10 +6,12 @@ import { isSafeNavigationHref, isTrustedUrl } from '@/lib/security';
 import { ApiError } from '@/lib/api-errors';
 import { getHubGuidesFolderId, getOrganizationLogosFolderId, trashDriveFileById, uploadHubGuidePdfToDrive } from '@/lib/google-drive';
 import { buildDirectoryKey } from '@/lib/directory-repository';
+import { HUB_GUIDE_CATEGORIES, normalizeHubGuideCategory } from '@/lib/hub-guide-categories';
+import { MANAGED_PDF_MAX_BYTES, validateManagedPdfFile } from '@/lib/managed-pdf';
 
 export const ADMIN_CONTENT_TYPES = ['directory', 'news', 'hub-guide', 'quick-link'] as const;
 export type AdminContentType = typeof ADMIN_CONTENT_TYPES[number];
-export const HUB_GUIDE_PDF_MAX_BYTES = 20 * 1024 * 1024;
+export const HUB_GUIDE_PDF_MAX_BYTES = MANAGED_PDF_MAX_BYTES;
 
 const optionalUrl = z.string().trim().max(2048).refine(isTrustedUrl, 'URL must use a trusted public host').or(z.literal(''));
 const safeHref = z.string().trim().max(2048).refine(isSafeNavigationHref, 'Link must be a safe relative path or HTTPS URL');
@@ -53,7 +55,7 @@ export const adminContentPayloadSchemas: Record<AdminContentType, z.ZodTypeAny> 
         fileUrl: z.string().trim().url().refine((value) => value.startsWith('https://'), 'Guide links must use HTTPS').refine((value) => /(?:\.pdf(?:$|[?#])|drive\.google\.com|docs\.google\.com)/i.test(value), 'Guide must reference a PDF or Google Drive document'),
         driveFileId: z.string().trim().max(200),
         resourceKey: z.string().trim().max(200),
-        category: z.string().trim().max(120),
+        category: z.enum(HUB_GUIDE_CATEGORIES),
         publicDataJson: z.record(z.string(), z.unknown()),
         enabled: z.boolean(),
         sortOrder: z.number().int().min(0).max(100000),
@@ -111,20 +113,7 @@ function hubGuideTitleFromFileName(fileName: string): string {
 }
 
 export async function validateHubGuidePdfFile(file: File): Promise<{ buffer: Buffer; fileName: string; sizeBytes: number }> {
-    if (typeof File === 'undefined' || !(file instanceof File) || file.size <= 0) {
-        throw new ApiError(400, 'INVALID_HUB_GUIDE_FILE', 'Choose a PDF to upload.');
-    }
-    if (file.size > HUB_GUIDE_PDF_MAX_BYTES) {
-        throw new ApiError(413, 'HUB_GUIDE_FILE_TOO_LARGE', 'PDF files must be 20 MB or smaller.');
-    }
-    if (String(file.type || '').toLowerCase() !== 'application/pdf') {
-        throw new ApiError(415, 'UNSUPPORTED_HUB_GUIDE_TYPE', 'Only PDF files are accepted.');
-    }
-    const buffer = Buffer.from(await file.arrayBuffer());
-    if (buffer.subarray(0, 5).toString('ascii') !== '%PDF-') {
-        throw new ApiError(415, 'INVALID_HUB_GUIDE_PDF', 'The selected file is not a valid PDF.');
-    }
-    return { buffer, fileName: String(file.name || 'guide.pdf'), sizeBytes: buffer.byteLength };
+    return validateManagedPdfFile(file);
 }
 
 function uploadedHubGuidePayload(input: unknown, uploaded: { fileId: string; resourceKey: string }, fileName: string): Record<string, unknown> {
@@ -186,7 +175,7 @@ function entityPayload(type: AdminContentType, row: any): Record<string, unknown
         fileUrl: row.fileUrl,
         driveFileId: row.driveFileId || '',
         resourceKey: row.resourceKey || '',
-        category: row.category || '',
+        category: normalizeHubGuideCategory(row.category),
         publicDataJson: toJsonObject(row.publicDataJson),
         enabled: row.enabled,
         sortOrder: row.sortOrder,

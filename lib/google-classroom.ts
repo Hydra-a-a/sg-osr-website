@@ -238,6 +238,8 @@ export async function publishClassroomCourseWork(accessToken: string, courseId: 
     return courseWork;
 }
 
+export class ClassroomPreflightError extends Error {}
+
 export async function submitCourseWorkLink(params: {
     accessToken: string;
     courseId: string;
@@ -245,6 +247,7 @@ export async function submitCourseWorkLink(params: {
     linkUrl: string;
     linkTitle?: string;
     turnIn?: boolean;
+    beforeAttach?: () => Promise<void>;
 }): Promise<{ submissionId: string; state?: string }> {
     const { accessToken, courseId, courseWorkId, linkUrl, linkTitle, turnIn = true } = params;
 
@@ -256,13 +259,13 @@ export async function submitCourseWorkLink(params: {
     const accessibleCourses = await listMyClassroomCourses(accessToken);
     const userCourseIds = new Set(accessibleCourses.map((course) => course.id));
     if (!userCourseIds.has(courseId)) {
-        throw new Error('Course is not accessible for the authenticated leader.');
+        throw new ClassroomPreflightError('Course is not accessible for the authenticated leader.');
     }
 
     const courseWorkItems = await listCourseWork(accessToken, courseId);
     const courseWork = courseWorkItems.find((item) => item.id === courseWorkId);
     if (courseWork?.associatedWithDeveloper === false) {
-        throw new Error('Coursework is not associated with this Developer Console project.');
+        throw new ClassroomPreflightError('Coursework is not associated with this Developer Console project.');
     }
 
     const classroom = getClassroomClient(accessToken);
@@ -277,9 +280,10 @@ export async function submitCourseWorkLink(params: {
     const submission = listRes.data.studentSubmissions?.[0];
 
     if (!submission?.id) {
-        throw new Error('No classroom submission found for this coursework and user.');
+        throw new ClassroomPreflightError('No classroom submission found for this coursework and user.');
     }
 
+    await params.beforeAttach?.();
     await classroom.courses.courseWork.studentSubmissions.modifyAttachments({
         courseId,
         courseWorkId,
@@ -293,7 +297,7 @@ export async function submitCourseWorkLink(params: {
                 },
             ],
         },
-    });
+    }, { timeout: 3000 });
 
     let finalState = submission.state || undefined;
 
@@ -302,7 +306,7 @@ export async function submitCourseWorkLink(params: {
             courseId,
             courseWorkId,
             id: submission.id,
-        });
+        }, { timeout: 3000 });
         finalState = 'TURNED_IN';
     }
 

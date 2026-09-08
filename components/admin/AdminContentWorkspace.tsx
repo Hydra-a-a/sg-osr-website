@@ -8,10 +8,12 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import AdminActionMenu from './AdminActionMenu';
 import { AdminDrawer, AdminModal } from './AdminOverlay';
 import { AdminTabs } from './AdminTabs';
+import AdminViewModeToggle from './AdminViewModeToggle';
 import AdminToastRegion, { useAdminToasts } from './AdminToast';
 import useAdminUnsavedChanges from './useAdminUnsavedChanges';
 import { AdminNotice, AdminPageShell } from './AdminPageShell';
 import type { AdminContentType } from '@/lib/admin-content';
+import { HUB_GUIDE_CATEGORIES } from '@/lib/hub-guide-categories';
 
 type RecordRow = {
     id: string;
@@ -35,12 +37,13 @@ const fieldLabels: Record<string, string> = {
     name: 'Name', roleOrOffice: 'Role or office', councilOrUnit: 'Council or unit', email: 'Public email', profileUrl: 'Profile URL',
     sourcePageName: 'Source', sourcePageSlug: 'Source slug', message: 'Caption / message', manualTitle: 'Manual title', manualBody: 'Manual body',
     articleTitle: 'Article title', articleBody: 'Article body', section: 'Section', imageAlt: 'Image alt text',
+    imageUrl: 'Image URL', fbLink: 'Facebook post link',
     title: 'Title', description: 'Description', fileUrl: 'PDF or Drive URL', category: 'Category', label: 'Label', href: 'Safe URL', icon: 'Icon name',
 };
 
 const editableFields: Record<AdminContentType, string[]> = {
     directory: ['name', 'roleOrOffice', 'councilOrUnit', 'email', 'profileUrl', 'enabled', 'sortOrder'],
-    news: ['sourcePageName', 'sourcePageSlug', 'message', 'manualTitle', 'manualBody', 'articleTitle', 'articleBody', 'section', 'imageAlt', 'featured', 'enabled', 'sortOrder'],
+    news: ['sourcePageName', 'sourcePageSlug', 'message', 'manualTitle', 'manualBody', 'articleTitle', 'articleBody', 'imageUrl', 'fbLink', 'section', 'imageAlt', 'featured', 'enabled', 'sortOrder'],
     'hub-guide': ['title', 'description', 'fileUrl', 'category', 'enabled', 'sortOrder'],
     'quick-link': ['label', 'description', 'href', 'icon', 'category', 'enabled', 'sortOrder'],
 };
@@ -57,17 +60,8 @@ function titleFromPdfFileName(fileName: string): string {
 function createDefaults(type: AdminContentType): Record<string, unknown> {
     if (type === 'directory') return { entryType: 'organization', directoryKey: '', name: '', roleOrOffice: '', councilOrUnit: '', email: '', imageUrl: '', profileUrl: '', publicDataJson: {}, enabled: true, sortOrder: 0 };
     if (type === 'news') return { sourcePageId: 'manual', sourcePageName: 'Manual entry', sourcePageSlug: 'manual', message: '', imageUrl: '', publishedAt: new Date().toISOString(), fbLink: '', targetPagesJson: ['/news'], enabled: true, featured: false, manualTitle: '', manualBody: '', articleTitle: '', articleBody: '', imageAlt: '', section: '', sortOrder: null };
-    if (type === 'hub-guide') return { title: '', description: '', fileUrl: '', driveFileId: '', resourceKey: '', category: 'Student Handbook & Guides', publicDataJson: {}, enabled: true, sortOrder: 0 };
+    if (type === 'hub-guide') return { title: '', description: '', fileUrl: '', driveFileId: '', resourceKey: '', category: HUB_GUIDE_CATEGORIES[0], publicDataJson: {}, enabled: true, sortOrder: 0 };
     return { label: '', href: '', category: '', description: '', icon: 'ExternalLink', enabled: true, sortOrder: 0 };
-}
-
-function publicSourceNotice(source: ContentResponse['publicSource'], type: AdminContentType): string | null {
-    if (!source) return null;
-    if (source === 'sheet') return 'Drafts and publications are stored in Neon, but this public collection remains Sheets-backed until its separate cutover.';
-    if (source === 'db-with-sheets-fallback') return type === 'hub-guide'
-        ? 'Published Hub Guides read from Neon first and use Sheets only if Neon is unavailable.'
-        : 'Published records read from Neon first and fall back to Sheets only if Neon is unavailable.';
-    return 'Published records are served from Neon.';
 }
 
 async function fetcher(url: string): Promise<ContentResponse> {
@@ -94,6 +88,16 @@ function getPrimaryLabel(type: AdminContentType, row: RecordRow) {
     return String(payload.name || payload.title || payload.label || payload.manualTitle || row.id);
 }
 
+function getCategoryLabel(type: AdminContentType, row: RecordRow): string {
+    const payload = row.draft?.payload || row.payload;
+    const value = type === 'directory'
+        ? payload.councilOrUnit || payload.roleOrOffice
+        : type === 'news'
+            ? payload.section
+            : payload.category;
+    return String(value || '').trim() || 'Uncategorized';
+}
+
 export default function AdminContentWorkspace() {
     const router = useRouter();
     const pathname = usePathname();
@@ -111,13 +115,25 @@ export default function AdminContentWorkspace() {
     const [historyLoading, setHistoryLoading] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [logoUploading, setLogoUploading] = useState(false);
+    const [unfurlUrl, setUnfurlUrl] = useState('');
+    const [isUnfurling, setIsUnfurling] = useState(false);
     const hubGuideFileInputRef = useRef<HTMLInputElement>(null);
     const [hubGuideFile, setHubGuideFile] = useState<File | null>(null);
     const [hubGuideDragActive, setHubGuideDragActive] = useState(false);
     const [hubGuideUploadError, setHubGuideUploadError] = useState('');
+    const [viewMode, setViewMode] = useState<'list' | 'category'>('list');
     const selected = data?.records.find((row) => row.id === selectedId) || null;
 
     const records = useMemo(() => data?.records || [], [data?.records]);
+    const groupedRecords = useMemo(() => {
+        if (viewMode !== 'category') return [] as Array<[string, RecordRow[]]>;
+        const groups = new Map<string, RecordRow[]>();
+        records.forEach((row) => {
+            const category = getCategoryLabel(type, row);
+            groups.set(category, [...(groups.get(category) || []), row]);
+        });
+        return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+    }, [records, type, viewMode]);
     const selectedPayload = draftValues || selected?.draft?.payload || selected?.payload || {};
     const hasDraft = Boolean(selected?.draft || draftValues);
     const { confirmDiscard } = useAdminUnsavedChanges({ isDirty, onDiscard: () => setIsDirty(false) });
@@ -126,6 +142,43 @@ export default function AdminContentWorkspace() {
         setHubGuideFile(null);
         setHubGuideDragActive(false);
         setHubGuideUploadError('');
+        setUnfurlUrl('');
+    }
+
+    async function handleUnfurlNewsPost() {
+        const targetUrl = unfurlUrl.trim();
+        if (!targetUrl) return;
+        setIsUnfurling(true);
+        try {
+            const response = await fetch('/api/admin/news/unfurl', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ url: targetUrl }),
+            });
+            const payload = await response.json() as { success?: boolean; draft?: Record<string, unknown>; error?: { message?: string } };
+            if (!response.ok || !payload.draft) {
+                throw new Error(payload.error?.message || 'Failed to import post preview.');
+            }
+            setDraftValues((current) => ({
+                ...(current || selectedPayload),
+                ...payload.draft,
+            }));
+            setIsDirty(true);
+            pushToast({
+                title: 'Post preview imported',
+                description: 'Fields populated from link. Review title, body, and image below before publishing.',
+                tone: 'success',
+            });
+        } catch (unfurlError) {
+            pushToast({
+                title: 'Import failed',
+                description: unfurlError instanceof Error ? unfurlError.message : 'Unable to unfurl post link.',
+                tone: 'danger',
+                durationMs: 0,
+            });
+        } finally {
+            setIsUnfurling(false);
+        }
     }
 
     function selectHubGuideFile(file: File | undefined) {
@@ -191,6 +244,16 @@ export default function AdminContentWorkspace() {
     function updateField(key: string, value: unknown) {
         setDraftValues((current) => ({ ...(current || selectedPayload), [key]: value }));
         setIsDirty(true);
+    }
+
+    function renderRecordRow(row: RecordRow) {
+        const payload = row.draft?.payload || row.payload;
+        return <div key={row.id} className="grid gap-3 px-4 py-4 transition hover:bg-white/[0.04] sm:grid-cols-[minmax(0,1fr)_8rem_8rem_9rem_3rem] sm:items-center sm:px-5">
+            <button type="button" onClick={() => openRecord(row.id)} className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"><span className="block truncate text-sm font-semibold text-white">{getPrimaryLabel(type, row)}</span><span className="mt-1 block truncate text-xs text-slate-500">{displayValue(payload.category || payload.roleOrOffice || payload.section || row.id)}</span></button>
+            <span className={`w-fit border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${row.draft ? 'border-amber-300/25 bg-amber-300/10 text-amber-100' : 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100'}`}>{row.draft ? 'Draft' : 'Live'}</span>
+            <span className="text-sm text-slate-300">v{row.version}</span><span className="text-xs text-slate-500">{formatDate(row.updatedAt)}</span>
+            <AdminActionMenu label={`Actions for ${getPrimaryLabel(type, row)}`} compact items={[{ id: 'edit', label: 'Open editor', icon: <FilePenLine size={15} />, onSelect: () => openRecord(row.id, 'edit') }, { id: 'preview', label: 'Preview', icon: <Eye size={15} />, onSelect: () => openRecord(row.id, 'preview') }, { id: 'history', label: 'History', icon: <History size={15} />, onSelect: () => openRecord(row.id, 'history') }]} />
+        </div>;
     }
 
     function saveDraft() {
@@ -363,20 +426,11 @@ export default function AdminContentWorkspace() {
                 </div>
 
                 {error ? <div className="mt-5"><AdminNotice tone="danger" role="alert">{error.message}</AdminNotice></div> : null}
-                {publicSourceNotice(data?.publicSource, type) ? <div className="mt-5"><AdminNotice tone={data?.publicSource === 'sheet' ? 'warning' : 'info'}>{publicSourceNotice(data?.publicSource, type)}</AdminNotice></div> : null}
                 <section className="mt-5 border border-white/10 bg-white/[0.04]" aria-label={`${type} content records`}>
-                    <div className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-3 sm:px-5"><p className="text-sm text-slate-300">{isLoading ? 'Loading records…' : `${records.length} records · ${records.filter((row) => row.draft).length} pending drafts`}</p><button type="button" onClick={() => void mutate()} className="min-h-10 border border-white/10 px-3 text-xs font-semibold text-slate-300 hover:bg-white/5">Refresh</button></div>
+                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-4 py-3 sm:px-5"><p className="text-sm text-slate-300">{isLoading ? 'Loading records…' : `${records.length} records · ${records.filter((row) => row.draft).length} pending drafts`}</p><div className="flex flex-wrap items-center gap-2"><AdminViewModeToggle value={viewMode} onChange={setViewMode} allLabel="All records" /><button type="button" onClick={() => void mutate()} className="min-h-10 border border-white/10 px-3 text-xs font-semibold text-slate-300 hover:bg-white/5">Refresh</button></div></div>
                     <div className="hidden grid-cols-[minmax(0,1fr)_8rem_8rem_9rem_3rem] gap-3 border-b border-white/10 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-slate-500 sm:grid sm:px-5"><span>Record</span><span>Status</span><span>Version</span><span>Updated</span><span aria-hidden="true" /></div>
                     <div className="divide-y divide-white/10">
-                        {records.map((row) => {
-                            const payload = row.draft?.payload || row.payload;
-                            return <div key={row.id} className="grid gap-3 px-4 py-4 transition hover:bg-white/[0.04] sm:grid-cols-[minmax(0,1fr)_8rem_8rem_9rem_3rem] sm:items-center sm:px-5">
-                                <button type="button" onClick={() => openRecord(row.id)} className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"><span className="block truncate text-sm font-semibold text-white">{getPrimaryLabel(type, row)}</span><span className="mt-1 block truncate text-xs text-slate-500">{displayValue(payload.category || payload.roleOrOffice || payload.section || row.id)}</span></button>
-                                <span className={`w-fit border px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${row.draft ? 'border-amber-300/25 bg-amber-300/10 text-amber-100' : 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100'}`}>{row.draft ? 'Draft' : 'Live'}</span>
-                                <span className="text-sm text-slate-300">v{row.version}</span><span className="text-xs text-slate-500">{formatDate(row.updatedAt)}</span>
-                                <AdminActionMenu label={`Actions for ${getPrimaryLabel(type, row)}`} compact items={[{ id: 'edit', label: 'Open editor', icon: <FilePenLine size={15} />, onSelect: () => openRecord(row.id, 'edit') }, { id: 'preview', label: 'Preview', icon: <Eye size={15} />, onSelect: () => openRecord(row.id, 'preview') }, { id: 'history', label: 'History', icon: <History size={15} />, onSelect: () => openRecord(row.id, 'history') }]} />
-                            </div>;
-                        })}
+                        {viewMode === 'category' ? groupedRecords.map(([category, categoryRows]) => <div key={category} className="border-b border-white/10 last:border-b-0"><div className="flex items-center justify-between gap-3 bg-white/[0.03] px-4 py-2.5 sm:px-5"><h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-amber-200">{category}</h3><span className="text-xs text-slate-500">{categoryRows.length}</span></div>{categoryRows.map(renderRecordRow)}</div>) : records.map(renderRecordRow)}
                         {!isLoading && records.length === 0 ? <p className="px-5 py-12 text-center text-sm text-slate-500">No records are available from the current Neon source.</p> : null}
                     </div>
                 </section>
@@ -401,7 +455,8 @@ export default function AdminContentWorkspace() {
                         <p className="mt-3 min-h-5 text-xs text-rose-200" aria-live="polite">{hubGuideUploadError}</p>
                     </section> : null}
                     {type === 'directory' && !isCreating ? <label className="block border border-dashed border-amber-300/30 bg-amber-300/5 p-4 text-sm text-slate-300"><span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-amber-200">Staged logo</span><input type="file" accept="image/png,image/jpeg,image/webp" disabled={logoUploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void stageLogo(file); event.currentTarget.value = ''; }} className="block w-full text-xs text-slate-400 file:mr-3 file:border file:border-white/10 file:bg-white/5 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-200" /><span className="mt-2 block text-xs text-slate-500">Uploads stay private in the restricted Drive folder until publish.</span></label> : null}
-                    {(isCreating && type === 'directory' ? ['entryType', ...editableFields[type]] : editableFields[type]).map((key) => { const value = selectedPayload[key]; const isBoolean = typeof value === 'boolean'; const isLong = key.toLowerCase().includes('body') || key === 'message' || key === 'description'; return <label key={key} className="block text-sm text-slate-300"><span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">{key === 'entryType' ? 'Entry type' : fieldLabels[key] || key}</span>{key === 'entryType' ? <select value={String(value || 'organization')} onChange={(event) => updateField(key, event.target.value)} className="w-full border border-white/10 bg-black/10 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-200/50"><option value="organization">Organization</option><option value="office">Office</option></select> : isBoolean ? <span className="flex min-h-11 items-center gap-3 border border-white/10 bg-black/10 px-3"><input type="checkbox" checked={Boolean(value)} onChange={(event) => updateField(key, event.target.checked)} className="accent-amber-300" /><span>{value ? 'Enabled on public surface' : 'Hidden from public surface'}</span></span> : isLong ? <textarea value={String(value ?? '')} onChange={(event) => updateField(key, event.target.value)} rows={key === 'description' ? 3 : 6} className="w-full border border-white/10 bg-black/10 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-200/50" /> : <input value={String(value ?? '')} onChange={(event) => updateField(key, key === 'sortOrder' ? Number(event.target.value || 0) : event.target.value)} type={key === 'sortOrder' ? 'number' : 'text'} className="w-full border border-white/10 bg-black/10 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-200/50" />}</label>; })}
+                    {type === 'news' ? <section className="border border-sky-300/25 bg-sky-300/5 p-4 text-sm text-slate-300"><span className="block text-xs font-semibold uppercase tracking-[0.1em] text-sky-200">Auto-Import from Facebook / Announcement Link</span><p className="mt-1 text-xs text-slate-400">Paste a public post link (Facebook post, advisory) to automatically extract headline, body, and image.</p><div className="mt-3 flex flex-col gap-2 sm:flex-row"><input type="url" value={unfurlUrl} onChange={(event) => setUnfurlUrl(event.target.value)} placeholder="https://www.facebook.com/..." disabled={isUnfurling || isSaving} className="flex-1 border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-sky-300/50" /><button type="button" onClick={() => void handleUnfurlNewsPost()} disabled={isUnfurling || isSaving || !unfurlUrl.trim()} className="inline-flex min-h-10 items-center justify-center gap-2 border border-sky-300/30 bg-sky-300/10 px-4 text-xs font-semibold uppercase tracking-[0.08em] text-sky-100 hover:bg-sky-300/20 disabled:opacity-50">{isUnfurling ? <Loader2 size={14} className="animate-spin" /> : null}{isUnfurling ? 'Importing…' : 'Import Link'}</button></div>{selectedPayload.imageUrl ? <div className="mt-3 flex items-center gap-3 border border-white/10 bg-black/20 p-2"><img src={String(selectedPayload.imageUrl)} alt="Preview" className="h-12 w-12 rounded object-cover" /><div className="min-w-0 flex-1"><span className="block truncate text-xs font-medium text-slate-200">Image preview detected</span><span className="block truncate text-[0.7rem] text-slate-400">{String(selectedPayload.imageUrl)}</span></div></div> : null}</section> : null}
+                    {(isCreating && type === 'directory' ? ['entryType', ...editableFields[type]] : editableFields[type]).map((key) => { const value = selectedPayload[key]; const isBoolean = typeof value === 'boolean'; const isLong = key.toLowerCase().includes('body') || key === 'message' || key === 'description'; const isHubGuideCategory = type === 'hub-guide' && key === 'category'; return <label key={key} className="block text-sm text-slate-300"><span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">{key === 'entryType' ? 'Entry type' : fieldLabels[key] || key}</span>{key === 'entryType' ? <select value={String(value || 'organization')} onChange={(event) => updateField(key, event.target.value)} className="w-full border border-white/10 bg-black/10 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-200/50"><option value="organization">Organization</option><option value="office">Office</option></select> : isHubGuideCategory ? <select value={String(value ?? '')} onChange={(event) => updateField(key, event.target.value)} required className="w-full border border-white/10 bg-black/10 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-200/50"><option value="" disabled>Select category</option>{HUB_GUIDE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}</select> : isBoolean ? <span className="flex min-h-11 items-center gap-3 border border-white/10 bg-black/10 px-3"><input type="checkbox" checked={Boolean(value)} onChange={(event) => updateField(key, event.target.checked)} className="accent-amber-300" /><span>{value ? 'Enabled on public surface' : 'Hidden from public surface'}</span></span> : isLong ? <textarea value={String(value ?? '')} onChange={(event) => updateField(key, event.target.value)} rows={key === 'description' ? 3 : 6} className="w-full border border-white/10 bg-black/10 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-200/50" /> : <input value={String(value ?? '')} onChange={(event) => updateField(key, key === 'sortOrder' ? Number(event.target.value || 0) : event.target.value)} type={key === 'sortOrder' ? 'number' : 'text'} className="w-full border border-white/10 bg-black/10 px-3 py-2.5 text-sm text-white outline-none focus:border-amber-200/50" />}</label>; })}
                     {!isCreating ? <details className="border border-white/10 p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-200">Source and publication state</summary><dl className="mt-3 grid gap-3 text-xs text-slate-400"><div><dt className="text-slate-500">Current version</dt><dd>v{selected?.version}</dd></div><div><dt className="text-slate-500">Last updated</dt><dd>{selected ? formatDate(selected.updatedAt) : 'Not created'}</dd></div><div><dt className="text-slate-500">Draft base version</dt><dd>{selected?.draft ? selected.draft.baseVersion === 0 ? 'New record' : `v${selected.draft.baseVersion}` : 'No draft'}</dd></div></dl></details> : null}
                 </div> : null}
             </AdminDrawer>

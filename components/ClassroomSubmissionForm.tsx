@@ -1,515 +1,114 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { CheckCircle, AlertCircle, ExternalLink, GraduationCap, ClipboardCheck, Loader2 } from 'lucide-react';
-import { deriveEffectivePortalRole, hasLeaderPrivilege, normalizePortalRole, PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
+import { hasLeaderPrivilege } from '@/lib/portal-mode';
 import { formatClassroomDueDateTime } from '@/lib/date-time';
+import { ClassroomSubmissionSchema } from '@/schemas/classroom';
 
-interface ClassroomCourse {
-    id: string;
-    name: string;
-    section?: string;
-    room?: string;
-}
-
-interface ClassroomCourseWork {
-    id: string;
-    title: string;
-    description?: string;
-    alternateLink?: string;
-    associatedWithDeveloper?: boolean;
-    state?: string;
-    dueDate?: {
-        year?: number;
-        month?: number;
-        day?: number;
-    };
-    dueTime?: {
-        hours?: number;
-        minutes?: number;
-        seconds?: number;
-        nanos?: number;
-    };
-}
-
-interface RecentClassroomSubmission {
-    courseName: string;
-    courseworkTitle: string;
-    linkUrl: string;
-    turnIn: boolean;
-    submittedAtIso: string;
-}
-
-interface ClassroomSubmissionStatus {
-    success: boolean;
-    message: string;
-    errorCode?: string;
-    requestId?: string;
-    retryAfterSeconds?: number;
-    retryAt?: string;
-}
-
-const apiFetcher = async (url: string) => {
-    const res = await fetch(url, { cache: 'no-store' });
-    const json = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-        const message = typeof json?.error === 'string' ? json.error : 'Request failed';
-        throw new Error(message);
-    }
-
-    return json;
+type Course = { id: string; name: string; section?: string };
+type CourseWork = { id: string; title: string; associatedWithDeveloper?: boolean; dueDate?: { year?: number; month?: number; day?: number }; dueTime?: { hours?: number; minutes?: number } };
+const fetcher = async (url: string) => {
+    const response = await fetch(url, { cache: 'no-store' });
+    const body = await response.json();
+    if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Classroom is temporarily unavailable.');
+    return body;
 };
 
 export default function ClassroomSubmissionForm() {
     const { data: session, status } = useSession();
-    const [portalMode, setPortalMode] = useState('');
-    const [selectedCourseId, setSelectedCourseId] = useState('');
-    const [selectedCourseWorkId, setSelectedCourseWorkId] = useState('');
-    const [reportLink, setReportLink] = useState('');
-    const [reportTitle, setReportTitle] = useState('');
-    const [turnInImmediately, setTurnInImmediately] = useState(true);
-    const [classroomSubmitting, setClassroomSubmitting] = useState(false);
-    const [classroomResult, setClassroomResult] = useState<ClassroomSubmissionStatus | null>(null);
-    const [recentClassroomSubmission, setRecentClassroomSubmission] = useState<RecentClassroomSubmission | null>(null);
-    const [duplicateRetryUntil, setDuplicateRetryUntil] = useState<number | null>(null);
-    const [duplicateCountdown, setDuplicateCountdown] = useState(0);
+    const [courseId, setCourseId] = useState('');
+    const [courseWorkId, setCourseWorkId] = useState('');
+    const [periodKind, setPeriodKind] = useState('ANNUAL');
+    const [submitting, setSubmitting] = useState(false);
+    const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+    const attempt = useRef<{ payload: string; key: string } | null>(null);
+    const pending = useRef(false);
+    const leader = status === 'authenticated' && hasLeaderPrivilege(session?.user?.role);
+    const { data: coursesData, error: coursesError, isLoading: coursesLoading } = useSWR(leader ? '/api/classroom/courses' : null, fetcher, { revalidateOnFocus: false });
+    const { data: workData, error: workError, isLoading: workLoading } = useSWR(leader && courseId ? `/api/classroom/courses/${encodeURIComponent(courseId)}/coursework` : null, fetcher, { revalidateOnFocus: false });
+    const courses: Course[] = coursesData?.data || [];
+    const coursework: CourseWork[] = workData?.data || [];
+    const selectedWork = coursework.find(item => item.id === courseWorkId);
 
-    useEffect(() => {
-        if (typeof document === 'undefined') {
+    async function submit(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (pending.current) return;
+        const form = event.currentTarget;
+        const values = new FormData(form);
+        const parsed = ClassroomSubmissionSchema.safeParse({
+            courseId, courseWorkId, title: values.get('title'), linkUrl: values.get('linkUrl'),
+            academicYearStart: Number(values.get('academicYearStart')), periodKind,
+            periodNumber: periodKind === 'ANNUAL' ? null : Number(values.get('periodNumber')),
+            periodStart: values.get('periodStart'), periodEnd: values.get('periodEnd'),
+            turnIn: values.get('turnIn') === 'on',
+        });
+        if (!parsed.success) {
+            setResult({ success: false, message: parsed.error.issues[0]?.message || 'Check the report details.' });
             return;
         }
-
-        const cookie = document.cookie
-            .split(';')
-            .map((part) => part.trim())
-            .find((part) => part.startsWith(`${PORTAL_MODE_COOKIE}=`));
-
-        setPortalMode(cookie ? decodeURIComponent(cookie.slice(PORTAL_MODE_COOKIE.length + 1)) : '');
-    }, [status]);
-
-    const isAuthenticated = status === 'authenticated' && Boolean(session?.user?.email);
-    const effectiveRole = deriveEffectivePortalRole(session?.user?.role, portalMode);
-    const isLeader = hasLeaderPrivilege(effectiveRole);
-    const isLeaderAccountInStudentMode = hasLeaderPrivilege(session?.user?.role) && !isLeader;
-
-    const { data: coursesResponse, error: coursesError, isLoading: coursesLoading } = useSWR(
-        isAuthenticated && isLeader ? '/api/classroom/courses' : null,
-        apiFetcher,
-        { revalidateOnFocus: false }
-    );
-
-    const courses: ClassroomCourse[] = coursesResponse?.data || [];
-
-    const { data: courseworkResponse, error: courseworkError, isLoading: courseworkLoading } = useSWR(
-        isAuthenticated && isLeader && selectedCourseId
-            ? `/api/classroom/courses/${encodeURIComponent(selectedCourseId)}/coursework`
-            : null,
-        apiFetcher,
-        { revalidateOnFocus: false }
-    );
-
-    const courseworkItems: ClassroomCourseWork[] = courseworkResponse?.data || [];
-    const selectedCoursework = courseworkItems.find((item) => item.id === selectedCourseWorkId);
-    const selectedCourseworkProjectMismatch = selectedCoursework?.associatedWithDeveloper === false;
-    const trimmedReportLink = reportLink.trim();
-
-    useEffect(() => {
-        if (!duplicateRetryUntil) {
-            setDuplicateCountdown(0);
-            return;
-        }
-
-        const updateCountdown = () => {
-            const nextCountdown = Math.max(0, Math.ceil((duplicateRetryUntil - Date.now()) / 1000));
-            setDuplicateCountdown(nextCountdown);
-            if (nextCountdown === 0) {
-                setDuplicateRetryUntil(null);
-            }
-        };
-
-        updateCountdown();
-        const timer = window.setInterval(updateCountdown, 1000);
-        return () => window.clearInterval(timer);
-    }, [duplicateRetryUntil]);
-
-    const reportLinkIssue = useMemo(() => {
-        if (!trimmedReportLink) return 'Add the report or correspondence link.';
-        if (!/^https:\/\//i.test(trimmedReportLink)) return 'Report link must start with https://.';
-
+        const payload = JSON.stringify(parsed.data);
+        if (!attempt.current || attempt.current.payload !== payload) attempt.current = { payload, key: crypto.randomUUID() };
+        pending.current = true;
+        setSubmitting(true);
+        setResult(null);
         try {
-            const parsedUrl = new URL(trimmedReportLink);
-            if (parsedUrl.protocol !== 'https:') return 'Report link must use HTTPS.';
-        } catch {
-            return 'Enter a complete, valid report URL.';
-        }
-
-        return '';
-    }, [trimmedReportLink]);
-
-    const incompleteSubmissionReason = useMemo(() => {
-        if (duplicateCountdown > 0) return `Duplicate submission lock expires in ${duplicateCountdown} seconds.`;
-        if (coursesLoading) return 'Loading Classroom courses.';
-        if (coursesError) return 'Resolve the Classroom course loading error.';
-        if (courses.length === 0) return 'No active Classroom courses are available for this account.';
-        if (!selectedCourseId) return 'Select a Classroom course.';
-        if (courseworkLoading) return 'Loading coursework for the selected course.';
-        if (courseworkError) return 'Resolve the coursework loading error.';
-        if (courseworkItems.length === 0) return 'No coursework is available for this course yet.';
-        if (!selectedCourseWorkId) return 'Select a coursework item.';
-        if (selectedCourseworkProjectMismatch) return 'Select coursework created through this portal project.';
-        if (reportLinkIssue) return reportLinkIssue;
-        return '';
-    }, [
-        duplicateCountdown,
-        coursesLoading,
-        coursesError,
-        courses.length,
-        selectedCourseId,
-        courseworkLoading,
-        courseworkError,
-        courseworkItems.length,
-        selectedCourseWorkId,
-        selectedCourseworkProjectMismatch,
-        reportLinkIssue,
-    ]);
-
-    const submitDisabled = classroomSubmitting || Boolean(incompleteSubmissionReason);
-
-    const handleClassroomSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!isAuthenticated || !isLeader) {
-            setClassroomResult({ success: false, message: 'Only authenticated student leaders can submit through Google Classroom.' });
-            return;
-        }
-
-        if (!selectedCourseId || !selectedCourseWorkId) {
-            setClassroomResult({ success: false, message: 'Please select both a course and a coursework item.' });
-            return;
-        }
-
-        if (selectedCourseworkProjectMismatch) {
-            setClassroomResult({
-                success: false,
-                message: 'This coursework was created outside this portal project, so Google Classroom will not allow portal attachments.',
-                errorCode: 'PROJECT_PERMISSION_DENIED',
-            });
-            return;
-        }
-
-        let normalizedLink = reportLink.trim();
-        if (!/^https:\/\//i.test(normalizedLink)) {
-            setClassroomResult({ success: false, message: 'Report link must start with https://.' });
-            return;
-        }
-
-        try {
-            normalizedLink = new URL(normalizedLink).toString();
-        } catch {
-            setClassroomResult({ success: false, message: 'Please provide a valid report URL.' });
-            return;
-        }
-
-        setClassroomSubmitting(true);
-        setClassroomResult(null);
-
-        try {
-            const res = await fetch('/api/classroom/submissions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    courseId: selectedCourseId,
-                    courseWorkId: selectedCourseWorkId,
-                    linkUrl: normalizedLink,
-                    linkTitle: reportTitle.trim() || undefined,
-                    turnIn: turnInImmediately,
-                }),
-            });
-
-            const json = await res.json().catch(() => ({}));
-
-            if (!res.ok) {
-                if (json?.errorCode === 'DUPLICATE_SUBMISSION') {
-                    const retryAfterSeconds = Number(json?.retryAfterSeconds || res.headers.get('Retry-After') || 90);
-                    const safeRetryAfterSeconds = Number.isFinite(retryAfterSeconds) ? Math.max(1, Math.ceil(retryAfterSeconds)) : 90;
-                    const retryUntil = json?.retryAt ? new Date(json.retryAt).getTime() : Date.now() + safeRetryAfterSeconds * 1000;
-                    setDuplicateRetryUntil(Number.isFinite(retryUntil) ? retryUntil : Date.now() + safeRetryAfterSeconds * 1000);
-                    setClassroomResult({
-                        success: false,
-                        message: `Duplicate submission detected. You can resubmit in ${safeRetryAfterSeconds} seconds.`,
-                        errorCode: json?.errorCode,
-                        requestId: json?.requestId,
-                        retryAfterSeconds: safeRetryAfterSeconds,
-                        retryAt: json?.retryAt,
-                    });
-                    return;
-                }
-                setClassroomResult({
-                    success: false,
-                    message: json?.error || 'Submission failed',
-                    errorCode: json?.errorCode,
-                    requestId: json?.requestId,
-                });
+            const response = await fetch('/api/classroom/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': attempt.current.key }, body: payload });
+            const body = await response.json();
+            if (!response.ok) {
+                setResult({ success: false, message: typeof body.error === 'string' ? body.error : 'Submission failed. Retry with the same details.' });
                 return;
             }
-
-            setClassroomResult({
-                success: true,
-                message: turnInImmediately
-                    ? 'Report submitted and marked as turned in successfully.'
-                    : 'Report attached successfully. You can turn it in from Google Classroom when ready.',
-                requestId: json?.requestId,
-            });
-
-            const selectedCourse = courses.find((course) => course.id === selectedCourseId);
-            setRecentClassroomSubmission({
-                courseName: selectedCourse?.name || selectedCourseId,
-                courseworkTitle: selectedCoursework?.title || selectedCourseWorkId,
-                linkUrl: normalizedLink,
-                turnIn: turnInImmediately,
-                submittedAtIso: new Date().toISOString(),
-            });
-
-            setReportLink('');
-            setReportTitle('');
+            setResult({ success: true, message: `Private submission ${body.transparencySubmissionId} recorded. ${parsed.data.turnIn ? 'The source was attached and turned in to Classroom.' : 'The source was attached. Turn it in through Classroom when ready.'} Publication requires officer review.` });
+            // Keep the successful reference so a repeated click cannot attach the same payload twice.
         } catch {
-            setClassroomResult({ success: false, message: 'Network error while submitting to Google Classroom.' });
+            setResult({ success: false, message: 'The response could not be confirmed. Keep these details and retry to check the same submission.' });
         } finally {
-            setClassroomSubmitting(false);
+            pending.current = false;
+            setSubmitting(false);
         }
-    };
+    }
 
-    return (
-        <div className="card transparency-classroom-surface p-8">
-            <div className="flex items-center gap-3 mb-3">
-                <GraduationCap size={22} className="text-rtu-blue" />
-                <h3 className="text-xl font-bold text-strong">Google Classroom Report Submission</h3>
+    if (status === 'loading') return <div className="h-48 animate-pulse rounded-xl bg-inset motion-reduce:animate-none" role="status" aria-label="Loading submission access" />;
+    if (status !== 'authenticated') return <Link className="btn-primary" href={`/login?callbackUrl=${encodeURIComponent('/transparency/submit')}`}>Sign in with RTU</Link>;
+    if (!leader) return <p>Student leader access is required to submit an SSC report.</p>;
+
+    return <form onSubmit={submit} className="space-y-6">
+        <p className="text-sm text-muted">Supreme Student Council. Submitted sources and your identity remain private to authorized officers.</p>
+        <fieldset disabled={submitting} className="space-y-5">
+            <legend className="sr-only">SSC report submission</legend>
+            <div className="grid gap-5 sm:grid-cols-2">
+                <label className="block text-sm font-medium">Classroom course
+                    <select name="courseId" required value={courseId} onChange={event => { setCourseId(event.target.value); setCourseWorkId(''); }} className="field-input mt-2" disabled={coursesLoading}>
+                        <option value="">{coursesLoading ? 'Loading courses…' : 'Select course'}</option>
+                        {courses.map(course => <option key={course.id} value={course.id}>{course.name}{course.section ? ` — ${course.section}` : ''}</option>)}
+                    </select>
+                </label>
+                <label className="block text-sm font-medium">Coursework
+                    <select name="courseWorkId" required value={courseWorkId} onChange={event => setCourseWorkId(event.target.value)} className="field-input mt-2" disabled={!courseId || workLoading}>
+                        <option value="">{workLoading ? 'Loading coursework…' : 'Select coursework'}</option>
+                        {coursework.map(work => <option key={work.id} value={work.id} disabled={work.associatedWithDeveloper === false}>{work.title}{work.associatedWithDeveloper === false ? ' (submit in Classroom)' : ''}</option>)}
+                    </select>
+                </label>
             </div>
-            <p className="text-sm text-body mb-6">
-                Student leaders can submit transparency reports and official correspondence directly to assigned Google Classroom coursework.
-            </p>
-
-            {!isAuthenticated ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-sm text-amber-900">
-                        People with <strong>Student Leader Access</strong> can log in with their <strong>@rtu.edu.ph</strong> account to access Classroom submission tools.
-                    </p>
-                    <Link
-                        href={`/login?callbackUrl=${encodeURIComponent('/transparency')}`}
-                        className="btn-primary w-full mt-3 inline-flex items-center justify-center gap-2 text-base"
-                    >
-                        Continue to Login
-                    </Link>
-                </div>
-            ) : !isLeader ? (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-                    {isLeaderAccountInStudentMode
-                        ? 'You are signed in as a Student Leader account in Student Access mode. Switch to Student Leader mode from your profile menu, or sign in with Student Leader Access, to open Classroom tools.'
-                        : 'Classroom submission tools are available to authenticated student leaders.'}
-                </div>
-            ) : (
-                <form onSubmit={handleClassroomSubmit} className="space-y-5">
-                    {coursesError && (
-                        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                            {coursesError.message.includes('token')
-                                ? 'Classroom access token missing. Please sign out and sign in again to grant Classroom permissions.'
-                                : `Failed to load courses: ${coursesError.message}`}
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="block text-sm font-medium mb-1.5 text-body">Classroom Course</label>
-                        <select
-                            value={selectedCourseId}
-                            onChange={(e) => {
-                                setSelectedCourseId(e.target.value);
-                                setSelectedCourseWorkId('');
-                                setClassroomResult(null);
-                            }}
-                            disabled={coursesLoading || classroomSubmitting || courses.length === 0}
-                            className="field-input text-sm"
-                        >
-                            <option value="">{coursesLoading ? 'Loading courses...' : 'Select a course'}</option>
-                            {courses.map((course) => (
-                                <option key={course.id} value={course.id}>
-                                    {course.name}{course.section ? ` — ${course.section}` : ''}
-                                </option>
-                            ))}
-                        </select>
-                        {!coursesLoading && !coursesError && courses.length === 0 && (
-                            <p className="text-xs text-subtle mt-2">
-                                No active courses found for your account. Ensure you are enrolled in the expected Classroom.
-                            </p>
-                        )}
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium mb-1.5 text-body">Coursework Item</label>
-                        <select
-                            value={selectedCourseWorkId}
-                            onChange={(e) => {
-                                setSelectedCourseWorkId(e.target.value);
-                                setClassroomResult(null);
-                            }}
-                            disabled={!selectedCourseId || courseworkLoading || classroomSubmitting}
-                            className="field-input text-sm"
-                        >
-                            <option value="">
-                                {selectedCourseId
-                                    ? (courseworkLoading ? 'Loading coursework...' : 'Select coursework')
-                                    : 'Select a course first'}
-                            </option>
-                            {courseworkItems.map((item) => (
-                                <option key={item.id} value={item.id}>
-                                    {item.title}{item.associatedWithDeveloper === false ? ' - not portal-managed' : ''}
-                                </option>
-                            ))}
-                        </select>
-                        {selectedCourseworkProjectMismatch && (
-                            <p className="text-xs text-amber-700 mt-2">
-                                This coursework was created outside the portal Google Cloud project. Google Classroom only allows portal attachments on coursework created by this same project.
-                            </p>
-                        )}
-                        {selectedCoursework && (
-                            <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/35 p-3 text-xs leading-6 text-slate-300">
-                                <p className="font-semibold text-white">Selected coursework</p>
-                                <p className="mt-1">Due: {formatClassroomDueDateTime(selectedCoursework.dueDate, selectedCoursework.dueTime)}</p>
-                                {selectedCoursework.state && <p>Status: {selectedCoursework.state.toLowerCase()}</p>}
-                            </div>
-                        )}
-                        {courseworkError && (
-                            <p className="text-xs text-red-600 mt-2">
-                                Failed to load coursework: {courseworkError.message}
-                            </p>
-                        )}
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium mb-1.5 text-body">Report / Correspondence Link</label>
-                        <input
-                            type="url"
-                            required
-                            placeholder="https://docs.google.com/document/d/..."
-                            value={reportLink}
-                            onChange={(e) => {
-                                setReportLink(e.target.value);
-                                setClassroomResult(null);
-                            }}
-                            disabled={classroomSubmitting}
-                            className="field-input text-sm"
-                            aria-invalid={Boolean(trimmedReportLink && reportLinkIssue)}
-                        />
-                        {trimmedReportLink && reportLinkIssue && (
-                            <p className="text-xs text-amber-200 mt-2">{reportLinkIssue}</p>
-                        )}
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium mb-1.5 text-body">
-                            Link Title <span className="text-subtle">(optional)</span>
-                        </label>
-                        <input
-                            type="text"
-                            maxLength={150}
-                            placeholder="March Transparency Report"
-                            value={reportTitle}
-                            onChange={(e) => {
-                                setReportTitle(e.target.value);
-                                setClassroomResult(null);
-                            }}
-                            disabled={classroomSubmitting}
-                            className="field-input text-sm"
-                        />
-                        <p className="mt-2 text-xs text-subtle">{reportTitle.length}/150 characters</p>
-                    </div>
-
-                    <label className="flex items-center gap-2 text-sm text-body">
-                        <input
-                            type="checkbox"
-                            checked={turnInImmediately}
-                            onChange={(e) => setTurnInImmediately(e.target.checked)}
-                            disabled={classroomSubmitting}
-                        />
-                        Mark as <strong>Turned In</strong> immediately after attaching link
-                    </label>
-
-                    <AnimatePresence>
-                        {classroomResult && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className={`p-4 rounded-xl flex items-start gap-3 text-sm ${classroomResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}
-                            >
-                                {classroomResult.success ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
-                                <div className="space-y-1">
-                                    <p>{classroomResult.message}</p>
-                                    {!classroomResult.success && (classroomResult.errorCode || classroomResult.requestId) && (
-                                        <p className="text-xs opacity-80">
-                                            {classroomResult.errorCode && <span>Code: {classroomResult.errorCode}</span>}
-                                            {classroomResult.errorCode && classroomResult.requestId && <span> </span>}
-                                            {classroomResult.requestId && <span>Ref: {classroomResult.requestId}</span>}
-                                        </p>
-                                    )}
-                                    {!classroomResult.success && classroomResult.errorCode === 'DUPLICATE_SUBMISSION' && duplicateCountdown > 0 && (
-                                        <p className="text-xs opacity-90">Retry opens in {duplicateCountdown} seconds.</p>
-                                    )}
-                                    {classroomResult.success && classroomResult.requestId && (
-                                        <p className="text-xs opacity-80">Ref: {classroomResult.requestId}</p>
-                                    )}
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-
-                    {recentClassroomSubmission && (
-                        <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900 space-y-1.5">
-                            <p className="font-semibold">Most recent submission</p>
-                            <p>Course: {recentClassroomSubmission.courseName}</p>
-                            <p>Coursework: {recentClassroomSubmission.courseworkTitle}</p>
-                            <p>
-                                Status: {recentClassroomSubmission.turnIn ? 'Turned In' : 'Attached (not yet turned in)'}
-                            </p>
-                            <p>
-                                Submitted:{' '}
-                                {new Date(recentClassroomSubmission.submittedAtIso).toLocaleString('en-PH', {
-                                    dateStyle: 'medium',
-                                    timeStyle: 'short',
-                                })}
-                            </p>
-                            <a
-                                href={recentClassroomSubmission.linkUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-green-900 underline"
-                            >
-                                Open submitted link <ExternalLink size={14} />
-                            </a>
-                        </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={submitDisabled}
-                        className={`btn-primary w-full gap-2 text-base ${classroomSubmitting ? 'is-submitting' : ''}`}
-                    >
-                        {classroomSubmitting ? <Loader2 size={18} className="animate-spin" /> : <ClipboardCheck size={18} />}
-                        {classroomSubmitting ? 'Submitting to Classroom...' : 'Submit to Google Classroom'}
-                    </button>
-                    {incompleteSubmissionReason && !classroomSubmitting && (
-                        <p className="text-xs leading-6 text-slate-300">
-                            {incompleteSubmissionReason}
-                        </p>
-                    )}
-                </form>
-            )}
-        </div>
-    );
+            {(coursesError || workError) && <p role="alert" className="text-sm text-danger">{coursesError?.message || workError?.message} Check Classroom permissions and your current access mode.</p>}
+            {!coursesLoading && !coursesError && courses.length === 0 && <p>No active courses are available for this account.</p>}
+            {courseId && !workLoading && !workError && coursework.length === 0 && <p>No coursework is available for this course.</p>}
+            {selectedWork && <p className="text-sm text-muted">Due: {formatClassroomDueDateTime(selectedWork.dueDate, selectedWork.dueTime)}</p>}
+            <label className="block text-sm font-medium">Report title<input name="title" required minLength={3} maxLength={200} className="field-input mt-2" /></label>
+            <div className="grid gap-5 sm:grid-cols-2">
+                <label className="block text-sm font-medium">Academic year begins<input name="academicYearStart" type="number" min={2000} max={2100} defaultValue={new Date().getFullYear()} required className="field-input mt-2" /><span className="text-xs text-muted">For 2026–2027, enter 2026.</span></label>
+                <label className="block text-sm font-medium">Period type<select name="periodKind" value={periodKind} onChange={event => setPeriodKind(event.target.value)} className="field-input mt-2"><option value="ANNUAL">Annual</option><option value="SEMESTER">Semester</option><option value="QUARTER">Quarter</option><option value="MONTH">Month</option></select></label>
+                {periodKind !== 'ANNUAL' && <label className="block text-sm font-medium">Period number<input key={periodKind} name="periodNumber" type="number" min={1} max={periodKind === 'SEMESTER' ? 2 : periodKind === 'QUARTER' ? 4 : 12} required className="field-input mt-2" /></label>}
+                <label className="block text-sm font-medium">Period starts<input name="periodStart" type="date" required className="field-input mt-2" /></label>
+                <label className="block text-sm font-medium">Period ends<input name="periodEnd" type="date" required className="field-input mt-2" /></label>
+            </div>
+            <label className="block text-sm font-medium">Private report source link<input name="linkUrl" type="url" required placeholder="https://docs.google.com/…" className="field-input mt-2" /><span className="text-xs text-muted">Use HTTPS and grant the reviewing officers access to the source.</span></label>
+            <label className="flex items-center gap-3 text-sm"><input name="turnIn" type="checkbox" defaultChecked />Turn in to Classroom after attaching the source</label>
+        </fieldset>
+        {result && <p role={result.success ? 'status' : 'alert'} className={`rounded-lg border p-4 text-sm ${result.success ? 'border-success' : 'border-warning'}`}>{result.message}</p>}
+        <button type="submit" disabled={submitting || !courseWorkId || selectedWork?.associatedWithDeveloper === false} className="btn-primary">{submitting ? 'Submitting…' : 'Submit SSC report'}</button>
+    </form>;
 }
