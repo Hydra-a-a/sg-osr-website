@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { ApiError, toApiResponse } from '@/lib/api-errors';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getClientIp, redactErrorForLog } from '@/lib/security';
-import { syncFacebookNews } from '@/lib/facebook-news-sync';
+import { syncFacebookNews, verifyFacebookNewsTokens } from '@/lib/facebook-news-sync';
 
 function withNoStore(response: NextResponse): NextResponse {
     response.headers.set('Cache-Control', 'no-store');
@@ -57,13 +57,24 @@ async function handleSync(request: Request) {
     try {
         const requestUrl = new URL(request.url);
         const dryRun = requestUrl.searchParams.get('dryRun') === '1';
-        const summary = await syncFacebookNews({ dryRun });
+        const verify = requestUrl.searchParams.get('verify') === '1';
+        const includeUnrouted = requestUrl.searchParams.get('includeUnrouted') === '1';
+        if (includeUnrouted && process.env.NODE_ENV === 'production') {
+            return withNoStore(toApiResponse(new ApiError(403, 'FORBIDDEN', 'Unrouted news preview is available only in local development.')));
+        }
+
+        const summary = verify
+            ? await verifyFacebookNewsTokens()
+            : await syncFacebookNews({ dryRun, allowUnroutedPosts: includeUnrouted });
+        const success = summary.errors.length === 0;
 
         return withNoStore(NextResponse.json({
-            success: true,
+            success,
             dryRun,
+            verify,
+            includeUnrouted,
             summary,
-        }));
+        }, { status: success ? 200 : 502 }));
     } catch (error) {
         console.error('[News Sync] Failed to sync Facebook news:', redactErrorForLog(error));
         return withNoStore(toApiResponse(error));

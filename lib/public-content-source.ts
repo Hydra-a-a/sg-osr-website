@@ -5,6 +5,7 @@ import { normalizeNewsPost } from '@/lib/news';
 import type { NewsPost } from '@/schemas/news';
 import { unstable_cache } from 'next/cache';
 import { PUBLIC_CACHE_TAGS } from '@/lib/public-cache';
+import { normalizeHubGuideCategory } from '@/lib/hub-guide-categories';
 
 export type PublicContentSource = 'sheet' | 'db-with-sheets-fallback' | 'db';
 
@@ -76,7 +77,7 @@ async function queryHubGuidesFromDb() {
                 id: row.id,
                 title: row.title,
                 description: row.description || '',
-                category: row.category || 'Student Handbook & Guides',
+                category: normalizeHubGuideCategory(row.category),
                 source: 'drive',
                 embedUrl: previewUrl,
                 viewUrl: previewUrl,
@@ -95,7 +96,7 @@ async function queryHubGuidesFromDb() {
             id: row.id,
             title: row.title,
             description: row.description || '',
-            category: row.category || 'Student Handbook & Guides',
+            category: normalizeHubGuideCategory(row.category),
             source: 'direct',
             embedUrl,
             viewUrl,

@@ -15,7 +15,6 @@ const FORBIDDEN_AUTH_HOST_PATTERNS = [
 ];
 
 const PREVIEW_AUTH_HOST_PATTERNS = [
-    /--[a-z0-9-]+\.netlify\.app$/i,
     /-git-[^.]+\.vercel\.app$/i,
 ];
 

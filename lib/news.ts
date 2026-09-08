@@ -219,6 +219,31 @@ export function resolveNewsRoutes(
     };
 }
 
+export function hasEnabledNewsRoutingMatch(
+    hashtags: string[],
+    rules: NewsRoutingRule[],
+): boolean {
+    const normalizedTags = new Set(hashtags.map(normalizeHashtag));
+    return rules.some((rule) => rule.enabled && normalizedTags.has(normalizeHashtag(rule.hashtag)));
+}
+
+export function hasSyncedNewsPostChanges(existing: NewsPost, incoming: NewsPost): boolean {
+    const comparable = (post: NewsPost) => ({
+        sourcePageId: post.sourcePageId,
+        sourcePageName: post.sourcePageName,
+        caption: post.caption,
+        articleTitle: post.articleTitle,
+        articleBody: post.articleBody,
+        imageUrl: post.imageUrl || '',
+        publishedAt: post.publishedAt,
+        fbLink: post.fbLink || '',
+        routeTargets: post.routeTargets,
+        section: post.section,
+    });
+
+    return JSON.stringify(comparable(existing)) !== JSON.stringify(comparable(incoming));
+}
+
 export function normalizeSyncedFacebookPost(
     input: FacebookNewsPostInput,
     rules: NewsRoutingRule[],
@@ -386,6 +411,7 @@ export function mergeSyncedNewsPost(existing: NewsPost, incoming: NewsPost): New
         ...incoming,
         manualTitle: existing.manualTitle,
         manualBody: existing.manualBody,
+        articleSlug: existing.articleSlug || incoming.articleSlug,
         imageAlt: existing.imageAlt || incoming.imageAlt,
         visible: existing.visible,
         featured: existing.featured,
