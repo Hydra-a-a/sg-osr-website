@@ -13,12 +13,10 @@ import {
     ChevronRight,
     Clock3,
     FileText,
-    Lightbulb,
     Loader2,
     MessageSquare,
     Search,
     Send,
-    ShieldCheck,
     UploadCloud,
 } from 'lucide-react';
 
@@ -66,27 +64,22 @@ const ACCESS_TOKEN_STORAGE_KEY = 'osr_proposal_access_tokens';
 
 const TIMELINE_STEPS: Array<{
     label: string;
-    description: string;
     activeFor: ProposalStatus[];
 }> = [
     {
         label: 'Submitted',
-        description: 'Your proposal document and summary were logged into the review queue.',
         activeFor: ['Pending Review', 'Under Review', 'Needs Revision', 'Approved', 'Rejected'],
     },
     {
         label: 'Under Review',
-        description: 'The reviewing office is assessing feasibility, policy alignment, and supporting details.',
         activeFor: ['Under Review', 'Needs Revision', 'Approved', 'Rejected'],
     },
     {
         label: 'Revisions Needed',
-        description: 'The reviewing office requested updates before final board action.',
         activeFor: ['Needs Revision'],
     },
     {
         label: 'Board Decision',
-        description: 'Final decision and reviewer notes are available in the tracker.',
         activeFor: ['Approved', 'Rejected'],
     },
 ];
@@ -158,7 +151,6 @@ function Timeline({ status }: { status: ProposalStatus }) {
                                 </div>
                                 <div className="pt-1 min-w-0">
                                     <p className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-slate-400'}`}>{step.label}</p>
-                                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">{step.description}</p>
                                 </div>
                             </div>
                         );
@@ -391,20 +383,14 @@ export default function ProposalTrackingPage() {
 
                     <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-end mb-10">
                         <div>
-                            <span className="proposal-eyebrow inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-4">
-                                <Lightbulb size={14} className="text-amber-300" />
-                                Proposal Tracking Hub
-                            </span>
-                            <h1 className="proposal-display">
-                                Follow Every <span className="proposal-display-accent">Official Action</span>
-                            </h1>
-                            <p className="proposal-lead mt-5 max-w-2xl text-slate-200">
-                                Review your proposal history, monitor the status timeline, and continue the feedback loop with the reviewing office from one secure dashboard.
+                            <h1 className="page-header-title mb-3 font-bold text-white">Track a proposal</h1>
+                            <p className="max-w-2xl text-base leading-relaxed text-slate-200">
+                                View proposal status, decisions, and reviewer feedback.
                             </p>
                         </div>
 
                         <div className="proposal-panel p-5 md:p-6">
-                            <p className="text-xs uppercase tracking-[0.16em] text-slate-400 mb-2">Lookup Proposal</p>
+                            <p className="text-xs uppercase tracking-[0.16em] text-slate-400 mb-2">Proposal ID</p>
                             <form
                                 onSubmit={(event) => {
                                     event.preventDefault();
@@ -427,7 +413,7 @@ export default function ProposalTrackingPage() {
                                     disabled={!query.trim() || loadingDetail}
                                     className="rounded-xl bg-amber-400 text-slate-950 font-semibold px-5 py-3 hover:bg-amber-300 disabled:opacity-60 disabled:cursor-not-allowed transition"
                                 >
-                                    {loadingDetail ? 'Loading...' : 'Open Tracker'}
+                                    {loadingDetail ? 'Loading…' : 'Open tracker'}
                                 </button>
                             </form>
                         </div>
@@ -441,18 +427,16 @@ export default function ProposalTrackingPage() {
                         >
                             <div className="flex items-center justify-between gap-4 mb-5">
                                 <div>
-                                    <h2 className="text-xl font-semibold text-white">Your Proposal History</h2>
-                                    <p className="text-sm text-slate-400 mt-1">Only proposals tied to your signed-in institutional account appear here.</p>
+                                    <h2 className="text-xl font-semibold text-white">Proposal history</h2>
                                 </div>
                                 {loadingList ? <Loader2 size={18} className="text-slate-300 animate-spin" /> : null}
                             </div>
 
                             {loadingList ? (
-                                <div className="py-10 text-sm text-slate-400">Loading proposal ledger...</div>
+                                <div className="py-10 text-sm text-slate-400">Loading proposals…</div>
                             ) : proposals.length === 0 ? (
                                 <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-6">
                                     <p className="text-white font-medium">No submitted proposals yet.</p>
-                                    <p className="text-sm text-slate-400 mt-2">Once you submit a proposal, its tracker ID and review history will appear here automatically.</p>
                                 </div>
                             ) : (
                                 <div className="space-y-3 max-h-[68vh] overflow-auto pr-1">
@@ -474,7 +458,7 @@ export default function ProposalTrackingPage() {
                                                         <p className="text-xs font-mono text-slate-400 mb-1">{item.proposalId}</p>
                                                         <p className="text-sm md:text-base font-semibold text-white line-clamp-2">{item.title || 'Untitled Proposal'}</p>
                                                     </div>
-                                                    <span className="text-[11px] px-2 py-1 rounded-full border border-white/10 bg-white/10 text-slate-200 whitespace-nowrap">
+                                                    <span className="text-xs text-slate-300 whitespace-nowrap">
                                                         {item.status}
                                                     </span>
                                                 </div>
@@ -509,16 +493,12 @@ export default function ProposalTrackingPage() {
                             {!proposal && !error ? (
                                 <div className="proposal-card p-8">
                                     <p className="text-white font-medium">Select a proposal to view its tracker.</p>
-                                    <p className="text-sm text-slate-400 mt-2">The tracker will show the proposal timeline, attached document, reviewer notes, and the discussion thread.</p>
                                 </div>
                             ) : null}
 
                             {proposal ? (
                                 <>
                                     <div className="proposal-card p-6 md:p-7 relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                                            <ShieldCheck size={108} />
-                                        </div>
                                         <div className="relative">
                                             <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
                                                 <div>
@@ -526,10 +506,7 @@ export default function ProposalTrackingPage() {
                                                     <h2 className="text-2xl md:text-3xl font-bold text-white leading-tight">{proposal.title}</h2>
                                                     <p className="text-sm text-slate-300 mt-3 max-w-3xl leading-relaxed">{proposal.description}</p>
                                                 </div>
-                                                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-300/20 bg-amber-300/10 text-amber-100 text-xs font-semibold">
-                                                    <Lightbulb size={14} />
-                                                    {proposal.status}
-                                                </span>
+                                                <span className="text-sm font-semibold text-amber-100">Status: {proposal.status}</span>
                                             </div>
 
                                             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 text-sm">
@@ -583,9 +560,8 @@ export default function ProposalTrackingPage() {
                                             <div>
                                                 <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                                                     <MessageSquare size={16} className="text-amber-200" />
-                                                    Feedback Loop
+                                                    Discussion
                                                 </h3>
-                                                <p className="text-xs text-slate-400 mt-1">Official officer responses are labeled below so organizational action is easy to distinguish.</p>
                                             </div>
                                             {loadingComments ? <Loader2 size={18} className="text-slate-300 animate-spin" /> : null}
                                         </div>
@@ -611,8 +587,8 @@ export default function ProposalTrackingPage() {
                                                                         {comment.authorName || (isOfficial ? 'OSR Officer' : 'Proposal Submitter')}
                                                                     </span>
                                                                     {isOfficial ? (
-                                                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-300/15 border border-emerald-300/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-100">
-                                                                            Official Action
+                                                                        <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-100">
+                                                                            Official
                                                                         </span>
                                                                     ) : null}
                                                                 </div>
@@ -638,12 +614,12 @@ export default function ProposalTrackingPage() {
 
                                         <form onSubmit={handleCommentSubmit} className="space-y-4">
                                             <div>
-                                                <label htmlFor="proposal-comment" className="block text-sm font-medium text-slate-200 mb-2">Add a reply</label>
+                                                <label htmlFor="proposal-comment" className="block text-sm font-medium text-slate-200 mb-2">Reply</label>
                                                 <textarea
                                                     id="proposal-comment"
                                                     value={message}
                                                     onChange={(event) => setMessage(event.target.value)}
-                                                    placeholder="Reply to reviewer notes, clarify scope, or submit your revision response..."
+                                                    placeholder="Write a reply or appeal."
                                                     rows={5}
                                                     className="w-full rounded-2xl border border-white/10 bg-black/20 text-white px-4 py-3 resize-none outline-none focus:ring-2 focus:ring-amber-300/25 focus:border-amber-300/30"
                                                     disabled={posting}
@@ -660,7 +636,7 @@ export default function ProposalTrackingPage() {
                                                 />
                                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                                     <div>
-                                                        <p className="text-sm font-medium text-white">Optional support attachment</p>
+                                                        <p className="text-sm font-medium text-white">Attachment (optional)</p>
                                                         <p className="text-xs text-slate-400 mt-1">PNG, JPG, PDF, DOC, or DOCX. Maximum 10MB.</p>
                                                         {attachment ? (
                                                             <p className="text-xs text-amber-200 mt-2">{attachment.name}</p>
@@ -703,7 +679,7 @@ export default function ProposalTrackingPage() {
                                                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-400 text-slate-950 font-semibold px-5 py-3 hover:bg-amber-300 disabled:opacity-60 disabled:cursor-not-allowed transition"
                                             >
                                                 {posting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                                                {posting ? 'Sending Reply...' : 'Send Reply'}
+                                                {posting ? 'Sending…' : 'Send reply'}
                                             </button>
                                         </form>
                                     </div>
@@ -741,36 +717,6 @@ export default function ProposalTrackingPage() {
                     mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
                     pointer-events: none;
                     z-index: 2;
-                }
-
-                .proposal-eyebrow {
-                    background: rgba(244, 192, 82, 0.12);
-                    border: 1px solid rgba(244, 192, 82, 0.2);
-                    color: #fde68a;
-                    font-size: 0.8rem;
-                    font-weight: 600;
-                    backdrop-filter: blur(8px);
-                }
-
-                .proposal-display {
-                    font-size: clamp(2.3rem, 5vw, 4.4rem);
-                    line-height: 1.05;
-                    color: #ffffff;
-                    max-width: 14ch;
-                    font-weight: 700;
-                    text-wrap: balance;
-                }
-
-                .proposal-display-accent {
-                    color: transparent;
-                    background: linear-gradient(135deg, #fde68a 0%, #f59e0b 100%);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                }
-
-                .proposal-lead {
-                    font-size: clamp(1rem, 1.1vw + 0.5rem, 1.15rem);
-                    line-height: 1.7;
                 }
 
                 .proposal-card,

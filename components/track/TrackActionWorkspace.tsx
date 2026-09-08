@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { LockKeyhole, MessageSquareMore } from 'lucide-react';
+import { LockKeyhole } from 'lucide-react';
 
 interface TrackActionWorkspaceProps {
     actionAllowed: boolean;
@@ -10,37 +10,20 @@ interface TrackActionWorkspaceProps {
 
 export function TrackActionWorkspace({ actionAllowed, children }: TrackActionWorkspaceProps) {
     return (
-        <section className="rounded-3xl border border-[rgba(35,72,116,0.16)] bg-[linear-gradient(165deg,rgba(255,255,255,0.98),rgba(242,247,252,0.92))] p-6">
+        <section className="rounded-3xl border border-white/10 bg-[linear-gradient(145deg,rgba(12,22,36,0.72),rgba(11,20,34,0.56))] shadow-[0_20px_50px_rgba(4,10,22,0.2)] p-6">
             <div className="mb-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand/75">
-                    Action workspace
-                </p>
-                <h3 className="mt-1 text-xl font-semibold tracking-tight text-strong">Follow-up, appeals, and discussion</h3>
-                <p className="mt-2 text-sm leading-relaxed text-subtle">
-                    This panel is intentionally separate from the read-only record so status review stays clear while replies and appeal actions stay focused.
-                </p>
+                <h3 className="text-xl font-semibold tracking-tight text-white">Follow-up and appeals</h3>
             </div>
 
             {actionAllowed ? (
                 children
             ) : (
-                <div className="rounded-xl border border-dashed border-[rgba(203,165,77,0.28)] bg-[rgba(203,165,77,0.08)] p-5">
-                    <div className="inline-flex rounded-full bg-surface-elevated p-2 text-[color:var(--accent-gold)] shadow-sm">
+                <div className="rounded-xl border border-dashed border-amber-300/30 bg-amber-300/[0.08] p-5">
+                    <div className="inline-flex bg-white/[0.08] p-2 text-amber-200 shadow-sm">
                         <LockKeyhole size={18} />
                     </div>
-                    <h4 className="mt-3 text-base font-semibold text-strong">Discussion is locked for this view</h4>
-                    <p className="mt-2 text-sm leading-relaxed text-body">
-                        Appeals, follow-up replies, and supporting documents are only available to the ticket owner or someone reopening the grievance with a valid access token.
-                    </p>
-                    <div className="mt-4 rounded-xl border border-[rgba(35,72,116,0.14)] bg-white p-4 text-sm text-body">
-                        <div className="flex items-center gap-2 font-semibold text-strong">
-                            <MessageSquareMore size={15} />
-                            What stays hidden
-                        </div>
-                        <p className="mt-2 leading-relaxed">
-                            Message history, attachments, and appeal actions remain hidden here to protect student privacy and prevent accidental disclosure.
-                        </p>
-                    </div>
+                    <h4 className="mt-3 text-base font-semibold text-white">Access restricted</h4>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-300">Follow-up messages, attachments, and appeals require ticket-owner access or a valid access token.</p>
                 </div>
             )}
         </section>

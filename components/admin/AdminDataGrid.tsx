@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronUp, Columns3, Search } from 'lucide-react';
 import type { AdminColumn, AdminRecordAdapter } from './admin-types';
 import { readAdminListQuery, writeAdminListQuery } from './admin-query';
+import AdminViewModeToggle from './AdminViewModeToggle';
 
 type AdminDataGridProps<TRecord> = {
     rows: TRecord[];
@@ -44,6 +45,7 @@ export default function AdminDataGrid<TRecord>({
     const [page, setPage] = useState(initialQuery.page);
     const [sort, setSort] = useState<SortState | null>(initialQuery.sort ? { key: initialQuery.sort, direction: initialQuery.dir } : null);
     const [showSecondary, setShowSecondary] = useState(true);
+    const [viewMode, setViewMode] = useState<'list' | 'category'>('list');
 
     function syncQuery(patch: Parameters<typeof writeAdminListQuery>[1]) {
         const nextQuery = writeAdminListQuery(new URLSearchParams(searchParams.toString()), patch);
@@ -68,9 +70,50 @@ export default function AdminDataGrid<TRecord>({
         });
     }, [adapter, columns, query, rows, sort]);
 
-    const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+    const displayRows = useMemo(() => {
+        if (!adapter.getCategory || viewMode !== 'category') return filteredRows;
+        return [...filteredRows].sort((left, right) => {
+            const result = adapter.getCategory!(left).localeCompare(adapter.getCategory!(right), undefined, { sensitivity: 'base' });
+            return result || adapter.getId(left).localeCompare(adapter.getId(right), undefined, { numeric: true, sensitivity: 'base' });
+        });
+    }, [adapter, filteredRows, viewMode]);
+
+    const pageCount = Math.max(1, Math.ceil(displayRows.length / pageSize));
     const activePage = Math.min(page, pageCount);
-    const pagedRows = filteredRows.slice((activePage - 1) * pageSize, activePage * pageSize);
+    const pagedRows = displayRows.slice((activePage - 1) * pageSize, activePage * pageSize);
+    const groupedRows = useMemo(() => {
+        if (!adapter.getCategory || viewMode !== 'category') return [] as Array<[string, TRecord[]]>;
+        const groups = new Map<string, TRecord[]>();
+        pagedRows.forEach((row) => {
+            const label = adapter.getCategory!(row).trim() || 'Uncategorized';
+            groups.set(label, [...(groups.get(label) || []), row]);
+        });
+        return [...groups.entries()];
+    }, [adapter, pagedRows, viewMode]);
+
+    function renderTableRow(row: TRecord) {
+        const id = adapter.getId(row);
+        const selected = id === selectedId;
+        return (
+            <tr
+                key={id}
+                tabIndex={0}
+                aria-selected={selected}
+                onClick={() => selectRow(row)}
+                onKeyDown={(event) => handleRowKeyDown(event, row)}
+                className={`cursor-pointer align-top outline-none transition focus-visible:bg-amber-200/[0.08] ${selected ? 'bg-amber-200/[0.1]' : 'hover:bg-white/[0.04]'}`}
+            >
+                {columns.map((column) => {
+                    const secondary = column.priority === 'secondary';
+                    return (
+                        <td key={column.key} className={`${column.className || ''} ${secondary && !showSecondary ? 'hidden' : ''} px-3 py-3.5 text-slate-200`}>
+                            {column.render ? column.render(row) : column.getValue(row)}
+                        </td>
+                    );
+                })}
+            </tr>
+        );
+    }
 
     function selectRow(row: TRecord) {
         onSelect(row);
@@ -122,6 +165,7 @@ export default function AdminDataGrid<TRecord>({
                                 <span>Secondary columns</span>
                                 <input type="checkbox" checked={showSecondary} onChange={(event) => setShowSecondary(event.target.checked)} className="accent-amber-300" />
                             </label>
+                            {adapter.getCategory ? <AdminViewModeToggle value={viewMode} onChange={(nextMode) => { setViewMode(nextMode); setPage(1); }} allLabel="All records" compact showLabel={false} /> : null}
                         </div>
                     </details>
                     {toolbar}
@@ -153,29 +197,7 @@ export default function AdminDataGrid<TRecord>({
                             <tr><td colSpan={columns.length} className="px-3 py-14 text-center text-slate-400">Loading records...</td></tr>
                         ) : pagedRows.length === 0 ? (
                             <tr><td colSpan={columns.length} className="px-3 py-14 text-center text-slate-400">{emptyMessage}</td></tr>
-                        ) : pagedRows.map((row) => {
-                            const id = adapter.getId(row);
-                            const selected = id === selectedId;
-                            return (
-                                <tr
-                                    key={id}
-                                    tabIndex={0}
-                                    aria-selected={selected}
-                                    onClick={() => selectRow(row)}
-                                    onKeyDown={(event) => handleRowKeyDown(event, row)}
-                                    className={`cursor-pointer align-top outline-none transition focus-visible:bg-amber-200/[0.08] ${selected ? 'bg-amber-200/[0.1]' : 'hover:bg-white/[0.04]'}`}
-                                >
-                                    {columns.map((column) => {
-                                        const secondary = column.priority === 'secondary';
-                                        return (
-                                            <td key={column.key} className={`${column.className || ''} ${secondary && !showSecondary ? 'hidden' : ''} px-3 py-3.5 text-slate-200`}>
-                                                {column.render ? column.render(row) : column.getValue(row)}
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            );
-                        })}
+                        ) : viewMode === 'category' && adapter.getCategory ? groupedRows.map(([category, rows]) => <Fragment key={category}><tr className="bg-white/[0.03]"><th colSpan={columns.length} scope="rowgroup" className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-amber-200">{category}<span className="ml-2 text-slate-500">{rows.length}</span></th></tr>{rows.map(renderTableRow)}</Fragment>) : pagedRows.map(renderTableRow)}
                     </tbody>
                 </table>
             </div>

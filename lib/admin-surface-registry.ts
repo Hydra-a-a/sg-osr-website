@@ -1,4 +1,4 @@
-export type AdminSurfaceKey = 'grievances' | 'proposals' | 'routes' | 'lost-found' | 'users' | 'directory' | 'content' | 'classroom';
+export type AdminSurfaceKey = 'grievances' | 'proposals' | 'routes' | 'lost-found' | 'users' | 'directory' | 'content' | 'classroom' | 'transparency';
 export type AdminSurfaceSource = 'neon' | 'sheets' | 'hybrid' | 'code' | 'linked';
 
 export type AdminSurfaceRegistryEntry = {
@@ -13,6 +13,7 @@ export type AdminSurfaceRegistryEntry = {
 };
 
 export const adminSurfaceRegistry: AdminSurfaceRegistryEntry[] = [
+    { key: 'transparency', label: 'SSC transparency', description: 'Prepare financial reports, approve publication, and reply privately to students.', adminHref: '/services/admin/transparency', publicHrefs: ['/transparency'], source: 'neon', editor: 'moderation', actions: ['prepare', 'review', 'publish', 'withdraw', 'reply'] },
     { key: 'grievances', label: 'Grievances', description: 'Review tickets and publish resolutions.', adminHref: '/services/admin/grievances', publicHrefs: ['/services/grievance', '/services/track'], source: 'sheets', editor: 'moderation', actions: ['review', 'resolve', 'reply'] },
     { key: 'proposals', label: 'Proposals', description: 'Review project submissions and discussion.', adminHref: '/services/admin/proposals', publicHrefs: ['/services/proposals', '/services/proposals/track'], source: 'sheets', editor: 'moderation', actions: ['review', 'reply'] },
     { key: 'routes', label: 'Community routes', description: 'Moderate commuter route submissions.', adminHref: '/services/admin/routes', publicHrefs: ['/hub/commute', '/hub/commute/contribute', '/hub/commute/leaderboard'], source: 'sheets', editor: 'moderation', actions: ['approve', 'flag', 'restore confidence'] },

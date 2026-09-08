@@ -7,13 +7,9 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
     ArrowLeft,
-    AlertTriangle,
-    BookOpen,
     Loader2,
-    MessageSquare,
     Search,
     Send,
-    Ticket,
     UploadCloud,
     XCircle,
 } from 'lucide-react';
@@ -45,22 +41,22 @@ const FOLLOW_UP_ALLOWED_MIME_TYPES = new Set([
 const STEPS: TrackStep[] = [
     {
         label: 'Ticket received',
-        description: 'Your grievance was received and securely logged in the system.',
+        description: 'Case logged.',
         activeFor: ['Open', 'In Progress', 'Resolved', 'Closed', 'Appealed'],
     },
     {
         label: 'Under review',
-        description: 'The Student Regent is actively reviewing or coordinating a resolution for your concern.',
+        description: 'Review in progress.',
         activeFor: ['In Progress', 'Resolved', 'Closed', 'Appealed'],
     },
     {
         label: 'Resolved or waiting for closure',
-        description: 'A resolution has been issued or the case is now waiting for final closure and any follow-up.',
+        description: 'Resolution issued or awaiting closure.',
         activeFor: ['Resolved', 'Closed', 'Appealed'],
     },
     {
         label: 'Appeal submitted',
-        description: 'A formal appeal or follow-up reply is now part of the official discussion thread.',
+        description: 'Appeal added to the case record.',
         activeFor: ['Appealed'],
     },
 ];
@@ -168,34 +164,17 @@ function getLatestOfficialUpdate(ticket: TrackTicket): string {
 
     switch (ticket.status) {
         case 'Open':
-            return 'Your grievance has been received and queued for intake review.';
+            return 'Received; awaiting intake review.';
         case 'In Progress':
-            return 'An OSR officer is actively reviewing the concern or coordinating the next resolution step.';
+            return 'Under active review.';
         case 'Resolved':
-            return 'A resolution has been recorded. Review the case details and thread for the latest context.';
+            return 'Resolution recorded.';
         case 'Closed':
-            return 'The case has been closed. If the outcome needs to be revisited, use the follow-up workspace to submit an appeal.';
+            return 'Case closed.';
         case 'Appealed':
-            return 'A formal appeal has been submitted and is now part of the official discussion thread.';
+            return 'Appeal submitted.';
         default:
             return 'The case record has been updated.';
-    }
-}
-
-function getNextStepGuidance(ticket: TrackTicket): string {
-    switch (ticket.status) {
-        case 'Open':
-            return 'Keep the ticket ID handy. The next visible change usually happens when OSR starts active review.';
-        case 'In Progress':
-            return 'Wait for the latest official response or add a focused follow-up only if new details materially change the case.';
-        case 'Resolved':
-            return 'Review the resolution notes first. If something important is missing, you can send a follow-up or formal appeal.';
-        case 'Closed':
-            return 'Closed cases stay on record. Use the action workspace only if you need to contest the outcome with new supporting context.';
-        case 'Appealed':
-            return 'Your appeal is already in motion. Add supporting files only when they strengthen the record instead of repeating earlier points.';
-        default:
-            return 'Keep monitoring the ticket here for official updates.';
     }
 }
 
@@ -334,46 +313,41 @@ function FollowUpThread({ ticketId, detailsRedacted }: { ticketId: string; detai
 
     return (
         <div className="space-y-5">
-            <div className="rounded-xl border border-[rgba(35,72,116,0.14)] bg-white p-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.05] p-4">
                 <div className="flex items-center gap-2">
-                    <MessageSquare size={16} className="text-subtle" />
-                    <p className="text-sm font-semibold text-strong">Thread history</p>
+                    <p className="text-sm font-semibold text-white">Discussion</p>
                 </div>
 
-                <div className="mt-4 overflow-hidden rounded-xl border border-[rgba(35,72,116,0.14)] bg-white">
+                <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-black/10">
                     {loading ? (
-                        <div className="flex items-center gap-2 text-sm text-subtle">
+                        <div className="flex items-center gap-2 text-sm text-slate-400">
                             <Loader2 className="animate-spin" size={14} />
-                            Loading discussion...
+                            Loading discussion…
                         </div>
                     ) : comments.length === 0 ? (
-                        <p className="text-sm italic text-subtle">No comments or appeals yet.</p>
+                        <p className="text-sm italic text-slate-400">No comments or appeals yet.</p>
                     ) : (
                         comments.map((comment, index) => (
-                            <div key={comment.commentId || index} className="border-b border-[rgba(35,72,116,0.1)] p-4 last:border-b-0">
+                            <div key={comment.commentId || index} className="border-b border-white/10 p-4 last:border-b-0">
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-sm font-semibold text-strong">{comment.author}</span>
+                                        <span className="text-sm font-semibold text-white">{comment.author}</span>
                                         {comment.authorRole === 'OFFICER' ? (
-                                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                                Official action
-                                            </span>
+                                            <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-300">Official</span>
                                         ) : null}
                                         {comment.isAppeal ? (
-                                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
-                                                Formal appeal
-                                            </span>
+                                            <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-amber-200">Appeal</span>
                                         ) : null}
                                     </div>
-                                    <span className="text-xs text-subtle">{formatSubmittedDate(comment.timestamp)}</span>
+                                    <span className="text-xs text-slate-400">{formatSubmittedDate(comment.timestamp)}</span>
                                 </div>
-                                <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-body">{comment.message}</p>
+                                <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{comment.message}</p>
                                 {comment.attachmentUrl ? (
                                     <a
                                         href={comment.attachmentUrl}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="mt-3 inline-flex text-xs font-medium text-brand hover:underline"
+                                        className="mt-3 inline-flex text-xs font-medium text-sky-200 hover:underline"
                                     >
                                         View follow-up document
                                     </a>
@@ -384,12 +358,9 @@ function FollowUpThread({ ticketId, detailsRedacted }: { ticketId: string; detai
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="rounded-xl border border-[rgba(35,72,116,0.14)] bg-white p-4">
+            <form onSubmit={handleSubmit} className="rounded-xl border border-white/10 bg-white/[0.05] p-4">
                 <div className="mb-4">
-                    <p className="text-sm font-semibold text-strong">Send a follow-up or formal appeal</p>
-                    <p className="mt-1 text-sm text-subtle">
-                        Keep replies factual and specific. Use the appeal toggle only when you want to formally contest the current outcome.
-                    </p>
+                    <p className="text-sm font-semibold text-white">Follow-up or formal appeal</p>
                 </div>
 
                 {error ? <p className="mb-3 text-xs text-red-600">{error}</p> : null}
@@ -397,12 +368,12 @@ function FollowUpThread({ ticketId, detailsRedacted }: { ticketId: string; detai
                 <textarea
                     value={message}
                     onChange={(event) => setMessage(event.target.value)}
-                    placeholder="Write your follow-up update, clarification, or appeal message..."
-                    className="min-h-[120px] w-full rounded-2xl border border-soft bg-surface-soft p-3 text-sm text-strong outline-none transition-all focus:border-[color:var(--accent-secondary)] focus:ring-2 focus:ring-[rgba(203,165,77,0.16)]"
+                    placeholder="Write a follow-up or appeal message."
+                    className="min-h-[120px] w-full rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-white outline-none transition-all placeholder:text-slate-500 focus:border-amber-300/50 focus:ring-2 focus:ring-amber-300/20"
                     disabled={posting}
                 />
 
-                <label className="mt-4 flex items-center gap-3 text-sm text-body">
+                <label className="mt-4 flex items-center gap-3 text-sm text-slate-200">
                     <input
                         type="checkbox"
                         checked={isAppeal}
@@ -413,10 +384,8 @@ function FollowUpThread({ ticketId, detailsRedacted }: { ticketId: string; detai
                     Submit this reply as a formal appeal
                 </label>
 
-                <div className="mt-4 rounded-xl border border-[rgba(35,72,116,0.14)] bg-white p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
-                        Optional attachment
-                    </p>
+                <div className="mt-4 rounded-xl border border-white/10 bg-black/10 p-4">
+                    <p className="text-sm font-semibold text-white">Attachment (optional)</p>
                     <input
                         id="track-follow-up-attachment"
                         type="file"
@@ -427,23 +396,15 @@ function FollowUpThread({ ticketId, detailsRedacted }: { ticketId: string; detai
                     />
                     <label
                         htmlFor="track-follow-up-attachment"
-                        className="mt-3 flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[rgba(35,72,116,0.2)] bg-[rgba(35,72,116,0.04)] px-4 text-sm text-strong"
+                        className="mt-3 flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/[0.04] px-4 text-sm text-slate-200"
                     >
                         <UploadCloud size={15} />
                         <span>{attachment ? 'Replace selected file' : 'Attach supporting document'}</span>
                     </label>
 
-                    <p className="mt-2 text-[11px] text-subtle">Allowed: PNG, JPG, PDF, DOC, DOCX. Maximum 10MB.</p>
+                    <p className="mt-2 text-[11px] text-slate-400">Allowed: PNG, JPG, PDF, DOC, DOCX. Maximum 10MB.</p>
                     {attachmentError ? <p className="mt-1 text-[11px] text-red-600">{attachmentError}</p> : null}
                     {attachment && !attachmentError ? <p className="mt-1 text-[11px] text-green-700">Selected: {attachment.name}</p> : null}
-                    {!attachment && !attachmentError ? (
-                        <div className="mt-3 rounded-xl border border-[rgba(203,165,77,0.24)] bg-[rgba(203,165,77,0.08)] px-3 py-2">
-                            <p className="inline-flex items-start gap-2 text-[11px] leading-relaxed text-body">
-                                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                                You may continue without proof, but supporting documents make appeals easier to evaluate and faster to resolve.
-                            </p>
-                        </div>
-                    ) : null}
                 </div>
 
                 <div className="mt-4 flex justify-end">
@@ -454,7 +415,7 @@ function FollowUpThread({ ticketId, detailsRedacted }: { ticketId: string; detai
                     >
                         <span className="inline-flex items-center gap-2">
                             {posting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
-                            {posting ? 'Posting...' : 'Post reply'}
+                            {posting ? 'Posting…' : 'Post reply'}
                         </span>
                     </button>
                 </div>
@@ -582,38 +543,11 @@ function TrackContent() {
     return (
         <div className="container-main max-w-6xl pb-24">
             <div className="mb-8">
-                <Link href="/services" className="group inline-flex items-center gap-2 text-sm text-subtle transition-colors hover:text-body">
+                <Link href="/services" className="group inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white">
                     <ArrowLeft size={14} className="transition-transform group-hover:-translate-x-0.5" />
                     Back to Services
                 </Link>
             </div>
-
-            {!ticket && !error ? (
-                <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
-                    <div className="relative overflow-hidden rounded-2xl border border-[rgba(35,72,116,0.18)] bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(242,247,252,0.9))] p-5 shadow-[0_16px_36px_-26px_rgba(16,35,59,0.5)]">
-                        <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-[rgba(125,211,252,0.22)] blur-2xl" />
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand/75">
-                            How this works
-                        </p>
-                        <h2 className="mt-1 text-xl font-semibold tracking-tight text-strong">A layered case workspace for grievance tracking</h2>
-                        <p className="mt-2 text-sm leading-relaxed text-subtle">
-                            Signed-in students see their own case history first. Manual lookup stays available at all times for ticket IDs and access tokens, and any result that is not verified for ownership remains in a privacy-protected shell.
-                        </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-[rgba(203,165,77,0.24)] bg-[linear-gradient(160deg,rgba(203,165,77,0.14),rgba(255,255,255,0.95))] p-5 shadow-[0_14px_32px_-28px_rgba(120,82,18,0.55)]">
-                        <div className="flex items-center gap-2">
-                            <BookOpen size={16} className="text-[var(--rtu-gold-dark)]" />
-                            <p className="text-sm font-semibold text-strong">Before you search</p>
-                        </div>
-                        <ul className="mt-3 space-y-2 text-sm leading-relaxed text-subtle">
-                            <li>Use the exact ticket ID from your confirmation email.</li>
-                            <li>Sign in to load My cases automatically.</li>
-                            <li>Use the follow-up workspace only for meaningful updates or a formal appeal.</li>
-                        </ul>
-                    </div>
-                </div>
-            ) : null}
 
             <div className="sticky top-20 z-10 mb-6">
                 <TrackEntryRail
@@ -637,21 +571,21 @@ function TrackContent() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -6 }}
-                        className="rounded-2xl border border-[rgba(220,38,38,0.18)] bg-[linear-gradient(180deg,rgba(220,38,38,0.07),rgba(255,255,255,0.98))] p-6 shadow-[0_18px_42px_-34px_rgba(127,29,29,0.45)]"
+                        className="rounded-2xl border border-red-400/20 bg-[linear-gradient(180deg,rgba(127,29,29,0.22),rgba(12,22,36,0.72))] p-6 shadow-[0_18px_42px_-34px_rgba(127,29,29,0.45)]"
                     >
                         <div className="flex gap-4">
                             <XCircle className="mt-0.5 shrink-0 text-red-500" size={20} />
                             <div>
-                                <h3 className="text-lg font-semibold tracking-tight text-strong">
+                                <h3 className="text-lg font-semibold tracking-tight text-white">
                                     {errorKind === 'offline' || errorKind === 'service' || errorKind === 'timeout' ? 'We could not reach the ticket service' : 'We couldn&apos;t find that ticket'}
                                 </h3>
-                                <p className="mt-2 text-sm text-body">{error}</p>
+                                <p className="mt-2 text-sm text-red-100/90">{error}</p>
                                 {errorKind === 'offline' || errorKind === 'service' || errorKind === 'timeout' ? (
-                                    <p className="mt-4 border-t border-[rgba(220,38,38,0.12)] pt-4 text-sm text-subtle">
+                                    <p className="mt-4 border-t border-red-300/20 pt-4 text-sm text-red-100/75">
                                         Reconnect or try again shortly. Your ticket ID was not treated as invalid.
                                     </p>
                                 ) : null}
-                                <p className="mt-4 border-t border-[rgba(220,38,38,0.12)] pt-4 text-sm text-subtle">
+                                <p className="mt-4 border-t border-red-300/20 pt-4 text-sm text-red-100/75">
                                     Double-check the exact ID from your confirmation email. Newly submitted tickets may take a few moments to appear, and protected tickets may also require the access token that came with the confirmation link.
                                 </p>
                             </div>
@@ -670,12 +604,10 @@ function TrackContent() {
                         <div className="space-y-6">
                             <TrackCaseSummary
                                 ticketId={ticket.ticketId}
-                                title={ticket.detailsRedacted ? 'Ticket status workspace' : (ticket.subject || `${ticket.category} grievance`)}
+                                title={ticket.detailsRedacted ? 'Ticket status' : (ticket.subject || `${ticket.category} grievance`)}
                                 status={ticket.status}
-                                submittedAtLabel={formatSubmittedDate(ticket.submittedAt)}
                                 submittedAtShort={formatShortSubmittedDate(ticket.submittedAt)}
                                 latestOfficialUpdate={getLatestOfficialUpdate(ticket)}
-                                nextStepGuidance={getNextStepGuidance(ticket)}
                                 isOwnerView={ownerView}
                                 category={ticket.detailsRedacted ? '' : ticket.category}
                             />
@@ -712,44 +644,32 @@ function TrackContent() {
 
 export default function TrackPage() {
     return (
-        <>
-            <section className="page-header relative overflow-hidden bg-[linear-gradient(165deg,#10233b_0%,#173455_46%,#22456d_100%)] text-slate-100">
+        <div className="min-h-screen bg-[linear-gradient(145deg,#102845_0%,#173b60_52%,#1f5577_100%)]">
+            <section className="relative overflow-hidden bg-transparent text-slate-100">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_8%_12%,rgba(247,217,150,0.24),transparent_52%),radial-gradient(120%_120%_at_92%_10%,rgba(125,211,252,0.22),transparent_58%)]" />
-                <div className="container-main relative grid items-end gap-8 py-3 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:py-6">
+                <div className="container-main relative py-6 lg:py-8">
                     <div>
-                        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-100">
-                            <Ticket size={12} />
-                            Case workspace
-                        </div>
                         <h1 className="page-header-title mb-3 font-bold text-white">
-                            Track Your <span className="text-gradient-gold">Grievance</span>
+                            Track a grievance
                         </h1>
                         <p className="max-w-2xl text-base leading-relaxed text-slate-200">
-                            Review case status, open your owner workspace, and keep follow-up actions separate from the official record so the whole process stays clearer and more privacy-safe.
+                            View case status, details, and follow-up options.
                         </p>
-                    </div>
-                    <div className="rounded-2xl border border-white/15 bg-white/[0.07] p-4 backdrop-blur-sm">
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-100/80">Workspace principles</p>
-                        <ul className="mt-3 space-y-2 text-sm text-slate-100/90">
-                            <li>Owner-first case context when signed in</li>
-                            <li>Manual lookup always available</li>
-                            <li>Protected records stay privacy-redacted</li>
-                        </ul>
                     </div>
                 </div>
             </section>
 
-            <section className="section-tight bg-surface-base">
+            <section className="section-tight bg-transparent">
                 <Suspense
                     fallback={
                         <div className="container-main flex max-w-6xl justify-center py-16">
-                            <Loader2 className="animate-spin text-subtle" size={24} />
+                            <Loader2 className="animate-spin text-slate-300" size={24} />
                         </div>
                     }
                 >
                     <TrackContent />
                 </Suspense>
             </section>
-        </>
+        </div>
     );
 }

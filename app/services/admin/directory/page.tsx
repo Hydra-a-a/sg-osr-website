@@ -144,6 +144,7 @@ export default function AdminDirectoryPage() {
     const directoryAdapter: AdminRecordAdapter<DirectoryEntry> = {
         getId: (entry) => entry.directoryKey,
         getSearchText: (entry) => [entry.directoryKey, entry.name, entry.roleOrOffice, entry.councilOrUnit, entry.entryType, entry.logo?.fileName].join(' '),
+        getCategory: (entry) => entry.councilOrUnit || entry.roleOrOffice || 'Uncategorized',
         getStatus: (entry) => entry.logo ? 'assigned' : 'missing',
         getUpdatedAt: (entry) => entry.logo?.updatedAt || '',
     };

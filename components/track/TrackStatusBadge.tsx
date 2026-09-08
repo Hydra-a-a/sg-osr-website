@@ -2,21 +2,21 @@
 
 export function TrackStatusBadge({ status }: { status: string }) {
     const map: Record<string, string> = {
-        Open: 'border-[rgba(203,165,77,0.24)] bg-[rgba(203,165,77,0.12)] text-[color:var(--accent-gold)]',
-        'In Progress': 'border-[rgba(35,72,116,0.18)] bg-[rgba(35,72,116,0.1)] text-[color:var(--accent-primary)]',
-        Resolved: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-        Closed: 'border-soft bg-surface-soft text-subtle',
-        Appealed: 'border-[rgba(203,165,77,0.2)] bg-[rgba(232,207,146,0.24)] text-[color:var(--rtu-gold-dark)]',
+        Open: 'border-amber-300/25 bg-amber-300/10 text-amber-200',
+        'In Progress': 'border-sky-300/25 bg-sky-300/10 text-sky-200',
+        Resolved: 'border-emerald-300/25 bg-emerald-300/10 text-emerald-200',
+        Closed: 'border-white/10 bg-white/[0.05] text-slate-300',
+        Appealed: 'border-amber-300/25 bg-amber-300/10 text-amber-200',
     };
     const dot: Record<string, string> = {
-        Open: 'bg-[color:var(--accent-gold)]',
-        'In Progress': 'bg-[color:var(--accent-primary)]',
-        Resolved: 'bg-green-500',
-        Closed: 'bg-[color:var(--text-subtle)]',
-        Appealed: 'bg-[color:var(--rtu-gold-dark)]',
+        Open: 'bg-amber-200',
+        'In Progress': 'bg-sky-200',
+        Resolved: 'bg-emerald-200',
+        Closed: 'bg-slate-400',
+        Appealed: 'bg-amber-200',
     };
-    const cls = map[status] ?? 'border-soft bg-surface-soft text-subtle';
-    const dotCls = dot[status] ?? 'bg-[color:var(--text-subtle)]';
+    const cls = map[status] ?? 'border-white/10 bg-white/[0.05] text-slate-300';
+    const dotCls = dot[status] ?? 'bg-slate-400';
 
     return (
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${cls}`}>

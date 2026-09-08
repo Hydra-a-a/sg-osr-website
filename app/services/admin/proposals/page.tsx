@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Loader2, MessageSquare, Paperclip, Save, Search, Send } from 'lucide-react';
 import { AdminNotice, AdminPageShell } from '@/components/admin/AdminPageShell';
 import AdminInspector from '@/components/admin/AdminInspector';
+import AdminViewModeToggle from '@/components/admin/AdminViewModeToggle';
 
 const STATUS_OPTIONS = ['Pending Review', 'Under Review', 'Approved', 'Rejected', 'Needs Revision'] as const;
 type ProposalStatus = typeof STATUS_OPTIONS[number];
@@ -55,6 +56,7 @@ export default function AdminProposalsPage() {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [query, setQuery] = useState('');
+    const [viewMode, setViewMode] = useState<'list' | 'category'>('list');
 
     const [activeRow, setActiveRow] = useState<number | null>(null);
     const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
@@ -87,6 +89,16 @@ export default function AdminProposalsPage() {
             || proposal.submitterEmail.toLowerCase().includes(normalized)
         ));
     }, [proposals, query]);
+
+    const groupedProposals = useMemo(() => {
+        if (viewMode !== 'category') return [] as Array<[string, ProposalItem[]]>;
+        const groups = new Map<string, ProposalItem[]>();
+        filteredProposals.forEach((proposal) => {
+            const category = proposal.category.trim() || 'Uncategorized';
+            groups.set(category, [...(groups.get(category) || []), proposal]);
+        });
+        return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+    }, [filteredProposals, viewMode]);
 
     useEffect(() => {
         let cancelled = false;
@@ -186,6 +198,30 @@ export default function AdminProposalsPage() {
         setReplyAttachment(null);
         setReplyAttachmentError('');
         setSuccess('');
+    }
+
+    function renderProposalCard(proposal: ProposalItem) {
+        const isActive = activeRow === proposal.rowNumber;
+        return <button
+            key={`${proposal.rowNumber}-${proposal.title}`}
+            type="button"
+            onClick={() => selectProposal(proposal)}
+            className={`w-full text-left rounded-xl border p-4 transition ${isActive
+                ? 'border-blue-400/60 bg-blue-500/15'
+                : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20'
+            }`}
+        >
+            <div className="flex items-center justify-between gap-3">
+                <p className="text-sm md:text-base font-semibold text-white line-clamp-1">{proposal.title || 'Untitled Proposal'}</p>
+                <span className="text-xs px-2 py-1 rounded-full bg-white/10 text-slate-200 border border-white/10">{proposal.status}</span>
+            </div>
+            <p className="mt-2 text-sm text-slate-300 line-clamp-1">{proposal.submitterName} • {proposal.projectType || 'N/A'}</p>
+            <div className="mt-2 text-xs text-slate-400 flex flex-wrap gap-3">
+                <span>{proposal.category || 'Uncategorized'}</span>
+                <span>{proposal.submittedAt || 'No timestamp'}</span>
+                <span>Row {proposal.rowNumber}</span>
+            </div>
+        </button>;
     }
 
     function handleReviewAttachmentChange(file: File | null) {
@@ -362,14 +398,17 @@ export default function AdminProposalsPage() {
                         <div className="admin-proposals-queue min-h-0 w-full border border-white/10 bg-white/[0.04] p-5 md:p-6 shadow-[0_12px_36px_rgba(0,0,0,0.2)]">
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
                                 <h2 className="text-xl font-semibold text-white">Sheet-Synced Proposals</h2>
-                                <div className="relative w-full md:w-80">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                    <input
-                                        value={query}
-                                        onChange={(event) => setQuery(event.target.value)}
-                                        placeholder="Search submitter, title, status..."
-                                        className="w-full rounded-xl border border-white/10 bg-black/20 text-white placeholder:text-slate-500 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                                    />
+                                <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+                                    <div className="relative w-full md:w-80">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                        <input
+                                            value={query}
+                                            onChange={(event) => setQuery(event.target.value)}
+                                            placeholder="Search submitter, title, status..."
+                                            className="w-full rounded-xl border border-white/10 bg-black/20 text-white placeholder:text-slate-500 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                                        />
+                                    </div>
+                                    <AdminViewModeToggle value={viewMode} onChange={setViewMode} allLabel="All proposals" />
                                 </div>
                             </div>
 
@@ -381,33 +420,7 @@ export default function AdminProposalsPage() {
                                 <div className="py-16 text-center text-slate-400">No proposals matched your filters.</div>
                             ) : (
                                 <div className="max-h-[50dvh] overflow-y-auto overscroll-contain pr-1 space-y-3 sm:max-h-[62vh] xl:max-h-[calc(100dvh-18rem)]">
-                                    {filteredProposals.map((proposal) => {
-                                        const isActive = activeRow === proposal.rowNumber;
-                                        return (
-                                            <button
-                                                key={`${proposal.rowNumber}-${proposal.title}`}
-                                                type="button"
-                                                onClick={() => selectProposal(proposal)}
-                                                className={`w-full text-left rounded-xl border p-4 transition ${isActive
-                                                    ? 'border-blue-400/60 bg-blue-500/15'
-                                                    : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20'
-                                                }`}
-                                            >
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <p className="text-sm md:text-base font-semibold text-white line-clamp-1">{proposal.title || 'Untitled Proposal'}</p>
-                                                    <span className="text-xs px-2 py-1 rounded-full bg-white/10 text-slate-200 border border-white/10">
-                                                        {proposal.status}
-                                                    </span>
-                                                </div>
-                                                <p className="mt-2 text-sm text-slate-300 line-clamp-1">{proposal.submitterName} • {proposal.projectType || 'N/A'}</p>
-                                                <div className="mt-2 text-xs text-slate-400 flex flex-wrap gap-3">
-                                                    <span>{proposal.category || 'Uncategorized'}</span>
-                                                    <span>{proposal.submittedAt || 'No timestamp'}</span>
-                                                    <span>Row {proposal.rowNumber}</span>
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
+                                    {viewMode === 'category' ? groupedProposals.map(([category, categoryProposals]) => <section key={category} className="space-y-3"><div className="flex items-center justify-between gap-3 border-b border-white/10 pb-2"><h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-amber-200">{category}</h3><span className="text-xs text-slate-500">{categoryProposals.length}</span></div>{categoryProposals.map(renderProposalCard)}</section>) : filteredProposals.map(renderProposalCard)}
                                 </div>
                             )}
                         </div>

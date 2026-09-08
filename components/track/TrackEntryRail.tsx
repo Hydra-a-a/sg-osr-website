@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, ChevronRight, Loader2, Search, ShieldCheck } from 'lucide-react';
+import { ChevronRight, Loader2, Search } from 'lucide-react';
 import { TrackStatusBadge } from '@/components/track/TrackStatusBadge';
 import type { StoredTicket } from '@/components/track/types';
 
@@ -30,20 +30,14 @@ export function TrackEntryRail({
     formatShortDate,
 }: TrackEntryRailProps) {
     return (
-        <div className={`rounded-3xl border border-[rgba(35,72,116,0.14)] bg-[linear-gradient(160deg,rgba(255,255,255,0.98),rgba(241,246,252,0.92))] ${compact ? 'p-4' : 'p-6'}`}>
+        <div className={`rounded-3xl border border-white/10 bg-[linear-gradient(145deg,rgba(12,22,36,0.72),rgba(11,20,34,0.56))] shadow-[0_20px_50px_rgba(4,10,22,0.2)] ${compact ? 'p-4' : 'p-6'}`}>
             <div className={`grid gap-5 ${compact ? 'xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]' : 'xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]'}`}>
                 <div>
                     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand/75">
-                                Entry rail
-                            </p>
-                            <h2 className={`${compact ? 'text-base' : 'text-xl'} font-semibold tracking-tight text-strong`}>
-                                {compact ? 'Track another ticket or reopen your workspace' : 'Track a grievance with your ticket ID'}
+                            <h2 className={`${compact ? 'text-base' : 'text-xl'} font-semibold tracking-tight text-white`}>
+                                {compact ? 'Track another ticket' : 'Track a grievance'}
                             </h2>
-                            <p className="max-w-2xl text-sm leading-relaxed text-subtle">
-                                Lookup always stays available. Signed-in students see My cases first, but manual tracking still works for any valid ticket and access token.
-                            </p>
                         </div>
 
                         {activeStatus ? <TrackStatusBadge status={activeStatus} /> : null}
@@ -56,14 +50,14 @@ export function TrackEntryRail({
                         }}
                         className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"
                     >
-                        <div className="flex items-center gap-2 rounded-xl border border-[rgba(35,72,116,0.18)] bg-white px-4 transition-all focus-within:border-[color:var(--accent-secondary)] focus-within:ring-2 focus-within:ring-[rgba(203,165,77,0.16)]">
-                            <Search className="shrink-0 text-subtle" size={16} />
+                        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 transition-all focus-within:border-amber-300/50 focus-within:ring-2 focus-within:ring-amber-300/20">
+                            <Search className="shrink-0 text-slate-400" size={16} />
                             <input
                                 type="text"
                                 value={ticketId}
                                 onChange={(event) => onTicketIdChange(event.target.value)}
                                 placeholder="TKT-2604-1KMZ9D1Q7T"
-                                className="h-12 flex-1 bg-transparent font-mono text-sm uppercase tracking-wider text-strong outline-none placeholder:normal-case placeholder:tracking-normal placeholder:text-subtle"
+                                className="h-12 flex-1 bg-transparent font-mono text-sm uppercase tracking-wider text-white outline-none placeholder:normal-case placeholder:tracking-normal placeholder:text-slate-500"
                                 disabled={loading}
                                 autoComplete="off"
                                 spellCheck={false}
@@ -78,34 +72,33 @@ export function TrackEntryRail({
                         >
                             <span className="inline-flex items-center justify-center gap-2">
                                 {loading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
-                                {loading ? 'Searching...' : 'Open workspace'}
+                                {loading ? 'Searching…' : 'Open ticket'}
                             </span>
                         </button>
                     </form>
                 </div>
 
-                <div className="border-l border-[rgba(35,72,116,0.12)] pl-4">
-                    <div className="mb-3 flex items-center gap-2">
-                        <BookOpen className="text-subtle" size={15} />
-                        <h3 className="text-sm font-semibold text-strong">My cases</h3>
+                <div className="border-l border-white/10 pl-4">
+                    <div className="mb-3">
+                        <h3 className="text-sm font-semibold text-white">My cases</h3>
                     </div>
 
                     {history.length > 0 ? (
-                        <ul className="divide-y divide-[rgba(35,72,116,0.1)] rounded-xl border border-[rgba(35,72,116,0.14)] bg-white">
+                        <ul className="divide-y divide-white/10 rounded-xl border border-white/10 bg-black/10">
                             {history.slice(0, compact ? 3 : 5).map((item) => (
                                 <li key={item.id}>
                                     <button
                                         onClick={() => onSelectHistory(item.id)}
-                                        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-all hover:bg-[rgba(35,72,116,0.04)]"
+                                        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-all hover:bg-white/[0.06]"
                                     >
                                         <div className="min-w-0">
-                                            <p className="truncate font-mono text-xs font-bold text-strong">{item.id}</p>
-                                            <p className="mt-1 truncate text-xs text-subtle">
+                                            <p className="truncate font-mono text-xs font-bold text-white">{item.id}</p>
+                                            <p className="mt-1 truncate text-xs text-slate-400">
                                                 {item.category}
                                                 {item.subject ? ` · ${item.subject}` : ''}
                                             </p>
                                         </div>
-                                        <div className="flex shrink-0 items-center gap-2 text-subtle">
+                                        <div className="flex shrink-0 items-center gap-2 text-slate-400">
                                             <span className="hidden text-xs sm:inline">{formatShortDate(item.submittedAt)}</span>
                                             <ChevronRight size={14} />
                                         </div>
@@ -114,17 +107,9 @@ export function TrackEntryRail({
                             ))}
                         </ul>
                     ) : (
-                        <div className="rounded-xl border border-dashed border-[rgba(35,72,116,0.2)] bg-white p-4">
-                            <div className="mb-2 inline-flex rounded-full bg-[rgba(35,72,116,0.1)] p-2 text-brand">
-                                <ShieldCheck size={16} />
-                            </div>
-                            <p className="text-sm font-medium text-strong">
-                                {authStatus === 'authenticated' ? 'No saved cases yet' : 'Sign in to build your case list automatically'}
-                            </p>
-                            <p className="mt-1 text-sm leading-relaxed text-subtle">
-                                {authStatus === 'authenticated'
-                                    ? 'Your submitted grievances will appear here after filing or once you open them with a valid ticket ID.'
-                                    : 'Manual ticket lookup still works below, but signing in is the easiest way to keep your own grievance history in one place.'}
+                        <div className="rounded-xl border border-dashed border-white/20 bg-white/[0.04] p-4">
+                            <p className="text-sm font-medium text-slate-200">
+                                {authStatus === 'authenticated' ? 'No saved cases' : 'Sign in to view your cases'}
                             </p>
                         </div>
                     )}

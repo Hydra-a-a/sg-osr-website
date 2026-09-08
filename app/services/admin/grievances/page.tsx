@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ExternalLink, Loader2, Paperclip, Save, Search, ShieldAlert, X } from 'lucide-react';
 import { AdminPageShell } from '@/components/admin/AdminPageShell';
 import AdminInspector from '@/components/admin/AdminInspector';
+import AdminViewModeToggle from '@/components/admin/AdminViewModeToggle';
 
 const STATUS_OPTIONS = ['Open', 'In Progress', 'Resolved', 'Closed', 'Appealed'] as const;
 type TicketStatus = typeof STATUS_OPTIONS[number];
@@ -85,6 +86,7 @@ export default function AdminGrievancesPage() {
     const [error, setError] = useState('');
     const [query, setQuery] = useState('');
     const [queueFilter, setQueueFilter] = useState<'all' | 'appealed' | 'needs-publish'>('all');
+    const [viewMode, setViewMode] = useState<'list' | 'category'>('list');
     const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
     const [activeTicketId, setActiveTicketId] = useState('');
@@ -172,6 +174,16 @@ export default function AdminGrievancesPage() {
             return true;
         });
     }, [tickets, query, queueFilter]);
+
+    const groupedTickets = useMemo(() => {
+        if (viewMode !== 'category') return [] as Array<[string, AdminTicket[]]>;
+        const groups = new Map<string, AdminTicket[]>();
+        filteredTickets.forEach((ticket) => {
+            const category = ticket.category.trim() || 'Uncategorized';
+            groups.set(category, [...(groups.get(category) || []), ticket]);
+        });
+        return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+    }, [filteredTickets, viewMode]);
 
     const activityEntries = useMemo(() => {
         const entries: Array<{
@@ -323,6 +335,31 @@ export default function AdminGrievancesPage() {
         setResolutionAttachment(null);
     }
 
+    function renderTicketCard(ticket: AdminTicket) {
+        const isActive = activeTicketId === ticket.ticketId;
+        return <button
+            key={ticket.ticketId}
+            type="button"
+            onClick={() => hydrateEditor(ticket)}
+            className={`w-full text-left rounded-xl border p-4 transition ${isActive
+                ? 'border-blue-400/60 bg-blue-500/15'
+                : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20'
+            }`}
+        >
+            <div className="flex items-center justify-between gap-3">
+                <p className="text-sm md:text-base font-semibold text-white">{ticket.ticketId}</p>
+                <span className="text-xs px-2 py-1 rounded-full bg-white/10 text-slate-200 border border-white/10">{ticket.status}</span>
+            </div>
+            <p className="mt-2 text-sm text-slate-300 line-clamp-1">{ticket.subject || 'No subject provided'}</p>
+            <div className="mt-2 text-xs text-slate-400 flex flex-wrap gap-3">
+                <span>{ticket.category || 'Uncategorized'}</span>
+                <span>{ticket.campus || 'Campus N/A'}</span>
+                <span>{ticket.submittedAt || 'No timestamp'}</span>
+                <span className="text-blue-200/80">{ticket.officerSendControl || 'Draft'}</span>
+            </div>
+        </button>;
+    }
+
     async function persistTicketUpdate(next: {
         ticketId: string;
         status: TicketStatus;
@@ -460,14 +497,17 @@ export default function AdminGrievancesPage() {
                         <div className="admin-grievances-queue min-h-0 w-full border border-white/10 bg-white/[0.04] p-5 md:p-6 shadow-[0_12px_36px_rgba(0,0,0,0.2)] flex flex-col">
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
                                 <h2 className="text-xl font-semibold text-white">Sheet-Synced Cases</h2>
-                                <div className="relative w-full md:w-80">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                    <input
-                                        value={query}
-                                        onChange={(event) => setQuery(event.target.value)}
-                                        placeholder="Search ticket, subject, category..."
-                                        className="w-full rounded-xl border border-white/10 bg-black/20 text-white placeholder:text-slate-500 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                                    />
+                                <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+                                    <div className="relative w-full md:w-80">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                        <input
+                                            value={query}
+                                            onChange={(event) => setQuery(event.target.value)}
+                                            placeholder="Search ticket, subject, category..."
+                                            className="w-full rounded-xl border border-white/10 bg-black/20 text-white placeholder:text-slate-500 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                                        />
+                                    </div>
+                                    <AdminViewModeToggle value={viewMode} onChange={setViewMode} allLabel="All cases" />
                                 </div>
                             </div>
 
@@ -503,34 +543,7 @@ export default function AdminGrievancesPage() {
                                 <div className="py-16 text-center text-slate-400">No tickets matched your filters.</div>
                             ) : (
                                 <div className="flex-1 min-h-0 max-h-[50dvh] overflow-y-auto overscroll-contain pr-1 space-y-3 pb-2 sm:max-h-[62vh] xl:max-h-[calc(100dvh-18rem)]">
-                                    {filteredTickets.map((ticket) => {
-                                        const isActive = activeTicketId === ticket.ticketId;
-                                        return (
-                                            <button
-                                                key={ticket.ticketId}
-                                                type="button"
-                                                onClick={() => hydrateEditor(ticket)}
-                                                className={`w-full text-left rounded-xl border p-4 transition ${isActive
-                                                    ? 'border-blue-400/60 bg-blue-500/15'
-                                                    : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20'
-                                                    }`}
-                                            >
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <p className="text-sm md:text-base font-semibold text-white">{ticket.ticketId}</p>
-                                                    <span className="text-xs px-2 py-1 rounded-full bg-white/10 text-slate-200 border border-white/10">
-                                                        {ticket.status}
-                                                    </span>
-                                                </div>
-                                                <p className="mt-2 text-sm text-slate-300 line-clamp-1">{ticket.subject || 'No subject provided'}</p>
-                                                <div className="mt-2 text-xs text-slate-400 flex flex-wrap gap-3">
-                                                    <span>{ticket.category || 'Uncategorized'}</span>
-                                                    <span>{ticket.campus || 'Campus N/A'}</span>
-                                                    <span>{ticket.submittedAt || 'No timestamp'}</span>
-                                                    <span className="text-blue-200/80">{ticket.officerSendControl || 'Draft'}</span>
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
+                                    {viewMode === 'category' ? groupedTickets.map(([category, categoryTickets]) => <section key={category} className="space-y-3"><div className="flex items-center justify-between gap-3 border-b border-white/10 pb-2"><h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-amber-200">{category}</h3><span className="text-xs text-slate-500">{categoryTickets.length}</span></div>{categoryTickets.map(renderTicketCard)}</section>) : filteredTickets.map(renderTicketCard)}
                                 </div>
                             )}
                         </div>

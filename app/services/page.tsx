@@ -13,7 +13,6 @@ import {
     Lightbulb,
     ShieldCheck,
     ArrowRight,
-    Star,
 } from 'lucide-react';
 import { getAccessVisibilityState } from '@/lib/access-visibility';
 import { PORTAL_MODE_COOKIE } from '@/lib/portal-mode';
@@ -99,23 +98,17 @@ export default function ServicesPage() {
                         className="grid gap-8 md:grid-cols-[1.1fr_0.9fr] items-end"
                     >
                         <div>
-                            <span className="services-eyebrow inline-flex items-center gap-2 px-4 py-1.5 rounded-full shadow-sm mb-4">
-                                <Star size={14} className="text-rtu-gold" /> RTU Student Government Services
-                            </span>
-                            <h1 className={`services-display mt-3`}>
-                                Dedicated to <span className="services-display-accent">Student Support</span>
-                            </h1>
-                            <p className="services-lead mt-5 max-w-2xl">
-                                Access official channels for grievances, project proposals, and transparent updates. 
-                                Designed to be simple, accessible, and highly secure.
+                            <h1 className="services-title-gradient">Services</h1>
+                            <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-200">
+                                Access student-government services, including grievances and project proposals.
                             </p>
                         </div>
 
                         <div className="services-status-panel self-start md:self-end">
-                            <p className="services-status-label">Your Current Role</p>
+                            <p className="services-status-label">Role</p>
                             <p className={`services-status-mode`}>{modeLabel}</p>
                             <p className="services-status-caption">
-                                Certain administrative actions require elevated access to be visible.
+                                Some services require elevated access.
                             </p>
                         </div>
                     </motion.div>
@@ -129,13 +122,13 @@ export default function ServicesPage() {
                             {canSeeLeaderFeatures ? (
                                 <Link href="/services/proposals/track" className="services-track-link group inline-flex items-center gap-2 px-5 py-3 rounded-xl">
                                     <Lightbulb size={16} />
-                                    <span>Track Submitted Proposals</span>
+                                    <span>Track proposals</span>
                                     <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
                                 </Link>
                             ) : null}
                             <Link href="/services/track" className="services-track-link group inline-flex items-center gap-2 px-5 py-3 rounded-xl">
                                 <Search size={16} />
-                                <span>Open Tracking Console</span>
+                                <span>Track grievances</span>
                                 <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
                             </Link>
                         </div>
@@ -223,36 +216,15 @@ export default function ServicesPage() {
                     z-index: 2;
                 }
 
-                .services-eyebrow {
-                    background: rgba(212, 168, 67, 0.1);
-                    border: 1px solid rgba(212, 168, 67, 0.2);
-                    color: #f7d996;
-                    font-size: 0.8rem;
-                    font-weight: 600;
-                    backdrop-filter: blur(8px);
-                }
-
-                .services-display {
-                    font-size: clamp(2.2rem, 5vw, 4.2rem);
+                .services-title-gradient {
+                    font-size: clamp(2rem, 3.5vw, 3.25rem);
                     line-height: 1.1;
-                    color: #ffffff;
-                    max-width: 20ch;
-                    text-wrap: pretty;
                     font-weight: 700;
-                }
-
-                .services-display-accent {
+                    letter-spacing: -0.02em;
                     color: transparent;
-                    background: linear-gradient(135deg, #f7d996 0%, #d4a843 100%);
+                    background: linear-gradient(135deg, #ffffff 0%, #f7d996 100%);
                     -webkit-background-clip: text;
                     -webkit-text-fill-color: transparent;
-                }
-
-                .services-lead {
-                    color: #94a3b8;
-                    font-size: clamp(1rem, 1.15vw + 0.5rem, 1.15rem);
-                    line-height: 1.6;
-                    max-width: 65ch;
                 }
 
                 .services-card {
