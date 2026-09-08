@@ -14,6 +14,7 @@ export type AdminColumn<TRecord> = {
 export type AdminRecordAdapter<TRecord> = {
     getId: (record: TRecord) => string;
     getSearchText: (record: TRecord) => string;
+    getCategory?: (record: TRecord) => string;
     getStatus?: (record: TRecord) => string;
     getUpdatedAt?: (record: TRecord) => string;
 };

@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { isSafeNavigationHref } from '@/lib/security';
+import { HUB_GUIDE_CATEGORIES } from '@/lib/hub-guide-categories';
 
 export const TransparencyGuideSchema = z.object({
     id: z.string().min(1).max(120),
     title: z.string().min(1).max(160),
     description: z.string().max(500).default(''),
-    category: z.string().max(100).default('Student Handbook & Guides'),
+    category: z.string().max(100).default(HUB_GUIDE_CATEGORIES[0]),
     source: z.enum(['drive', 'direct']),
     embedUrl: z.string().max(2048).refine(isSafeNavigationHref, {
         message: 'Embed URL must be a safe HTTPS URL or same-origin relative path',

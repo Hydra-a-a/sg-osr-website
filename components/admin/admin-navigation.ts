@@ -13,7 +13,7 @@ import {
 import type { AdminModuleKey } from './admin-types';
 import { getAdminSurface } from '@/lib/admin-surface-registry';
 
-export type AdminNavigationKey = AdminModuleKey | 'content' | 'classroom';
+export type AdminNavigationKey = AdminModuleKey | 'content' | 'classroom' | 'transparency';
 
 export type AdminNavigationItem = {
     key: AdminNavigationKey | 'dashboard';
@@ -88,6 +88,12 @@ export const adminNavigationGroups: AdminNavigationGroup[] = [
     {
         label: 'Website control',
         items: [
+            {
+                key: 'transparency',
+                label: 'SSC transparency',
+                href: '/services/admin/transparency',
+                icon: FilePenLine,
+            },
             {
                 key: 'content',
                 label: getAdminSurface('content')?.label || 'Website content',

@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2, MapPinned, RefreshCcw, Search, ShieldAlert, XCir
 import { NoncedStyle } from '@/components/CspNonceProvider';
 import { AdminActionButton, AdminPageShell } from '@/components/admin/AdminPageShell';
 import AdminInspector from '@/components/admin/AdminInspector';
+import CommuteLiveAdminPanel from '@/components/admin/CommuteLiveAdminPanel';
 
 type ModerationAction = 'Approve' | 'Reject' | 'Mark for Review' | 'Approve with Warning' | 'Restore Confidence';
 
@@ -140,6 +141,8 @@ export default function AdminRoutesPage() {
                 </AdminActionButton>
             )}
         >
+
+                <CommuteLiveAdminPanel />
 
                 <div className="mt-8">
                     <div className="admin-routes-panel admin-routes-queue min-h-0 w-full p-4">
@@ -389,6 +392,7 @@ export default function AdminRoutesPage() {
                 }
                 .admin-routes-refresh,
                 .admin-routes-approve,
+                .admin-routes-neutral,
                 .admin-routes-reject {
                     display: inline-flex;
                     align-items: center;

@@ -67,6 +67,27 @@ enum CommuteVoteType {
   DOWNVOTE
 }
 
+enum CommuteAlertKind {
+  DELAY
+  CROWDING
+  FLOODING
+  CLOSURE
+  RECOVERY
+  OFFICIAL
+}
+
+enum CommuteAlertSeverity {
+  INFO
+  MODERATE
+  SEVERE
+}
+
+enum CommuteAlertStatus {
+  ACTIVE
+  RESOLVED
+  HIDDEN
+}
+
 enum LostFoundSource {
   CSO
   STUDENT
@@ -344,6 +365,43 @@ model CommuteReport {
   @@index([reporterEmail, createdAt])
 }
 
+model CommuteAlert {
+  id              String               @id @default(cuid())
+  alertId         String               @unique @default(cuid())
+  corridorId      String
+  corridorLabel   String
+  kind            CommuteAlertKind
+  severity        CommuteAlertSeverity
+  status          CommuteAlertStatus   @default(ACTIVE)
+  reporterEmail   String
+  privateNote     String               @default("")
+  officialTitle   String               @default("")
+  officialSummary String               @default("")
+  sourceUrl       String               @default("")
+  expiresAt       DateTime
+  resolvedAt      DateTime?
+  moderatedBy     String               @default("")
+  moderatedAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  confirmations   CommuteAlertConfirmation[]
+
+  @@index([status, expiresAt, createdAt])
+  @@index([corridorId, status, expiresAt])
+  @@index([reporterEmail, createdAt])
+}
+
+model CommuteAlertConfirmation {
+  id             String       @id @default(cuid())
+  alertId        String
+  alert          CommuteAlert @relation(fields: [alertId], references: [alertId], onDelete: Cascade)
+  confirmerEmail String
+  createdAt      DateTime     @default(now())
+
+  @@unique([alertId, confirmerEmail])
+  @@index([confirmerEmail, createdAt])
+}
+
 model NewsPost {
   id              String   @id
   sourcePageId    String
@@ -562,6 +620,111 @@ model LostFoundAttachment {
 
   @@index([itemId, createdAt])
   @@index([driveFileId])
+}
+
+model TransparencySubmission {
+  id String @id @default(cuid())
+  organizationName String @default("Supreme Student Council")
+  leaderEmail String
+  leaderName String
+  submittedLink String
+  courseId String
+  courseWorkId String
+  title String
+  academicYearStart Int
+  periodKind String
+  periodNumber Int?
+  periodStart DateTime @db.Date
+  periodEnd DateTime @db.Date
+  turnIn Boolean @default(true)
+  status String @default("PENDING")
+  reviewNote String?
+  reportId String? @unique
+  report TransparencyReport? @relation(fields: [reportId], references: [id])
+  idempotencyKey String @unique
+  requestHash String
+  classroomSubmissionId String?
+  classroomState String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, createdAt])
+}
+
+model TransparencyReport {
+  id String @id @default(cuid())
+  organizationName String @default("Supreme Student Council")
+  title String
+  slug String @unique
+  academicYearStart Int
+  periodKind String
+  periodNumber Int?
+  periodStart DateTime @db.Date
+  periodEnd DateTime @db.Date
+  asOfDate DateTime @db.Date
+  notes String @default("")
+  status String @default("DRAFT")
+  version Int @default(1)
+  preparerEmail String?
+  publisherEmail String?
+  preparedAt DateTime?
+  publishedAt DateTime?
+  publicReleaseConfirmedAt DateTime?
+  reviewNote String @default("")
+  pdfFileId String? @unique
+  pdfResourceKey String @default("")
+  pdfFileName String @default("")
+  pdfSizeBytes Int?
+  pdfFolderId String?
+  predecessorId String?
+  predecessor TransparencyReport? @relation("ReportCorrection", fields: [predecessorId], references: [id])
+  corrections TransparencyReport[] @relation("ReportCorrection")
+  correctionReason String @default("")
+  supersededAt DateTime?
+  withdrawalReason String @default("")
+  withdrawnAt DateTime?
+  withdrawnBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  submission TransparencySubmission?
+  lines TransparencyBudgetLine[]
+  feedback TransparencyFeedback[]
+  @@index([status, publishedAt])
+  @@index([academicYearStart, periodKind])
+}
+
+model TransparencyBudgetLine {
+  id String @id @default(cuid())
+  reportId String
+  report TransparencyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  projectTitle String
+  projectCode String @default("")
+  category String
+  publicNote String @default("")
+  allocated Decimal @db.Decimal(14, 2)
+  spent Decimal @db.Decimal(14, 2)
+  sortOrder Int
+  feedback TransparencyFeedback[]
+  @@index([reportId, sortOrder])
+}
+
+model TransparencyFeedback {
+  id String @id @default(cuid())
+  reportId String
+  report TransparencyReport @relation(fields: [reportId], references: [id])
+  projectId String?
+  project TransparencyBudgetLine? @relation(fields: [projectId], references: [id])
+  submitterEmail String
+  submitterName String
+  category String
+  message String
+  status String @default("OPEN")
+  response String @default("")
+  respondedBy String?
+  respondedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([submitterEmail, createdAt])
+  @@index([status, createdAt])
 }
 
 model LostFoundComment {

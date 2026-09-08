@@ -7,27 +7,8 @@ type MapLibreModule = typeof import('maplibre-gl');
 type MapInstance = InstanceType<MapLibreModule['Map']>;
 type MarkerInstance = InstanceType<MapLibreModule['Marker']>;
 
-const DEFAULT_COMMUTE_MAP_STYLE_URL = process.env.NEXT_PUBLIC_COMMUTE_MAP_STYLE_URL || '';
-const DEFAULT_COMMUTE_MAP_STYLE = DEFAULT_COMMUTE_MAP_STYLE_URL || {
-    version: 8,
-    sources: {
-        'openstreetmap-raster': {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '&copy; OpenStreetMap contributors',
-        },
-    },
-    layers: [
-        {
-            id: 'osm-raster-base',
-            type: 'raster',
-            source: 'openstreetmap-raster',
-            minzoom: 0,
-            maxzoom: 19,
-        },
-    ],
-};
+const DEFAULT_COMMUTE_MAP_STYLE_URL = process.env.NEXT_PUBLIC_COMMUTE_MAP_STYLE_URL
+    || 'https://tiles.openfreemap.org/styles/liberty';
 const ROUTE_SOURCE_ID = 'commute-route-geometry';
 const ROUTE_LAYER_ID = 'commute-route-line';
 
@@ -63,7 +44,7 @@ function getMapStatusCopy(result: CommuteResponse | null): string {
     if (result.originCoordinate || result.destinationCoordinate || result.routeGeometry || (result.waypoints || []).length) {
         return result.provider === 'google'
             ? 'Live provider results can render the full route line when geometry is available.'
-            : 'Community routes use saved coordinates first, then cached geocoding for missing map points.';
+            : 'Community routes use saved coordinates and geometry from approved guides.';
     }
 
     if (result.status === 'error') {
@@ -114,7 +95,7 @@ function getMapQualityBadge(result: CommuteResponse | null): MapQualityBadge {
     return {
         label: 'No mapped data',
         toneClassName: 'border-white/12 bg-white/6 text-slate-200',
-        detail: 'The route is still text-only until coordinates are added or geocoding succeeds.',
+        detail: 'The route is still text-only until coordinates are added to the approved guide.',
     };
 }
 
@@ -123,6 +104,7 @@ export default function CommuteMapPanel({ result, origin, destination }: Commute
     const mapRef = useRef<MapInstance | null>(null);
     const markerRefs = useRef<MarkerInstance[]>([]);
     const [mapError, setMapError] = useState('');
+    const [isMapOpen, setIsMapOpen] = useState(false);
     const renderablePoints = collectRenderablePoints(result);
     const hasRenderableMap = renderablePoints.length > 0;
     const mapQuality = getMapQualityBadge(result);
@@ -147,7 +129,7 @@ export default function CommuteMapPanel({ result, origin, destination }: Commute
 
     useEffect(() => {
         const container = mapContainerRef.current;
-        if (!container || !hasRenderableMap || !result) {
+        if (!container || !isMapOpen || !hasRenderableMap || !result) {
             for (const marker of markerRefs.current) {
                 marker.remove();
             }
@@ -176,9 +158,12 @@ export default function CommuteMapPanel({ result, origin, destination }: Commute
                 if (!map) {
                     map = new maplibregl.Map({
                         container: mapContainerRef.current,
-                        style: DEFAULT_COMMUTE_MAP_STYLE as never,
+                        style: DEFAULT_COMMUTE_MAP_STYLE_URL,
                         center: [activePoints[0].lng, activePoints[0].lat],
-                        zoom: 11,
+                        zoom: 13,
+                        minZoom: 10,
+                        maxZoom: 16,
+                        maxBounds: [[120.8, 14.35], [121.3, 14.9]],
                         attributionControl: false,
                     });
                     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
@@ -240,9 +225,10 @@ export default function CommuteMapPanel({ result, origin, destination }: Commute
                             : 'commute-map-marker commute-map-marker-waypoint';
                         markerNode.setAttribute('aria-label', point.label || `Stop ${index + 1}`);
 
-                        const popup = new maplibregl.Popup({ offset: 16 }).setHTML(
-                            `<div class="commute-map-popup">${point.label || `Stop ${index + 1}`}</div>`,
-                        );
+                        const popupContent = document.createElement('div');
+                        popupContent.className = 'commute-map-popup';
+                        popupContent.textContent = point.label || `Stop ${index + 1}`;
+                        const popup = new maplibregl.Popup({ offset: 16 }).setDOMContent(popupContent);
 
                         const marker = new maplibregl.Marker({ element: markerNode, anchor: 'bottom' })
                             .setLngLat([point.lng, point.lat])
@@ -276,14 +262,14 @@ export default function CommuteMapPanel({ result, origin, destination }: Commute
         return () => {
             cancelled = true;
         };
-    }, [destination, hasRenderableMap, mapSignature, origin, result]);
+    }, [destination, hasRenderableMap, isMapOpen, mapSignature, origin, result]);
 
     return (
         <section className="hub-panel p-5 lg:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-200/75">Map preview</p>
-                    <h2 className="text-xl font-semibold text-white">Temporary live canvas for commuter routes</h2>
+                    <h2 className="text-xl font-semibold text-white">Route map</h2>
                     <p className="max-w-2xl text-sm leading-6 text-slate-300">
                         {getMapStatusCopy(result)}
                     </p>
@@ -295,7 +281,7 @@ export default function CommuteMapPanel({ result, origin, destination }: Commute
                     </span>
                     <span className="hub-mini-chip text-xs">
                         <Compass className="mr-1.5 h-3.5 w-3.5" />
-                        {result?.provider === 'google' ? 'Google-backed route' : 'Community route'}
+                        Community route
                     </span>
                     <span className="hub-mini-chip text-xs">
                         <Route className="mr-1.5 h-3.5 w-3.5" />
@@ -308,24 +294,35 @@ export default function CommuteMapPanel({ result, origin, destination }: Commute
                 {mapQuality.detail}
             </p>
 
-            <div className="relative mt-5 overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/45 shadow-[0_30px_70px_rgba(2,8,23,0.35)]">
-                <div ref={mapContainerRef} className="h-[300px] w-full md:h-[360px]" />
-                {(!hasRenderableMap || mapError) && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-950/78 px-6 text-center text-sm text-slate-300 backdrop-blur-sm">
-                        <div className="max-w-md space-y-3">
-                            <MapPinned className="mx-auto h-10 w-10 text-amber-300/85" />
-                            <p>{mapError || getMapStatusCopy(result)}</p>
-                            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                                {origin && destination ? `${origin} to ${destination}` : 'Waiting for route search'}
-                            </p>
+            <button
+                type="button"
+                onClick={() => setIsMapOpen((open) => !open)}
+                disabled={!hasRenderableMap}
+                aria-expanded={isMapOpen}
+                className="hub-action-secondary mt-5 min-h-11 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+                <MapPinned className="h-4 w-4" />
+                {isMapOpen ? 'Hide map' : hasRenderableMap ? 'View map' : 'Map unavailable for this route'}
+            </button>
+
+            {isMapOpen && (
+                <div className="relative mt-4 overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/45 shadow-[0_30px_70px_rgba(2,8,23,0.35)]">
+                    <div ref={mapContainerRef} className="h-[300px] w-full md:h-[360px]" />
+                    {mapError && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/78 px-6 text-center text-sm text-slate-300 backdrop-blur-sm">
+                            <div className="max-w-md space-y-3">
+                                <MapPinned className="mx-auto h-10 w-10 text-amber-300/85" />
+                                <p>{mapError}</p>
+                                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{origin} to {destination}</p>
+                            </div>
                         </div>
-                    </div>
-                )}
-            </div>
+                    )}
+                </div>
+            )}
 
             <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
-                <span className="hub-mini-chip">MapLibre shell</span>
-                <span className="hub-mini-chip">{DEFAULT_COMMUTE_MAP_STYLE_URL ? 'Custom map style' : 'OpenStreetMap raster fallback'}</span>
+                <span className="hub-mini-chip">MapLibre</span>
+                <span className="hub-mini-chip">OpenFreeMap tiles</span>
                 <span className="hub-mini-chip">{renderablePoints.length} mapped point{renderablePoints.length === 1 ? '' : 's'}</span>
             </div>
         </section>

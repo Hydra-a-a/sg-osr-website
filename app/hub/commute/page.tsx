@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NoncedStyle } from '@/components/CspNonceProvider';
+import CommuteLiveFeed from '@/components/commute/CommuteLiveFeed';
 import CommuteMapPanel from '@/components/commute/CommuteMapPanel';
 import { 
     ArrowLeft, ArrowRightLeft, Bus, Footprints, Map, TrainFront, 
@@ -281,6 +282,8 @@ export default function CommuterMapsPage() {
                         <h1 className="text-3xl font-bold text-white">Plan your route</h1>
                     </div>
                 </div>
+
+                <CommuteLiveFeed />
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     

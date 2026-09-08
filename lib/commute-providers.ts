@@ -1,4 +1,3 @@
-import { Client, TravelMode } from '@googlemaps/google-maps-services-js';
 import { Redis } from '@upstash/redis';
 import { appendSheetData, batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { formatPhtStorageTimestamp } from '@/lib/date-time';
@@ -23,12 +22,12 @@ import { CommuteStepSchema } from '@/schemas/commute';
 const redis = Redis.fromEnv();
 const CACHE_TTL_SECONDS = 86400;
 
-const MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 const CURATED_SHEETS_ID = process.env.COMMUTER_MAPS_SHEET_ID;
 const ACTUAL_SHEETS_ID = CURATED_SHEETS_ID || process.env.GOOGLE_SHEETS_INFO_ID;
 const COMMUTE_GEOCODER_ENDPOINT = String(process.env.COMMUTE_GEOCODER_ENDPOINT || 'https://nominatim.openstreetmap.org/search').trim();
 const COMMUTE_GEOCODER_USER_AGENT = String(process.env.COMMUTE_GEOCODER_USER_AGENT || 'RTU-OSR-Commute-Map/1.0').trim();
 const COMMUTE_GEOCODER_REGION_HINT = String(process.env.COMMUTE_GEOCODER_REGION_HINT || 'Metro Manila, Philippines').trim();
+const COMMUTE_GEOCODING_ENABLED = process.env.COMMUTE_GEOCODING_ENABLED === 'true';
 
 const COMMUTE_TAB = 'Commuter Routes';
 const COMMUTE_RANGE = "'Commuter Routes'!A2:AA";
@@ -55,8 +54,6 @@ const COL_ROUTE_GEOMETRY_JSON = 26;
 
 const MATCH_THRESHOLD = 45;
 const COORDINATE_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30;
-
-const mapsClient = new Client({});
 
 interface CuratedRouteRow {
     rowNumber: number;
@@ -294,56 +291,6 @@ function parseRouteGeometry(raw: string): CommuteRouteGeometry | undefined {
     return undefined;
 }
 
-function decodePolyline(encoded: string): CommuteRouteGeometry | undefined {
-    const polyline = String(encoded || '').trim();
-    if (!polyline) {
-        return undefined;
-    }
-
-    let index = 0;
-    let lat = 0;
-    let lng = 0;
-    const coordinates: Array<[number, number]> = [];
-
-    while (index < polyline.length) {
-        let shift = 0;
-        let result = 0;
-        let byte = 0;
-
-        do {
-            byte = polyline.charCodeAt(index++) - 63;
-            result |= (byte & 0x1f) << shift;
-            shift += 5;
-        } while (byte >= 0x20 && index < polyline.length + 1);
-
-        const deltaLat = (result & 1) ? ~(result >> 1) : (result >> 1);
-        lat += deltaLat;
-
-        shift = 0;
-        result = 0;
-
-        do {
-            byte = polyline.charCodeAt(index++) - 63;
-            result |= (byte & 0x1f) << shift;
-            shift += 5;
-        } while (byte >= 0x20 && index < polyline.length + 1);
-
-        const deltaLng = (result & 1) ? ~(result >> 1) : (result >> 1);
-        lng += deltaLng;
-
-        coordinates.push([lng / 1e5, lat / 1e5]);
-    }
-
-    if (coordinates.length < 2) {
-        return undefined;
-    }
-
-    return {
-        type: 'LineString',
-        coordinates,
-    };
-}
-
 function buildFallbackGeometry(
     originCoordinate?: CommuteCoordinate,
     destinationCoordinate?: CommuteCoordinate,
@@ -476,15 +423,17 @@ async function resolveRouteMapData(route: CommuteResponse, origin: string, desti
     }
 
     const nextRoute: CommuteResponse = { ...route };
-    nextRoute.originCoordinate = nextRoute.originCoordinate || await geocodeCoordinate(origin);
-    nextRoute.destinationCoordinate = nextRoute.destinationCoordinate || await geocodeCoordinate(destination);
+    if (COMMUTE_GEOCODING_ENABLED) {
+        nextRoute.originCoordinate = nextRoute.originCoordinate || await geocodeCoordinate(origin);
+        nextRoute.destinationCoordinate = nextRoute.destinationCoordinate || await geocodeCoordinate(destination);
 
-    if ((!nextRoute.waypoints || !nextRoute.waypoints.length) && nextRoute.provider === 'curated') {
-        const waypointLabels = extractStopLabels(nextRoute.steps);
-        const waypoints = await Promise.all(waypointLabels.map((label) => geocodeCoordinate(label)));
-        nextRoute.waypoints = waypoints.flatMap((waypoint, index) =>
-            waypoint ? [{ ...waypoint, stepIndex: index }] : []
-        );
+        if (!nextRoute.waypoints?.length) {
+            const waypointLabels = extractStopLabels(nextRoute.steps);
+            const waypoints = await Promise.all(waypointLabels.map((label) => geocodeCoordinate(label)));
+            nextRoute.waypoints = waypoints.flatMap((waypoint, index) =>
+                waypoint ? [{ ...waypoint, stepIndex: index }] : []
+            );
+        }
     }
 
     nextRoute.routeGeometry = nextRoute.routeGeometry || buildFallbackGeometry(
@@ -560,90 +509,6 @@ function isLateNight(): boolean {
 function generateGoogleMapsUrl(origin: string, destination: string): string {
     const baseUrl = 'https://www.google.com/maps/dir/?api=1';
     return `${baseUrl}&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=transit`;
-}
-
-async function getGoogleDirections(origin: string, destination: string): Promise<CommuteResponse | null> {
-    if (!MAPS_API_KEY) {
-        console.log('[Commute] Missing GOOGLE_MAPS_API_KEY, skipping Google provider.');
-        return null;
-    }
-
-    try {
-        const response = await mapsClient.directions({
-            params: {
-                origin,
-                destination,
-                mode: TravelMode.transit,
-                key: MAPS_API_KEY,
-                region: 'ph',
-            },
-        });
-
-        if (response.data.status !== 'OK' || !response.data.routes.length) {
-            console.warn('[Commute] Google Maps returned no routes or error:', response.data.status);
-            return null;
-        }
-
-        const route = response.data.routes[0];
-        const leg = route.legs[0];
-
-        const steps: CommuteStep[] = leg.steps.map((step) => {
-            let type: CommuteStep['type'] = 'WALK';
-            let colorCode: string | undefined;
-
-            if (step.travel_mode === TravelMode.transit && step.transit_details) {
-                const transitType = step.transit_details.line.vehicle.type;
-                if (transitType === 'BUS' || transitType === 'INTERCITY_BUS') type = 'BUS';
-                else if (transitType === 'HEAVY_RAIL' || transitType === 'COMMUTER_TRAIN' || transitType === 'SUBWAY') type = 'MRT';
-                else if (transitType === 'SHARE_TAXI') type = 'UV';
-                else type = 'JEEP';
-
-                colorCode = step.transit_details.line.color;
-            }
-
-            const instruction = step.html_instructions.replace(/<[^>]*>?/gm, '');
-            const durationMins = Math.ceil((step.duration?.value || 0) / 60);
-
-            return {
-                type,
-                instruction,
-                durationMins: durationMins > 0 ? durationMins : undefined,
-                colorCode,
-            };
-        });
-
-        const fareEstimate = route.fare ? route.fare.text : undefined;
-        const originCoordinate = buildCoordinate(
-            leg.start_address || origin,
-            leg.start_location?.lat,
-            leg.start_location?.lng,
-        );
-        const destinationCoordinate = buildCoordinate(
-            leg.end_address || destination,
-            leg.end_location?.lat,
-            leg.end_location?.lng,
-        );
-        const routeGeometry = decodePolyline(String(route.overview_polyline?.points || ''));
-
-        return {
-            status: 'success',
-            provider: 'google',
-            summary: {
-                totalDurationMins: Math.ceil((leg.duration?.value || 0) / 60),
-                totalDistanceKm: Number((leg.distance?.value || 0) / 1000),
-                fareEstimateRange: fareEstimate,
-            },
-            steps,
-            notices: [],
-            originCoordinate,
-            destinationCoordinate,
-            routeGeometry,
-            externalUrl: generateGoogleMapsUrl(origin, destination),
-        };
-    } catch (error) {
-        console.error('[Commute] Google Directions API failed:', error);
-        return null;
-    }
 }
 
 function computeAliasScore(searchTerm: string, aliasesRaw: string): number {
@@ -846,7 +711,7 @@ export async function resolveCommuteRoute(origin: string, destination: string): 
 
     try {
         const cachedRoute = await redis.get<CommuteResponse>(cacheKey);
-        if (cachedRoute) {
+        if (cachedRoute?.provider === 'curated') {
             cachedRoute.notices = cachedRoute.notices.filter((notice) => !notice.message.includes('late!'));
             if (isLateNight()) {
                 cachedRoute.notices.push({
@@ -860,17 +725,7 @@ export async function resolveCommuteRoute(origin: string, destination: string): 
         console.warn('[Commute] Redis cache read failed:', error);
     }
 
-    let route = await getGoogleDirections(origin, destination);
-
-    if (route) {
-        route.notices = route.notices || [];
-        route.notices.unshift({
-            type: 'info',
-            message: 'This result came from Google transit data instead of the community-curated route sheet.',
-        });
-    } else {
-        route = await getCuratedRoute(origin, destination);
-    }
+    let route = await getCuratedRoute(origin, destination);
 
     if (!route) {
         return {

@@ -1,124 +1,51 @@
-import { BookOpen, ClipboardCheck, DollarSign, FileText, Lock, ShieldCheck } from 'lucide-react';
-import ClassroomSetupPanel from '@/components/ClassroomSetupPanel';
-import ClassroomSubmissionForm from '@/components/ClassroomSubmissionForm';
+import Link from 'next/link';
+import { listPublicTransparencyReports } from '@/lib/transparency';
+import { DocumentActions, ProjectRegistry, ReportTotals, date, period, fieldClass } from '@/components/transparency/ReportView';
 
-const sections = [
-    {
-        title: 'Financial Statements',
-        desc: 'Budget allocations, expenditure reports, and audit summaries for authorized publication.',
-        icon: DollarSign,
-    },
-    {
-        title: 'Board Resolutions',
-        desc: 'Official resolutions and governance records from recognized student-government bodies.',
-        icon: FileText,
-    },
-    {
-        title: 'Minutes of Meetings',
-        desc: 'Council meeting records, committee proceedings, and approved session documentation.',
-        icon: BookOpen,
-    },
-];
+export const metadata = { title: 'SSC Financial Transparency | RTU OSR' };
 
-export default function TransparencyPage() {
-    return (
-        <>
-            <section className="portal-section-dark transparency-hero-section">
-                <div className="portal-noise-overlay" aria-hidden="true" />
-                <div className="container-main relative z-10">
-                    <div className="transparency-hero-grid">
-                        <div className="transparency-hero-copy">
-                            <span className="portal-eyebrow transparency-eyebrow">
-                                <ShieldCheck size={16} aria-hidden="true" />
-                                Public Records
-                            </span>
-                            <h1 className="portal-title mt-6">
-                                Governance and <span className="portal-title-accent">Transparency</span>
-                            </h1>
-                            <p className="portal-lead mt-5">
-                                Access published student-government records, accountability materials, and official reporting channels in one place.
-                            </p>
-                        </div>
+type Search = Record<string, string | string[] | undefined>;
+const value = (params: Search, key: string) => typeof params[key] === 'string' ? params[key] as string : '';
 
-                        <div className="portal-panel-soft transparency-access-panel p-6">
-                            <div className="transparency-access-linework" aria-hidden="true" />
-                            <div className="flex items-start gap-4">
-                                <div className="transparency-icon-wrap">
-                                    <ClipboardCheck className="h-5 w-5" aria-hidden="true" />
-                                </div>
-                                <div>
-                                    <p className="text-sm font-semibold text-white">Submission Access</p>
-                                    <p className="mt-2 text-sm leading-6 text-slate-300">
-                                        Authorized student leaders may submit records through the Google Classroom workflow below.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section className="portal-section-slate section">
-                <div className="portal-noise-overlay" aria-hidden="true" />
-                <div className="container-main relative z-10">
-                    <div className="transparency-section-header">
-                        <div>
-                            <span className="portal-kicker">Record Categories</span>
-                            <h2 className="mt-3 text-3xl font-bold text-white md:text-4xl">Published materials</h2>
-                        </div>
-                        <p className="max-w-xl text-sm leading-7 text-slate-300">
-                            These categories will display public records once authorized submissions are reviewed and published.
-                        </p>
-                    </div>
-
-                    <div className="transparency-ledger-shell">
-                        <div className="transparency-ledger-rail" aria-hidden="true">
-                            <span className="transparency-ledger-knot" />
-                            <span className="transparency-ledger-knot" />
-                            <span className="transparency-ledger-knot" />
-                        </div>
-                        <div className="grid grid-cols-1 gap-5 md:grid-cols-3 transparency-record-grid">
-                        {sections.map((section) => {
-                            const Icon = section.icon;
-
-                            return (
-                                <article key={section.title} className="transparency-record-card portal-panel p-6 md:p-7">
-                                    <div className="transparency-record-card-header">
-                                        <div className="transparency-icon-wrap">
-                                            <Icon className="h-5 w-5" aria-hidden="true" />
-                                        </div>
-                                        <span className="transparency-status-chip">
-                                            <Lock size={13} aria-hidden="true" />
-                                            Pending
-                                        </span>
-                                    </div>
-                                    <h3 className="text-lg font-semibold text-white">{section.title}</h3>
-                                    <p className="mt-3 text-sm leading-7 text-slate-300">{section.desc}</p>
-                                </article>
-                            );
-                        })}
-                        </div>
-                    </div>
-
-                    <div className="transparency-submission-grid">
-                        <div className="transparency-submission-stack">
-                            <ClassroomSetupPanel />
-                            <div className="transparency-submission-shell">
-                                <ClassroomSubmissionForm />
-                            </div>
-                        </div>
-
-                        <aside className="portal-panel-soft p-6 transparency-status-rail">
-                            <div className="transparency-status-linework" aria-hidden="true" />
-                            <span className="portal-kicker">Publication Status</span>
-                            <h2 className="mt-3 text-xl font-semibold text-white">Records pending publication</h2>
-                            <p className="mt-3 text-sm leading-7 text-slate-300">
-                                Public records will appear on this page after the publishing workflow is enabled and authorized submissions are reviewed.
-                            </p>
-                        </aside>
-                    </div>
-                </div>
-            </section>
-        </>
-    );
+export default async function TransparencyPage({ searchParams }: { searchParams: Promise<Search> }) {
+    const [reports, params] = await Promise.all([listPublicTransparencyReports(), searchParams]);
+    const year = value(params, 'year');
+    const selectedPeriod = value(params, 'period');
+    const category = value(params, 'category');
+    const query = value(params, 'q').trim();
+    const matching = reports.filter(report => (!year || String(report.academicYearStart) === year) && (!selectedPeriod || `${report.periodKind}:${report.periodNumber ?? ''}` === selectedPeriod));
+    const latest = matching.find(report => report.status === 'PUBLISHED');
+    const lines = latest?.lines.filter(line => (!category || line.category === category) && (!query || line.projectTitle.toLocaleLowerCase().includes(query.toLocaleLowerCase()))) ?? [];
+    const archive = matching.filter(report => (!category && !query) || report.lines.some(line => (!category || line.category === category) && (!query || line.projectTitle.toLocaleLowerCase().includes(query.toLocaleLowerCase()))));
+    const years = [...new Set(reports.map(report => report.academicYearStart))].sort((a, b) => b - a);
+    const periods = [...new Map(reports.map(report => [`${report.periodKind}:${report.periodNumber ?? ''}`, period(report)])).entries()];
+    const categories = [...new Set(reports.flatMap(report => report.lines.map(line => line.category)))].sort();
+    return <section className="portal-section-slate section min-h-screen">
+        <div className="container-main space-y-8">
+            <header className="flex flex-wrap items-start justify-between gap-6">
+                <div><h1 className="text-3xl font-bold text-white md:text-5xl">SSC financial transparency</h1><p className="mt-4 max-w-2xl text-slate-300">Published budgets, spending, and approved financial reports of the Supreme Student Council.</p></div>
+                <Link href="/transparency/submit" className="inline-flex min-h-11 items-center text-sky-300 underline underline-offset-4">Submit a report</Link>
+            </header>
+            {reports.length ? <>
+                <form action="/transparency" method="get" className="grid items-end gap-4 border-y border-white/15 py-6 sm:grid-cols-2 lg:grid-cols-5">
+                    <label className="text-sm text-slate-200">Academic year<select name="year" defaultValue={year} className={fieldClass}><option value="">All years</option>{years.map(item => <option key={item} value={item}>{item}–{item + 1}</option>)}</select></label>
+                    <label className="text-sm text-slate-200">Reporting period<select name="period" defaultValue={selectedPeriod} className={fieldClass}><option value="">All periods</option>{periods.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+                    <label className="text-sm text-slate-200">Project category<select name="category" defaultValue={category} className={fieldClass}><option value="">All categories</option>{categories.map(item => <option key={item}>{item}</option>)}</select></label>
+                    <label className="text-sm text-slate-200">Project name<input type="search" name="q" maxLength={200} defaultValue={query} className={fieldClass} /></label>
+                    <div className="flex items-center gap-4"><button className="min-h-11 rounded-lg bg-sky-300 px-4 font-semibold text-slate-950">Apply filters</button><Link href="/transparency" className="text-sm text-sky-300 underline">Reset</Link></div>
+                </form>
+                {latest ? <section className="space-y-6" aria-labelledby="latest-report-title">
+                    <header><p className="text-sm text-slate-300">Academic year {latest.academicYearStart}–{latest.academicYearStart + 1} · {period(latest)}</p><h2 id="latest-report-title" className="mt-2 text-2xl font-semibold text-white">{latest.title}</h2><p className="mt-2 text-sm text-slate-300">Published {date(latest.publishedAt)} · As of {date(latest.asOfDate)}</p></header>
+                    <ReportTotals report={latest} />
+                    <p className="text-sm text-slate-300">Figures represent the complete report; project filters affect the registry below. The approved PDF is the canonical financial record.</p>
+                    <ProjectRegistry lines={lines} />
+                    <Link href={`/transparency/financial-statements/${latest.slug}`} className="inline-flex min-h-11 items-center text-sky-300 underline underline-offset-4">Complete report and private feedback</Link>
+                </section> : <p className="rounded-lg border border-white/15 p-6 text-slate-300">No current published report matches this reporting period. Historical records, when available, appear below.</p>}
+                <section aria-labelledby="archive-title"><h2 id="archive-title" className="text-2xl font-semibold text-white">Financial report archive</h2>
+                    {archive.length ? <ul className="mt-4 divide-y divide-white/15">{archive.map(report => <li key={report.id} className="flex flex-wrap items-center justify-between gap-5 py-6"><div><Link href={`/transparency/financial-statements/${report.slug}`} className="text-lg font-semibold text-sky-300 underline underline-offset-4">{report.title}</Link><p className="mt-2 text-sm text-slate-300">{report.academicYearStart}–{report.academicYearStart + 1} · {period(report)} · Published {date(report.publishedAt)}</p>{report.status !== 'PUBLISHED' ? <p className="mt-2 font-semibold text-amber-300">{report.status === 'WITHDRAWN' ? 'Withdrawn — document unavailable' : 'Superseded — correction available'}</p> : null}</div><DocumentActions report={report} /></li>)}</ul> : <p className="mt-4 text-slate-300">No reports match these filters.</p>}
+                </section>
+            </> : <section className="border-y border-white/15 py-10"><h2 className="text-2xl font-semibold text-white">No financial reports published yet</h2><p className="mt-3 max-w-2xl text-slate-300">Approved SSC reports and their project figures will appear here after officer review. No financial totals are available yet.</p></section>}
+            <aside className="flex flex-wrap gap-x-12 gap-y-4 border-t border-white/15 pt-6 text-slate-300"><p>Board Resolutions <span className="ml-2 text-sm">Planned</span></p><p>Minutes of Meetings <span className="ml-2 text-sm">Planned</span></p></aside>
+        </div>
+    </section>;
 }
