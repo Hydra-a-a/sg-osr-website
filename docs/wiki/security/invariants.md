@@ -119,13 +119,16 @@ Use this page as an orientation checklist. Verify each task against the implemen
 - Directory export jobs must authenticate with `CRON_SECRET` or the officer route, read only `public_sheet_directory_entries`, clear stale rows, and keep raw Drive URLs and private fields out of Sheets.
 - Public content source switches default to Sheets and may explicitly select database or database-with-Sheets-fallback loaders; public projections must preserve safe URL/guide filtering and response shapes. `db:compare:public-content` remains read-only and aggregate-only.
 - External public reads use short bounded timeouts and sanitized fallback projections; error classification must distinguish offline, timeout, rate-limit, provider failure, validation, and not-found states so ticket lookup never labels a network failure as an invalid ticket ID. Sentry captures errors without client tracing/replay sampling and validates the public DSN without exposing it.
+- Official Facebook links must be parsed as HTTPS URLs and match an allowlisted hostname or subdomain, never a string suffix. News unfurling revalidates every manually followed redirect against that allowlist, permits at most three redirects, and bounds each provider request to three seconds.
+- `sanitizeText()` is a plain-text normalizer, not an HTML sanitizer. Untrusted HTML is escaped or passed through the established DOM sanitization path at its rendering boundary.
+- Short internal ticket, proposal, and notification IDs select their alphabet characters with `crypto.randomInt`; tracking credentials retain their separate cryptographic-token boundary.
 
 ## Content and External Boundaries
 
 - Sanitize user-provided HTML before rendering with the established DOM sanitization path.
 - Keep externally supplied links and fetches within the repository's existing safe-validation patterns.
 - Preserve CSP behavior when changing scripts, integrations, or rendered content.
-- Keep `npm audit --omit=dev --audit-level=high` at zero High/Critical production findings before release. The documented remediation keeps Next and `eslint-config-next` on 16.3.0, `next-auth` on beta.32, uses the patched `nodemailer-patched` alias, removes unused Gemini and `isomorphic-dompurify` paths, and scopes `fast-uri`/`brace-expansion` overrides.
+- Keep `npm audit --omit=dev --audit-level=high` at zero High/Critical production findings before release. The documented remediation keeps Next and `eslint-config-next` on 16.4.5, Sentry on 11.11.0, `next-auth` on beta.32, uses the patched `nodemailer-patched` 10.3.1 alias, removes unused Gemini and `isomorphic-dompurify` paths, scopes `fast-uri`/`brace-expansion` overrides, and keeps Prisma/`@prisma/client` on the upstream-supported 7.10.1 line. Reassess these versions when the next dependency cycle changes the supported paths.
 
 ## Focused References
 

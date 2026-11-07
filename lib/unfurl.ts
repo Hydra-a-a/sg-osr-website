@@ -1,4 +1,4 @@
-import { isTrustedUrl } from '@/lib/security';
+import { fetchWithTimeout, isOfficialFacebookUrl, isTrustedUrl } from '@/lib/security';
 import {
     extractHashtags,
     generateArticleBody,
@@ -28,23 +28,55 @@ export interface UnfurlNewsResult {
     featured: boolean;
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+    amp: '&',
+    apos: "'",
+    gt: '>',
+    lt: '<',
+    quot: '"',
+    '#039': "'",
+    '#39': "'",
+};
+
 function decodeHtmlEntities(raw: string): string {
-    return raw
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .replace(/&#039;/g, "'")
-        .replace(/&#39;/g, "'")
-        .replace(/&apos;/g, "'")
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&#(\d+);/g, (_, code) => {
-            const num = Number.parseInt(code, 10);
-            return Number.isFinite(num) ? String.fromCharCode(num) : '';
-        })
-        .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
-            const num = Number.parseInt(hex, 16);
-            return Number.isFinite(num) ? String.fromCharCode(num) : '';
-        });
+    let output = '';
+
+    for (let index = 0; index < raw.length; index += 1) {
+        if (raw[index] !== '&') {
+            output += raw[index];
+            continue;
+        }
+
+        const candidate = raw.slice(index + 1, index + 12);
+        const end = candidate.indexOf(';');
+        if (end < 0) {
+            output += '&';
+            continue;
+        }
+
+        const entity = candidate.slice(0, end).toLowerCase();
+        const namedValue = HTML_ENTITIES[entity];
+        const codePoint = entity.startsWith('#x')
+            ? Number.parseInt(entity.slice(2), 16)
+            : entity.startsWith('#')
+                ? Number.parseInt(entity.slice(1), 10)
+                : Number.NaN;
+        const decoded = namedValue || (
+            Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+                ? String.fromCodePoint(codePoint)
+                : ''
+        );
+
+        if (!decoded) {
+            output += '&';
+            continue;
+        }
+
+        output += decoded;
+        index += end + 1;
+    }
+
+    return output;
 }
 
 function extractMetaContent(html: string, propertyOrName: string): string {
@@ -115,21 +147,41 @@ export async function unfurlPostUrl(targetUrl: string): Promise<UnfurlNewsResult
         throw new Error('URL is required');
     }
 
-    const parsed = new URL(cleanUrl);
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-        throw new Error('Invalid URL protocol. HTTPS required.');
+    if (!isOfficialFacebookUrl(cleanUrl)) {
+        throw new Error('Only HTTPS Facebook post URLs can be imported.');
     }
 
-    // Use browser-like User Agent to fetch rich OpenGraph metadata
-    const response = await fetch(cleanUrl, {
-        headers: {
-            'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php) Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-        },
-        cache: 'no-store',
-        redirect: 'follow',
-    });
+    let nextUrl = cleanUrl;
+    let response: Response | undefined;
+    for (let redirects = 0; redirects <= 3; redirects += 1) {
+        // Use browser-like User Agent to fetch rich OpenGraph metadata.
+        response = await fetchWithTimeout(nextUrl, {
+            headers: {
+                'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php) Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+            cache: 'no-store',
+            redirect: 'manual',
+            timeout: 3_000,
+        });
+
+        if (![301, 302, 303, 307, 308].includes(response.status)) {
+            break;
+        }
+
+        const location = response.headers.get('location');
+        const redirectedUrl = location ? new URL(location, nextUrl).href : '';
+        if (!isOfficialFacebookUrl(redirectedUrl)) {
+            throw new Error('Facebook redirected to an untrusted URL.');
+        }
+        nextUrl = redirectedUrl;
+        response = undefined;
+    }
+
+    if (!response) {
+        throw new Error('Too many Facebook redirects.');
+    }
 
     if (!response.ok) {
         throw new Error(`Failed to fetch URL preview (HTTP ${response.status})`);

@@ -90,15 +90,11 @@ function normalizeIp(raw: string | null | undefined): string | null {
     return isValidIp(candidate) ? candidate : null;
 }
 
-/**
- * nukes all html because students will try to XSS us.
- * cleans copy pasted stuff from external APIs/Sheets.
- */
+/** Normalizes plain text. HTML must be escaped at its rendering boundary. */
 export function sanitizeText(text: string): string {
     if (!text) return '';
 
     return text
-        .replace(/<[^>]+>/g, '')
         .replace(/[\u0000-\u001F\u007F]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -125,27 +121,39 @@ export function sanitizeRichText(text: string): string {
     return escapeHtml(normalized).replace(/\n/g, '<br />');
 }
 
-/**
- * makes sure the url isn't sketchy
- */
+const TRUSTED_URL_DOMAINS = [
+    'rtu.edu.ph',
+    'facebook.com',
+    'fbcdn.net',
+    'akamaihd.net',
+    'fb.me',
+    'googleusercontent.com',
+    'drive.google.com',
+];
+
+const FACEBOOK_DOMAINS = ['facebook.com', 'fb.watch', 'fb.me'];
+
+function hasTrustedHostname(hostname: string, trustedDomains: readonly string[]): boolean {
+    const normalizedHostname = hostname.toLowerCase();
+    return trustedDomains.some((domain) => normalizedHostname === domain || normalizedHostname.endsWith(`.${domain}`));
+}
+
+/** Validates an HTTPS URL against the public content allowlist. */
 export function isTrustedUrl(url: string | null | undefined): boolean {
     if (!url) return true; // if it's null whatever, let it through
 
     try {
         const parsed = new URL(url);
-        const trustedDomains = [
-            'rtu.edu.ph',
-            'facebook.com',
-            'fbcdn.net',
-            'akamaihd.net',
-            'fb.me',
-            'googleusercontent.com',
-            'drive.google.com'
-        ];
+        return parsed.protocol === 'https:' && hasTrustedHostname(parsed.hostname, TRUSTED_URL_DOMAINS);
+    } catch {
+        return false;
+    }
+}
 
-        return trustedDomains.some(domain =>
-            parsed.hostname === domain || parsed.hostname.endsWith('.' + domain)
-        );
+export function isOfficialFacebookUrl(url: string): boolean {
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'https:' && hasTrustedHostname(parsed.hostname, FACEBOOK_DOMAINS);
     } catch {
         return false;
     }

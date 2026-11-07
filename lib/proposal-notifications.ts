@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomInt } from 'crypto';
 import { z } from 'zod';
 import {
     enqueueNotificationRow,
@@ -99,10 +99,9 @@ const proposalPayloadSchema = z.object({
 });
 
 function randomBase36(length: number): string {
-    const bytes = randomBytes(length);
     let output = '';
-    for (const byte of bytes) {
-        output += ID_ALPHABET[byte % ID_ALPHABET.length];
+    for (let index = 0; index < length; index += 1) {
+        output += ID_ALPHABET[randomInt(ID_ALPHABET.length)];
     }
     return output;
 }

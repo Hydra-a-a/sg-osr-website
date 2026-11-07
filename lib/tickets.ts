@@ -14,7 +14,7 @@
  *
  * Status values: Open | In Progress | Resolved | Closed
  */
-import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import { appendSheetData, batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { sendEmail } from '@/lib/email';
 import { buildRegentAlertEmail, buildStudentConfirmationEmail, buildTicketUpdateEmail } from '@/lib/email-templates';
@@ -90,10 +90,9 @@ const TICKET_ID_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const OFFICIAL_STATUS_UPDATE_PREFIX = '[Official Status Update]:';
 
 function randomBase36(length: number): string {
-    const bytes = randomBytes(length);
     let output = '';
-    for (const byte of bytes) {
-        output += TICKET_ID_ALPHABET[byte % TICKET_ID_ALPHABET.length];
+    for (let index = 0; index < length; index += 1) {
+        output += TICKET_ID_ALPHABET[randomInt(TICKET_ID_ALPHABET.length)];
     }
     return output;
 }

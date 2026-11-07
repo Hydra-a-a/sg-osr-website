@@ -11,8 +11,8 @@ function assert(condition, message) {
 }
 
 assert(
-  packageJson.dependencies['nodemailer-patched'] === 'npm:nodemailer@^9.0.5',
-  'production mail transport must resolve to the patched Nodemailer 9 alias.'
+  /^npm:nodemailer@\^10\.3\.1$/.test(packageJson.dependencies['nodemailer-patched']),
+  'production mail transport must resolve to the patched Nodemailer 10.3.1-or-later alias.'
 );
 assert(
   !packageJson.dependencies.nodemailer,

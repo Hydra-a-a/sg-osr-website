@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isTrustedUrl } from '../lib/security';
+import { isOfficialFacebookUrl, isTrustedUrl } from '../lib/security';
 
 const nullableTrustedUrl = z.union([
     z.string().url().max(2048).refine(isTrustedUrl, { message: 'Untrusted image domain' }),
@@ -11,7 +11,7 @@ const nullableTrustedUrl = z.union([
 const nullableFacebookUrl = z.union([
     z.string()
         .url()
-        .refine((url) => url.includes('facebook.com') || url.includes('fb.watch'), {
+        .refine(isOfficialFacebookUrl, {
             message: 'Only official Facebook links allowed',
         }),
     z.literal(''),

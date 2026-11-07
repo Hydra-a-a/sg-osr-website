@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import { appendSheetData, batchUpdateSheetData, getSheetData } from '@/lib/sheets';
 import { sendEmail } from '@/lib/email';
 import { buildProposalCommentEmail, buildProposalStatusUpdateEmail } from '@/lib/email-templates';
@@ -133,10 +133,9 @@ export function resolveProposalsSpreadsheetId(): { spreadsheetId: string; usedFa
 }
 
 function randomBase36(length: number): string {
-    const bytes = randomBytes(length);
     let output = '';
-    for (const byte of bytes) {
-        output += RANDOM_ALPHABET[byte % RANDOM_ALPHABET.length];
+    for (let index = 0; index < length; index += 1) {
+        output += RANDOM_ALPHABET[randomInt(RANDOM_ALPHABET.length)];
     }
     return output;
 }
